@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from .meta_prompt import MetaPrompt, PromptMode
+import re
 
 #################################
 #   Evolution on Graph          #
@@ -70,6 +71,60 @@ class Evolution:
             node.evolve()
 
     # ... (keep other existing methods, but modify them to work with the graph structure)
+    
+    
+    def _get_alg(self,prompt_content):
+        """ 
+        Compile Prompt with LLM
+        Parsing code from response
+        """
+
+        response = self.interface_llm.get_response(prompt_content)
+
+        algorithm = re.findall(r"\{(.*)\}", response, re.DOTALL)
+        if len(algorithm) == 0:
+            if 'python' in response:
+                algorithm = re.findall(r'^.*?(?=python)', response,re.DOTALL)
+            elif 'import' in response:
+                algorithm = re.findall(r'^.*?(?=import)', response,re.DOTALL)
+            else:
+                algorithm = re.findall(r'^.*?(?=def)', response,re.DOTALL)
+
+        code = re.findall(r"import.*return", response, re.DOTALL)
+        if len(code) == 0:
+            code = re.findall(r"def.*return", response, re.DOTALL)
+
+        n_retry = 1
+        while (len(algorithm) == 0 or len(code) == 0):
+            if self.debug_mode:
+                print("Error: algorithm or code not identified, wait 1 seconds and retrying ... ")
+
+            response = self.interface_llm.get_response(prompt_content)
+
+            algorithm = re.findall(r"\{(.*)\}", response, re.DOTALL)
+            if len(algorithm) == 0:
+                if 'python' in response:
+                    algorithm = re.findall(r'^.*?(?=python)', response,re.DOTALL)
+                elif 'import' in response:
+                    algorithm = re.findall(r'^.*?(?=import)', response,re.DOTALL)
+                else:
+                    algorithm = re.findall(r'^.*?(?=def)', response,re.DOTALL)
+
+            code = re.findall(r"import.*return", response, re.DOTALL)
+            if len(code) == 0:
+                code = re.findall(r"def.*return", response, re.DOTALL)
+                
+            if n_retry > 3:
+                break
+            n_retry +=1
+
+        algorithm = algorithm[0]
+        code = code[0] 
+
+        code_all = code+" "+", ".join(s for s in self.prompt_func_outputs) 
+
+
+        return [code_all, algorithm]
 
     def _get_alg(self, prompt_content):
         # ... (existing implementation)
