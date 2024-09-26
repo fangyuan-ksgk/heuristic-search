@@ -23,6 +23,7 @@ class MetaPrompt:
     func_name: str
     input: str
     output: str
+    mode: PromptMode
     
     @property
     def joined_inputs(self):
@@ -38,8 +39,8 @@ class MetaPrompt:
         else:
             return "'" + self.output[0] + "'"
         
-    def _base_prompt(self, mode: PromptMode):
-        if mode == PromptMode.CODE:
+    def _base_prompt(self):
+        if self.mode == PromptMode.CODE:
             prompt_content = f"First, describe your new algorithm and main steps in one sentence. "\
                 "The description must be inside a brace. Next, implement it in Python as a function named "\
                 f"{self.func_name}. This function should accept {len(self.input)} input(s): "\
@@ -48,21 +49,21 @@ class MetaPrompt:
                 f"{self.other_inf}\n"\
                 "Do not give additional explanations."
             return prompt_content
-        elif mode == PromptMode.PROMPT:
+        elif self.mode == PromptMode.PROMPT:
             prompt_content = f"First, describe your new reasoning and main thoughts in one sentence."\
                 "The description must be inside a brace. Implement a Python function that generates a prompt to guide an AI in completing the task. "\
                 f"Follow these specifications: - Function name: generate_prompt - Input parameters: {self.joined_inputs} - Return value: A string containing the final prompt for the AI.\n" \
                 "Your function should incorporate the reasoning from step 1 and use the input parameters to create a tailored prompt for the task."
             return prompt_content
-        elif mode == PromptMode.TOOL:
+        elif self.mode == PromptMode.TOOL:
             raise NotImplementedError
         
-    def _get_prompt_i1(self, mode: PromptMode):
-        prompt_content = f"{self.task}\n{self._base_prompt(mode)}"
+    def _get_prompt_i1(self):
+        prompt_content = f"{self.task}\n{self._base_prompt()}"
         return prompt_content
         
-    def _get_prompt_e1(self, indivs: list, mode: PromptMode):
-        if mode == PromptMode.CODE:
+    def _get_prompt_e1(self, indivs: list):
+        if self.mode == PromptMode.CODE:
             prompt_indiv = ""
             for i, indiv in enumerate(indivs, 1):
                 prompt_indiv += f"No.{i} algorithm and the corresponding code are:\n{indiv['algorithm']}\n{indiv['code']}\n"
@@ -71,9 +72,9 @@ class MetaPrompt:
                 f"I have {len(indivs)} existing algorithms with their codes as follows:\n"\
                 f"{prompt_indiv}"\
                 "Please help me create a new algorithm that has a totally different form from the given ones.\n"\
-                f"{self._base_prompt(mode)}"
+                f"{self._base_prompt()}"
             return prompt_content
-        elif mode == PromptMode.PROMPT:
+        elif self.mode == PromptMode.PROMPT:
             prompt_indiv = ""
             for i, indiv in enumerate(indivs, 1):
                 prompt_indiv += f"No.{i} reasoning and the corresponding prompt generation function are:\n{indiv['reasoning']}\n{indiv['prompt_function']}\n"
@@ -82,11 +83,11 @@ class MetaPrompt:
                 f"I have {len(indivs)} existing prompt generation approaches with their functions as follows:\n"\
                 f"{prompt_indiv}"\
                 "Please help me create a new prompt generation approach that is totally different from the given ones.\n"\
-                f"{self._base_prompt(mode)}"
+                f"{self._base_prompt()}"
             return prompt_content
         
-    def _get_prompt_e2(self, indivs: list, mode: PromptMode):
-        if mode == PromptMode.CODE:
+    def _get_prompt_e2(self, indivs: list):
+        if self.mode == PromptMode.CODE:
             prompt_indiv = ""
             for i, indiv in enumerate(indivs, 1):
                 prompt_indiv += f"No.{i} algorithm and the corresponding code are:\n{indiv['algorithm']}\n{indiv['code']}\n"
@@ -103,7 +104,7 @@ class MetaPrompt:
                 f"{self.other_inf}\n"\
                 "Do not give additional explanations."
             return prompt_content
-        elif mode == PromptMode.PROMPT:
+        elif self.mode == PromptMode.PROMPT:
             prompt_indiv = ""
             for i, indiv in enumerate(indivs, 1):
                 prompt_indiv += f"No.{i} reasoning and the corresponding prompt generation function are:\n{indiv['reasoning']}\n{indiv['prompt_function']}\n"
@@ -117,47 +118,47 @@ class MetaPrompt:
                 f"Follow these specifications: - Function name: generate_prompt - Input parameters: {self.joined_inputs} - Return value: A string containing the final prompt for the AI.\n"\
                 "Your function should incorporate the reasoning from step 2 and use the input parameters to create a tailored prompt for the task."
             return prompt_content
-        elif mode == PromptMode.TOOL:
+        elif self.mode == PromptMode.TOOL:
             raise NotImplementedError
 
-    def _get_prompt_m1(self, indiv: dict, mode: PromptMode):
-        if mode == PromptMode.CODE:
+    def _get_prompt_m1(self, indiv: dict):
+        if self.mode == PromptMode.CODE:
             prompt_content = f"{self.task}\n"\
                 "I have one algorithm with its code as follows.\n"\
                 f"Algorithm description: {indiv['algorithm']}\n"\
                 f"Code:\n{indiv['code']}\n"\
                 "Please assist me in creating a new algorithm that has a different form but can be a modified version of the algorithm provided.\n"\
-                f"{self._base_prompt(mode)}"
+                f"{self._base_prompt()}"
             return prompt_content
-        elif mode == PromptMode.PROMPT:
+        elif self.mode == PromptMode.PROMPT:
             prompt_content = f"{self.task}\n"\
                 "I have one prompt generation approach with its function as follows.\n"\
                 f"Reasoning: {indiv['reasoning']}\n"\
                 f"Function:\n{indiv['prompt_function']}\n"\
                 "Please assist me in creating a new prompt generation approach that has a different form but can be a modified version of the approach provided.\n"\
-                f"{self._base_prompt(mode)}"
+                f"{self._base_prompt()}"
             return prompt_content
-        elif mode == PromptMode.TOOL:
+        elif self.mode == PromptMode.TOOL:
             raise NotImplementedError
 
-    def _get_prompt_m2(self, indiv: dict, mode: PromptMode):
-        if mode == PromptMode.CODE:
+    def _get_prompt_m2(self, indiv: dict):
+        if self.mode == PromptMode.CODE:
             prompt_content = f"{self.task}\n"\
                 "I have one algorithm with its code as follows.\n"\
                 f"Algorithm description: {indiv['algorithm']}\n"\
                 f"Code:\n{indiv['code']}\n"\
                 "Please identify the main algorithm parameters and assist me in creating a new algorithm that has different parameter settings of the score function provided.\n"\
-                f"{self._base_prompt(mode)}"
+                f"{self._base_prompt()}"
             return prompt_content
-        elif mode == PromptMode.PROMPT:
+        elif self.mode == PromptMode.PROMPT:
             prompt_content = f"{self.task}\n"\
                 "I have one prompt generation approach with its function as follows.\n"\
                 f"Reasoning: {indiv['reasoning']}\n"\
                 f"Function:\n{indiv['prompt_function']}\n"\
                 "Please identify the main approach parameters and assist me in creating a new prompt generation approach that has different parameter settings of the prompt generation function provided.\n"\
-                f"{self._base_prompt(mode)}"
+                f"{self._base_prompt()}"
             return prompt_content
-        elif mode == PromptMode.TOOL:
+        elif self.mode == PromptMode.TOOL:
             raise NotImplementedError
         
         
@@ -180,7 +181,7 @@ def parse_evol_response(response: str):
 
 # Plan as a Graph (Ideally, current version fall-back to a chain of plan ....)
 plan_graph_prompt = """
-Generate a JSON-style plan represented as a Directed Acyclic Graph (DAG) to achieve the goal.
+Generate a JSON-style plan represented as a Directed Acyclic Graph (DAG) to achieve the goal. Use creative topology in the DAG, include parallel tasks if required.
 
 The plan should include:
 
@@ -190,6 +191,7 @@ The plan should include:
   - `input`: The resources, information, or prerequisites needed to perform the action.
   - `output`: The immediate result or outcome of the action.
   - `target`: The purpose or goal that the action contributes to.
+  - `mode`: The execution mode for this task ("CODE" or "PROMPT").
 
 - **Edges**: Each edge represents a dependency or relationship between nodes, indicating that one step supports or leads to another.
   - `source`: The `id` of the source node (the preceding action).
@@ -208,6 +210,7 @@ Provide the output in the following JSON structure:
       "input": "Inputs required for Action 1",
       "output": "Outputs/result of Action 1",
       "target": "Purpose of Action 1"
+      "mode": "CODE"
     },
     {
       "task": "Task 2",
@@ -215,6 +218,7 @@ Provide the output in the following JSON structure:
       "input": "Inputs required for Action 2",
       "output": "Outputs/result of Action 2",
       "target": "Purpose of Action 2"
+      "mode": "PROMPT"
     }
     // Add more nodes as needed
   ],
@@ -235,63 +239,16 @@ class MetaPlan:
     
     @property
     def _base_prompt(self):
-        prompt_content = f"First, describe your new algorithm and main steps in one sentence. "\
+        prompt_content = f"First, describe the intuition for your tactics and main steps in one sentence. "\
                 "The description must be inside a brace."\
                 f"{plan_graph_prompt}"
         return prompt_content
     
-    def _get_prompt_i1(self, mode: PromptMode):
-        prompt_content = f"Goal: {self.goal}\n{self._base_prompt(mode)}"
+    def _get_prompt_i1(self):
+        prompt_content = f"Goal: {self.goal}\n{self._base_prompt}"
         return prompt_content
     
     # e1/e2/m1/m2 to be implemented
-
-
-
-
-def remove_comment(response):
-    # remove lines satisfies line_str.strip().startswith("//"), also remove empty lines
-    response_lines = response.split('\n')
-    filtered_lines = [line for line in response_lines if not line.strip().startswith("//") and line.strip() != ""]
-    filtered_response = '\n'.join(filtered_lines)
-    return filtered_response 
-    
-    
-def parse_json_from_response(response):
-    """
-    Parse out the JSON output from the 'response' string.
-    
-    Args:
-    response (str): The string containing the JSON output.
-    
-    Returns:
-    dict: The parsed JSON data, or None if parsing fails.
-    """
-
-    # Find the JSON content using regex
-    json_match = re.search(r'\{[\s\S]*\}', response)
-    
-    if json_match:
-        json_str = json_match.group(0)
-        json_str = remove_comment(json_str) # OAI special treatment
-        advice_str = response.split(json_str)[-1]
-        try:
-            # Parse the JSON string
-            json_data = json.loads(json_str)
-            
-            # Ensure the JSON structure is as expected
-            if 'nodes' in json_data and 'edges' in json_data:
-                # No need to modify nodes or edges
-                return json_data, advice_str
-            else:
-                print("Unexpected JSON structure.")
-                return None
-        except json.JSONDecodeError as e:
-            print(f"Error decoding JSON: {e}")
-            return None
-    else:
-        print("No JSON content found in the response.")
-        return None
 
 
 def build_graph_from_json(parsed_json):
@@ -315,25 +272,37 @@ def build_graph_from_json(parsed_json):
 
     return G 
 
-def parse_graph(response):
-    """ 
-    Parse out the Logical Graph Adopted by the LLM 
+
+def extract_json_from_text(text):
     """
+    Extracts a JSON object from a text containing a JSON code block.
+    
+    Parameters:
+        text (str): The input text containing the JSON code block.
+        
+    Returns:
+        dict: The parsed JSON object.
+        
+    Raises:
+        ValueError: If no JSON code block is found or JSON is invalid.
+    """
+    # Regular expression to find JSON code block enclosed in ```json ... ```
+    json_block_pattern = r'```json\s*(\{.*?\})\s*```'
+    
+    # Use re.DOTALL to allow '.' to match newline characters
+    match = re.search(json_block_pattern, text, re.DOTALL)
+    
+    if not match:
+        raise ValueError("No JSON code block found in the provided text.")
+    
+    json_str = match.group(1)
+    
     try:
-        parsed_json, advice_str = parse_json_from_response(response)
-        if parsed_json is None:
-            print("Error: parse_json_from_response returned None.")
-            return None
-        logical_graph = build_graph_from_json(parsed_json)
-        return logical_graph, advice_str
-    except json.JSONDecodeError:
-        print("Error: Unable to parse the logical graph response as JSON.")
-    except KeyError as e:
-        print(f"Error: Missing key in the JSON structure: {e}")
-    except nx.NetworkXError as e:
-        print(f"Error: NetworkX error while building graph: {e}")
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-    return None, ""
+        # Parse the JSON string into a Python dictionary
+        json_data = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON content: {e}")
+    
+    return json_data
 
 
