@@ -52,8 +52,7 @@ class EvolNode:
 
 class EvolGraph:
     """ 
-    Perhaps we should fold everything about 'Evolution' into this EvolGraph class
-    - Deciding what happen when 'evol' is called etc.
+    EvolGraph: DNA -- EvolNode: 
     """
     def __init__(self, nodes: Optional[List[EvolNode]], edges: Optional[List]):
         self.nodes: Dict[str, EvolNode] = {}
@@ -62,7 +61,9 @@ class EvolGraph:
     @classmethod
     def generate(cls, goal: str):
         """ 
-        Generate Graph Given Goal
+        DNA -> RNA -> Protein ....
+        - Goal -> MetaPlan -> PlanGraph
+        - PlanGraph -> MetaPrompt -> EvolNode
         """
         meta_prompt = MetaPlan(goal)
         prompt_content = meta_prompt._get_prompt_i1()
