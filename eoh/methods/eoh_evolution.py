@@ -50,6 +50,10 @@ class EvolNode(ABC):
         return self._evolve('m2', parents)
 
 class EvolGraph:
+    """ 
+    Perhaps we should fold everything about 'Evolution' into this EvolGraph class
+    - Deciding what happen when 'evol' is called etc.
+    """
     def __init__(self):
         self.nodes = {}  # Use a dictionary to store nodes with unique identifiers
         self.edges = []
