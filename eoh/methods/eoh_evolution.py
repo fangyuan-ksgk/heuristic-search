@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from .meta_prompt import MetaPrompt, PromptMode
+from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
+from .llm import get_openai_response as get_response
 import re
 
 #################################
@@ -8,36 +9,35 @@ import re
 #   - Edge: Not Decided Yet     #
 #################################
         
-class Node(ABC):
+class EvolNode(ABC):
     def __init__(self, content: str, description: str, meta_prompt: MetaPrompt):
         self.content = content
         self.description = description
         self.meta_prompt = meta_prompt
         self.prompt_mode: PromptMode = PromptMode.PROMPT
     
-    @abstractmethod
-    def evolve(self):
-        pass
+    def _evolve(self, method: str, parents: list = None):
+        prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
+        prompt_args = [self.prompt_mode] if parents is None else [parents, self.prompt_mode]
+        prompt_content = prompt_method(*prompt_args)
+        response = get_response(prompt_content)
+        return parse_evol_response(response)
 
-class CodeNode(Node):
-    def __init__(self, code: str, description: str, meta_prompt: MetaPrompt):
-        super().__init__(code, description, meta_prompt)
-        self.prompt_mode = PromptMode.CODE
-
-    def evolve(self):
-        # Implementation for evolving code
-        # Use self.content (code), self.description, and self.meta_prompt
-        pass
-
-class PromptNode(Node):
-    def __init__(self, prompt: str, description: str, meta_prompt: MetaPrompt):
-        super().__init__(prompt, description, meta_prompt)
-        self.prompt_mode = PromptMode.PROMPT
-
-    def evolve(self):
-        # Implementation for evolving prompts
-        # Use self.content (prompt), self.description, and self.meta_prompt
-        pass
+    def i1(self):
+        return self._evolve('i1')
+    
+    def e1(self, parents: list):
+        return self._evolve('e1', parents)
+    
+    def e2(self, parents: list):
+        return self._evolve('e2', parents)
+    
+    def m1(self, parents: list):
+        return self._evolve('m1', parents)
+    
+    def m2(self, parents: list):
+        return self._evolve('m2', parents)
+    
 
 
 class Graph:
@@ -61,8 +61,10 @@ class Graph:
 #
 # Missing: Topology search of our graph
 
+
+
 class Evolution:
-    def __init__(self, api_endpoint, api_key, model_LLM, llm_use_local, llm_local_url, debug_mode, prompts, **kwargs):
+    def __init__(self, prompts, **kwargs):
         # ... (keep the existing initialization code)
         self.graph = Graph()
 
@@ -73,58 +75,34 @@ class Evolution:
     # ... (keep other existing methods, but modify them to work with the graph structure)
     
     
-    def _get_alg(self,prompt_content):
+    def _get_node(self, prompt_content):
         """ 
         Compile Prompt with LLM
         Parsing code from response
         """
 
-        response = self.interface_llm.get_response(prompt_content)
+        response = get_response(prompt_content)
 
-        algorithm = re.findall(r"\{(.*)\}", response, re.DOTALL)
-        if len(algorithm) == 0:
-            if 'python' in response:
-                algorithm = re.findall(r'^.*?(?=python)', response,re.DOTALL)
-            elif 'import' in response:
-                algorithm = re.findall(r'^.*?(?=import)', response,re.DOTALL)
-            else:
-                algorithm = re.findall(r'^.*?(?=def)', response,re.DOTALL)
-
-        code = re.findall(r"import.*return", response, re.DOTALL)
-        if len(code) == 0:
-            code = re.findall(r"def.*return", response, re.DOTALL)
+        reasoning, code = parse_node(response)
 
         n_retry = 1
-        while (len(algorithm) == 0 or len(code) == 0):
+        while (len(reasoning) == 0 or len(code) == 0):
             if self.debug_mode:
-                print("Error: algorithm or code not identified, wait 1 seconds and retrying ... ")
+                print("Error: reasoning or code not identified, wait 1 seconds and retrying ... ")
 
-            response = self.interface_llm.get_response(prompt_content)
-
-            algorithm = re.findall(r"\{(.*)\}", response, re.DOTALL)
-            if len(algorithm) == 0:
-                if 'python' in response:
-                    algorithm = re.findall(r'^.*?(?=python)', response,re.DOTALL)
-                elif 'import' in response:
-                    algorithm = re.findall(r'^.*?(?=import)', response,re.DOTALL)
-                else:
-                    algorithm = re.findall(r'^.*?(?=def)', response,re.DOTALL)
-
-            code = re.findall(r"import.*return", response, re.DOTALL)
-            if len(code) == 0:
-                code = re.findall(r"def.*return", response, re.DOTALL)
+            response = get_response(prompt_content)
+            reasoning, code = parse_node(response)
                 
             if n_retry > 3:
                 break
             n_retry +=1
 
-        algorithm = algorithm[0]
+        reasoning = reasoning[0]
         code = code[0] 
 
         code_all = code+" "+", ".join(s for s in self.prompt_func_outputs) 
 
-
-        return [code_all, algorithm]
+        return [code_all, reasoning]
 
     def _get_alg(self, prompt_content):
         # ... (existing implementation)
