@@ -4,7 +4,11 @@ from openai import OpenAI
 from os import getenv
 import torch
 import random 
+import anthropic
 import os
+
+oai_client = OpenAI()
+claude_client = anthropic.Anthropic()
 
 class OpenRouterModel:
     BASEURL = "https://openrouter.ai/api/v1"
@@ -60,8 +64,6 @@ def get_helper_response(prompt, rand=True):
 
 def get_openai_response(input: Union[str, list], model_name="gpt-4o"):
     
-    client = OpenAI()
-    
     if isinstance(input, str):
         msg = [{"role": "user", "content": input}]
     elif isinstance(input, list):
@@ -69,12 +71,31 @@ def get_openai_response(input: Union[str, list], model_name="gpt-4o"):
     else:
         raise ValueError(f"Invalid input type: {type(input)}")
     
-    response = client.chat.completions.create(
+    response = oai_client.chat.completions.create(
         model=model_name,
         messages=msg,
     )
     return response.choices[0].message.content
 
+
+def get_claude_response(prompt: Union[str, list], system_prompt="You are a helpful assistant"):
+    
+    if isinstance(prompt, str):
+        messages = [{"role":"user", "content": prompt}]
+    else:
+        if prompt[0]["role"] == "system":
+            system_prompt = prompt[0]["content"]
+        messages = prompt[1:]
+        
+    response = claude_client.messages.create(
+        model="claude-3-5-sonnet-20240620",
+        max_tokens=1000,
+        temperature=0,
+        messages=messages,
+        system=system_prompt
+    )
+    response_content = response.content[0].text
+    return response_content
 
 try:
     from vllm import LLM, SamplingParams
