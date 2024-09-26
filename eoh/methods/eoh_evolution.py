@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
-from .meta_prompt import MetaPlan
+from .meta_prompt import MetaPlan, extract_json_from_text
 from .llm import get_openai_response as get_response
 import re
 from typing import Optional, Dict, List
@@ -48,6 +48,8 @@ class EvolNode:
     def m2(self, parents: list):
         return self._evolve('m2', parents)
 
+
+
 class EvolGraph:
     """ 
     Perhaps we should fold everything about 'Evolution' into this EvolGraph class
@@ -58,10 +60,6 @@ class EvolGraph:
         self.edges = []
     
     @classmethod
-    def parse_graph_from_response(cls, response):
-        pass
-    
-    @classmethod
     def generate(cls, goal: str):
         """ 
         Generate Graph Given Goal
@@ -69,11 +67,26 @@ class EvolGraph:
         meta_prompt = MetaPlan(goal)
         prompt_content = meta_prompt._get_prompt_i1()
         response = get_response(prompt_content)
-        plan_graph, advice_str = parse_graph(response)
+        plan_dict = extract_json_from_text(response)
         
-        pass # Missing information on the detail, need to test in notebook environment
+        nodes = {}
+        for node in plan_dict["nodes"]:
+            node_prompt = MetaPrompt(
+                task=node.get("task"),
+                func_name=node.get("name"),
+                input=node.get("input"),
+                output=node.get("output"),
+                mode=node.get("mode").lower()
+            )
+            nodes[node.get("name")] = EvolNode(meta_prompt=node_prompt)
         
+        edges = plan_dict["edges"]
         
+        graph = cls(nodes=list(nodes.values()), edges=edges)
+        graph.nodes = nodes
+        graph.edges = edges
+        
+        return graph
 
     def evolve_node(self, node_id: str, method: str):
         node = self.get_node(node_id)
