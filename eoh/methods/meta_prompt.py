@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 from enum import Enum
 import re
+import json
+import re
+import networkx as nx
+from dataclasses import dataclass
 
 class PromptMode(Enum):
     CODE = "code"
@@ -172,3 +176,164 @@ def parse_evol_response(response: str):
         code = re.findall(r"def.*return", response, re.DOTALL)
         
     return reasoning, code
+
+
+# Plan as a Graph (Ideally, current version fall-back to a chain of plan ....)
+plan_graph_prompt = """
+Generate a JSON-style plan represented as a Directed Acyclic Graph (DAG) to achieve the goal.
+
+The plan should include:
+
+- **Nodes**: Each node represents a key action or step and must contain the following attributes:
+  - `task`: Description of the task.
+  - `name`: Concise name used for the task function.
+  - `input`: The resources, information, or prerequisites needed to perform the action.
+  - `output`: The immediate result or outcome of the action.
+  - `target`: The purpose or goal that the action contributes to.
+
+- **Edges**: Each edge represents a dependency or relationship between nodes, indicating that one step supports or leads to another.
+  - `source`: The `id` of the source node (the preceding action).
+  - `target`: The `id` of the target node (the subsequent action).
+
+**Output Format:**
+
+Provide the output in the following JSON structure:
+
+```json
+{
+  "nodes": [
+    {
+      "task": "Task 1",
+      "name": "task_1"
+      "input": "Inputs required for Action 1",
+      "output": "Outputs/result of Action 1",
+      "target": "Purpose of Action 1"
+    },
+    {
+      "task": "Task 2",
+      "name": "task_2",
+      "input": "Inputs required for Action 2",
+      "output": "Outputs/result of Action 2",
+      "target": "Purpose of Action 2"
+    }
+    // Add more nodes as needed
+  ],
+  "edges": [
+    {
+      "source": "task_1",
+      "target": "task_2"
+    }
+    // Add more edges as needed
+  ]
+}
+"""
+
+
+@dataclass
+class MetaPlan:
+    goal: str
+    
+    @property
+    def _base_prompt(self):
+        prompt_content = f"First, describe your new algorithm and main steps in one sentence. "\
+                "The description must be inside a brace."\
+                f"{plan_graph_prompt}"
+        return prompt_content
+    
+    def _get_prompt_i1(self, mode: PromptMode):
+        prompt_content = f"Goal: {self.goal}\n{self._base_prompt(mode)}"
+        return prompt_content
+    
+    # e1/e2/m1/m2 to be implemented
+
+
+
+
+def remove_comment(response):
+    # remove lines satisfies line_str.strip().startswith("//"), also remove empty lines
+    response_lines = response.split('\n')
+    filtered_lines = [line for line in response_lines if not line.strip().startswith("//") and line.strip() != ""]
+    filtered_response = '\n'.join(filtered_lines)
+    return filtered_response 
+    
+    
+def parse_json_from_response(response):
+    """
+    Parse out the JSON output from the 'response' string.
+    
+    Args:
+    response (str): The string containing the JSON output.
+    
+    Returns:
+    dict: The parsed JSON data, or None if parsing fails.
+    """
+
+    # Find the JSON content using regex
+    json_match = re.search(r'\{[\s\S]*\}', response)
+    
+    if json_match:
+        json_str = json_match.group(0)
+        json_str = remove_comment(json_str) # OAI special treatment
+        advice_str = response.split(json_str)[-1]
+        try:
+            # Parse the JSON string
+            json_data = json.loads(json_str)
+            
+            # Ensure the JSON structure is as expected
+            if 'nodes' in json_data and 'edges' in json_data:
+                # No need to modify nodes or edges
+                return json_data, advice_str
+            else:
+                print("Unexpected JSON structure.")
+                return None
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON: {e}")
+            return None
+    else:
+        print("No JSON content found in the response.")
+        return None
+
+
+def build_graph_from_json(parsed_json):
+    """ 
+    Construct graph object from parsed json
+    - nodes & edges as the key values
+    """
+
+    G = nx.DiGraph()
+
+    # Add nodes
+    for node in parsed_json['nodes']:
+        try:
+            G.add_node(node)
+        except:
+            G.add_node(node['id'], label=node['label'])
+            
+    # Add edges
+    for edge in parsed_json['edges']:
+        G.add_edge(edge['from'], edge['to'], label=edge['relationship'])
+
+    return G 
+
+def parse_graph(response):
+    """ 
+    Parse out the Logical Graph Adopted by the LLM 
+    """
+    try:
+        parsed_json, advice_str = parse_json_from_response(response)
+        if parsed_json is None:
+            print("Error: parse_json_from_response returned None.")
+            return None
+        logical_graph = build_graph_from_json(parsed_json)
+        return logical_graph, advice_str
+    except json.JSONDecodeError:
+        print("Error: Unable to parse the logical graph response as JSON.")
+    except KeyError as e:
+        print(f"Error: Missing key in the JSON structure: {e}")
+    except nx.NetworkXError as e:
+        print(f"Error: NetworkX error while building graph: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+    return None, ""
+
+
