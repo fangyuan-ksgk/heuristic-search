@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from .meta_prompt import MetaPrompt
+from .meta_prompt import MetaPrompt, PromptMode
 
 #################################
 #   Evolution on Graph          #
@@ -8,29 +8,34 @@ from .meta_prompt import MetaPrompt
 #################################
         
 class Node(ABC):
-    def __init__(self, meta_prompt: MetaPrompt):
+    def __init__(self, content: str, description: str, meta_prompt: MetaPrompt):
+        self.content = content
+        self.description = description
         self.meta_prompt = meta_prompt
+        self.prompt_mode: PromptMode = PromptMode.PROMPT
     
     @abstractmethod
     def evolve(self):
         pass
-    
 
 class CodeNode(Node):
-    def __init__(self, code, algorithm):
-        self.code = code
-        self.algorithm = algorithm
+    def __init__(self, code: str, description: str, meta_prompt: MetaPrompt):
+        super().__init__(code, description, meta_prompt)
+        self.prompt_mode = PromptMode.CODE
 
     def evolve(self):
         # Implementation for evolving code
+        # Use self.content (code), self.description, and self.meta_prompt
         pass
 
 class PromptNode(Node):
-    def __init__(self, prompt):
-        self.prompt = prompt
+    def __init__(self, prompt: str, description: str, meta_prompt: MetaPrompt):
+        super().__init__(prompt, description, meta_prompt)
+        self.prompt_mode = PromptMode.PROMPT
 
     def evolve(self):
         # Implementation for evolving prompts
+        # Use self.content (prompt), self.description, and self.meta_prompt
         pass
 
 
