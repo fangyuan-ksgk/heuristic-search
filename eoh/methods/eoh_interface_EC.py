@@ -39,6 +39,12 @@ class InterfaceEC():
         return parents, offspring
 
     def get_offspring(self, pop, operator):
+        """ 
+        Generate a unique offspring using specific operator
+        - Wrap around _get_alg()
+        - Check against duplication
+        - Run evalution with timeout handler
+        """
         p, offspring = self._get_alg(pop, operator)
         
         while self.check_duplicate(pop, offspring['code']): # Desperate move for diversity ensurance | External stimulus is necessary
@@ -46,12 +52,17 @@ class InterfaceEC():
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future = executor.submit(self.interface_eval.evaluate, offspring['code'])
-            fitness = future.result(timeout=self.timeout) # Run Evaluation with TimeOut
+            fitness = future.result(timeout=self.timeout, default=0.) # Run Evaluation with TimeOut Default score as 0.
             offspring['objective'] = np.round(fitness, 5)
 
         return p, offspring
 
     def get_algorithm(self, pop, operator): # Parallel Genetic Search
+        """ 
+        Generate pop_size unique offsprings using specific operator
+        - Parallel execution
+        - Wrap around get_offspring()
+        """
         results = Parallel(n_jobs=self.n_p, timeout=self.timeout+15)(
             delayed(self.get_offspring)(pop, operator) for _ in range(self.pop_size)
         )
