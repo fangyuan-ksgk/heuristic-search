@@ -217,7 +217,7 @@ Provide the output in the following JSON structure:
       "name": "task_2",
       "input": "Inputs required for Action 2",
       "output": "Outputs/result of Action 2",
-      "target": "Purpose of Action 2"
+      "target": "Purpose of Action 2",
       "mode": "PROMPT"
     }
     // Add more nodes as needed
@@ -232,6 +232,23 @@ Provide the output in the following JSON structure:
 }
 """
 
+# For evaluation node, external memory is important (it could access local files through its code-interpreter, a skill which it should learn in the process)
+eval_goal_prompt = """
+Generate a JSON response describing a task to evaluate whehter the goal is completed.
+
+**Output Format:**
+
+Provide the output in the following JSON structure:
+```json
+{
+    "task": "Evaluate Task",
+    "name": "eval_goal",
+    "input": "Inputs required for evaluation",
+    "output": "Outputs required for evaluation",
+    "target": "Purpose of the evaluation",
+    "mode: "CODE"
+}
+"""
 
 @dataclass
 class MetaPlan:
@@ -244,8 +261,19 @@ class MetaPlan:
                 f"{plan_graph_prompt}"
         return prompt_content
     
+    @property
+    def _eval_prompt(self):
+        prompt_content = f"First, describe the intuition for your tactics and main steps in one sentence. "\
+                "The description must be inside a brace."\
+                f"{eval_goal_prompt}"
+        return prompt_content
+    
     def _get_prompt_i1(self):
         prompt_content = f"Goal: {self.goal}\n{self._base_prompt}"
+        return prompt_content
+    
+    def _get_eval_prompt_i1(self):
+        prompt_content = f"Goal: Evaluating wether the goal {self.goal} has been achieved.\n{self._base_prompt}"
         return prompt_content
     
     # e1/e2/m1/m2 to be implemented
