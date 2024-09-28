@@ -49,14 +49,14 @@ class EvolNode:
         return self._evolve('m2', parents)
 
 
-
 class EvolGraph:
     """ 
     EvolGraph: DNA -- EvolNode: 
     """
-    def __init__(self, nodes: Optional[List[EvolNode]], edges: Optional[List]):
-        self.nodes: Dict[str, EvolNode] = {}
-        self.edges = []
+    def __init__(self, nodes: Optional[List[EvolNode]], edges: Optional[List], evalnode: Optional[EvolNode]):
+        self.nodes: Dict[str, EvolNode] = nodes
+        self.edges = edges
+        self.evalnode = evalnode
     
     @classmethod
     def generate(cls, goal: str):

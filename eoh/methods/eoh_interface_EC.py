@@ -1,17 +1,18 @@
 import numpy as np
-from .eoh_evolution import Evolution
+from .eoh_evolution import EvolGraph, EvolNode
 from joblib import Parallel, delayed
 import concurrent.futures
 
 class InterfaceEC():
-    def __init__(self, pop_size: int, m: int, llm_model: str,
-                 interface_prob, # Special problem class
+    def __init__(self, pop_size: int, m: int,
+                 goal: str,
                  select,  # Special selection class
                  n_p: int, timeout: int, use_numba: bool, **kwargs):
         
         self.pop_size = pop_size
-        self.interface_eval = interface_prob
-        self.evol = Evolution(llm_model, interface_prob.prompts, **kwargs)
+        self.eval = EvolNode
+        # self.interface_eval = interface_prob # Manual Efforts required for curating the evaluation mechanism
+        self.evol = EvolGraph.generate(goal)
         self.m = m
         self.select = select
         self.n_p = n_p
