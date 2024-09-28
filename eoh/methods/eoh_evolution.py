@@ -88,6 +88,12 @@ class EvolGraph:
         graph.edges = edges
         
         return graph
+    
+    def evolve_graph(self, method: str):
+        """ 
+        Evolve Planning Graph Topology
+        """ 
+        raise NotImplementedError
 
     def evolve_node(self, node_id: str, method: str):
         node = self.get_node(node_id)
