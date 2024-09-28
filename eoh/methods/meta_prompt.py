@@ -45,8 +45,7 @@ class MetaPrompt:
                 "The description must be inside a brace. Next, implement it in Python as a function named "\
                 f"{self.func_name}. This function should accept {len(self.input)} input(s): "\
                 f"{self.joined_inputs}. The function should return {len(self.output)} output(s): "\
-                f"{self.joined_outputs}. {self.inout_inf} "\
-                f"{self.other_inf}\n"\
+                f"{self.joined_outputs}."\
                 "Do not give additional explanations."
             return prompt_content
         elif self.mode == PromptMode.PROMPT:
@@ -176,7 +175,7 @@ def parse_evol_response(response: str):
     if len(code) == 0:
         code = re.findall(r"def.*return", response, re.DOTALL)
         
-    return reasoning, code
+    return reasoning[0], code[0]
 
 
 # Plan as a Graph (Ideally, current version fall-back to a chain of plan ....)

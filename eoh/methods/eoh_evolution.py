@@ -31,7 +31,7 @@ class EvolNode:
         prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
         prompt_content = prompt_method()
         response = get_response(prompt_content)
-        return parse_evol_response(response)
+        return parse_evol_response(response) # Need to Make sure an Callable function is returned here ....
 
     def i1(self):
         return self._evolve('i1')
