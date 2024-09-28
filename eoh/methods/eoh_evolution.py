@@ -53,10 +53,10 @@ class EvolGraph:
     """ 
     EvolGraph: DNA -- EvolNode: 
     """
-    def __init__(self, nodes: Optional[List[EvolNode]], edges: Optional[List], evalnode: Optional[EvolNode]):
+    def __init__(self, nodes: Optional[List[EvolNode]], edges: Optional[List], eval_node: Optional[EvolNode]):
         self.nodes: Dict[str, EvolNode] = nodes
         self.edges = edges
-        self.evalnode = evalnode
+        self.eval_node = eval_node
     
     @classmethod
     def generate(cls, goal: str):
@@ -86,6 +86,18 @@ class EvolGraph:
         graph = cls(nodes=list(nodes.values()), edges=edges)
         graph.nodes = nodes
         graph.edges = edges
+        
+        prompt_content = meta_prompt._get_eval_prompt_i1()
+        response = get_response(prompt_content)
+        plan_dict = extract_json_from_text(response)
+        eval_prompt = MetaPrompt(
+            task=node.get("task"),
+            func_name=node.get("name"),
+            input=node.get("input"),
+            output=node.get("output"),
+            mode=node.get("mode").lower()
+        )
+        eval_node = EvolNode(meta_prompt=eval_prompt)
         
         return graph
     
