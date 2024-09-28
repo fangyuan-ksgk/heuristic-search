@@ -165,17 +165,16 @@ def parse_evol_response(response: str):
     reasoning = re.findall(r"\{(.*)\}", response, re.DOTALL)
     if len(reasoning) == 0:
         if 'python' in response:
-            reasoning = re.findall(r'^.*?(?=python)', response,re.DOTALL)
+            reasoning = re.findall(r'^.*?(?=python)', response, re.DOTALL)
         elif 'import' in response:
-            reasoning = re.findall(r'^.*?(?=import)', response,re.DOTALL)
+            reasoning = re.findall(r'^.*?(?=import)', response, re.DOTALL)
         else:
-            reasoning = re.findall(r'^.*?(?=def)', response,re.DOTALL)
+            reasoning = re.findall(r'^.*?(?=def)', response, re.DOTALL)
             
-    code = re.findall(r"import.*return", response, re.DOTALL)
-    if len(code) == 0:
-        code = re.findall(r"def.*return", response, re.DOTALL)
-        
-    return reasoning[0], code[0]
+    # Updated code extraction
+    code = re.findall(r"((?:import|def).*?(?:^return.*?$|^    return.*?$))", response, re.DOTALL | re.MULTILINE)
+    
+    return reasoning[0].strip() if reasoning else "", code[0].strip() if code else ""
 
 
 # Plan as a Graph (Ideally, current version fall-back to a chain of plan ....)
