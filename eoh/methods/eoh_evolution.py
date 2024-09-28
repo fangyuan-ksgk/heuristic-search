@@ -47,6 +47,9 @@ class EvolNode:
     
     def m2(self, parents: list):
         return self._evolve('m2', parents)
+    
+    def __forward__(self, inputs): # Interesting Parallel to NN Layer
+        raise NotImplementedError
 
 
 class EvolGraph:
