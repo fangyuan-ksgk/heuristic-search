@@ -83,9 +83,6 @@ class EvolGraph:
         
         edges = plan_dict["edges"]
         
-        graph = cls(nodes=list(nodes.values()), edges=edges)
-        graph.nodes = nodes
-        graph.edges = edges
         
         prompt_content = meta_prompt._get_eval_prompt_i1()
         response = get_response(prompt_content)
@@ -99,6 +96,8 @@ class EvolGraph:
         )
         eval_node = EvolNode(meta_prompt=eval_prompt)
         
+        graph = cls(nodes=list(nodes.values()), edges=edges, eval_node=eval_node)
+
         return graph
     
     def evolve_graph(self, method: str):
