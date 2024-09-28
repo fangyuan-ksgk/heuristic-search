@@ -233,6 +233,8 @@ Provide the output in the following JSON structure:
 """
 
 # For evaluation node, external memory is important (it could access local files through its code-interpreter, a skill which it should learn in the process)
+# How do we improve on the evaluation? Can we evaluate on the evaluation result? 
+
 eval_goal_prompt = """
 Generate a JSON response describing a task to evaluate whehter the goal is completed.
 
