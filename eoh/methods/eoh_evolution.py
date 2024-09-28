@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
 from .meta_prompt import MetaPlan, extract_json_from_text
+from .meta_execute import call_func
 from .llm import get_openai_response as get_response
 import re
 from typing import Optional, Dict, List
+
 
 #################################
 #   Evolution on Graph          #
@@ -48,8 +50,12 @@ class EvolNode:
     def m2(self, parents: list):
         return self._evolve('m2', parents)
     
-    def __forward__(self, inputs): # Interesting Parallel to NN Layer
-        raise NotImplementedError
+    def __forward__(self, inputs):
+        """ 
+        TBD: Inheritance to accumulated codebase with 'file_path' 
+        TBD: Stricter input / output type checking to ensure composibility
+        """
+        return call_func(inputs, self.code, self.meta_prompt.func_name, file_path=None)
 
 
 class EvolGraph:
