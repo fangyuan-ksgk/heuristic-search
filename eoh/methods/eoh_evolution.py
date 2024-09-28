@@ -29,11 +29,14 @@ class EvolNode:
         self.reasoning = reasoning
         self.meta_prompt = meta_prompt
     
-    def _evolve(self, method: str, parents: list = None):
+    def _evolve(self, method: str, parents: list = None, replace=False):
         prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
         prompt_content = prompt_method()
         response = get_response(prompt_content)
-        return parse_evol_response(response) # Need to Make sure an Callable function is returned here ....
+        reasoning, code = parse_evol_response(response)
+        if replace:
+            self.reasoning, self.code = reasoning, code
+        return reasoning, code
 
     def i1(self):
         return self._evolve('i1')
@@ -50,7 +53,7 @@ class EvolNode:
     def m2(self, parents: list):
         return self._evolve('m2', parents)
     
-    def __forward__(self, inputs):
+    def __call__(self, inputs):
         """ 
         TBD: Inheritance to accumulated codebase with 'file_path' 
         TBD: Stricter input / output type checking to ensure composibility
