@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
 from .meta_prompt import MetaPlan, extract_json_from_text
-from .meta_execute import call_func
+from .meta_execute import call_func_code, call_func_prompt
 from .llm import get_openai_response as get_response
 import re
 from typing import Optional, Dict, List
@@ -55,11 +55,13 @@ class EvolNode:
     
     def __call__(self, inputs):
         """ 
-        TBD: Inheritance to accumulated codebase with 'file_path' 
+        TBD: Inheritance to accumulated codebase with 'file_path' | Graph Topology naturally enables inheritance
         TBD: Stricter input / output type checking to ensure composibility
         """
-        return call_func(inputs, self.code, self.meta_prompt.func_name, file_path=None)
-
+        if self.meta_prompt.mode == PromptMode.CODE:
+            return call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None)
+        elif self.meta_prompt.mode == PromptMode.PROMPT:
+            return call_func_prompt(inputs, self.code, get_response)
 
 class EvolGraph:
     """ 
@@ -94,7 +96,6 @@ class EvolGraph:
             nodes[node.get("name")] = EvolNode(meta_prompt=node_prompt)
         
         edges = plan_dict["edges"]
-        
         
         prompt_content = meta_prompt._get_eval_prompt_i1()
         response = get_response(prompt_content)
