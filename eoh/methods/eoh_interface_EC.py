@@ -10,9 +10,7 @@ class InterfaceEC():
                  n_p: int, timeout: int, use_numba: bool, **kwargs):
         
         self.pop_size = pop_size
-        self.eval = EvolNode
-        # self.interface_eval = interface_prob # Manual Efforts required for curating the evaluation mechanism
-        self.evol = EvolGraph.generate(goal)
+        self.evol = EvolGraph.generate(goal) # EvolGraph contains evaluator itself
         self.m = m
         self.select = select
         self.n_p = n_p
@@ -52,7 +50,7 @@ class InterfaceEC():
             p, offspring = self._get_alg(pop, operator)
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(self.interface_eval.evaluate, offspring['code'])
+            future = executor.submit(self.evol.eval_node, offspring['code']) # Important to ensure each Node has 'forward' functionality
             fitness = future.result(timeout=self.timeout, default=0.) # Run Evaluation with TimeOut Default score as 0.
             offspring['objective'] = np.round(fitness, 5)
 
