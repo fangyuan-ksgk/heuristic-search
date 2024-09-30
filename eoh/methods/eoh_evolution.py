@@ -40,13 +40,15 @@ class EvolNode:
             reasoning, code = parse_evol_response(response)
             
             is_fit, error_message = compile_check(code)
-                        
+
             if is_fit:
                 if replace:
                     self.reasoning, self.code = reasoning, code
+                print("Bingo!")
                 return reasoning, code
             else:
                 prompt_content += f"\nPrevious attempt failed: {error_message}\nPlease try again."
+                print("failed compilation, retrying ...")
         
         return self.reasoning, self.code
     

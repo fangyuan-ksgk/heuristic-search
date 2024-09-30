@@ -2,7 +2,7 @@ import types
 import importlib.util
 import sys
 from .meta_prompt import extract_json_from_text
-from typing import Any, get_type_hints, Dict
+from typing import Any, get_type_hints, Dict, Tuple
 import inspect
 
 
@@ -60,39 +60,10 @@ def call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_p
     result = func(**input_data)
 
     # Check output type
-    if not isinstance(result, expected_return_type) and expected_return_type != Any:
+    if expected_return_type != Any and not isinstance(result, expected_return_type):
         raise TypeError(f"Output data type mismatch. Expected {expected_return_type}, got {type(result)}")
 
     return result
-
-
-
-# def call_func_code(input_data, code: str, func_name: str, file_path=None):
-#     """ 
-#     Dynamic calling function defined in 'code' snippet
-#     - with support of external python file from 'file_name'
-#     - dynamic module used to cache the code-snippet
-#     """
-#     if file_path:
-#         # Load code from external file
-#         module_name = f"dynamic_module_{hash(file_path)}"
-#         spec = importlib.util.spec_from_file_location(module_name, file_path)
-#         mod = importlib.util.module_from_spec(spec)
-#         sys.modules[module_name] = mod
-#         spec.loader.exec_module(mod)
-#     else:
-#         # Use the existing code string approach
-#         mod = types.ModuleType('dynamic_module')
-#         exec(code, mod.__dict__)
-    
-#     # Get the function from the module
-#     if func_name not in mod.__dict__:
-#         raise ValueError(f"Function '{func_name}' not found in generated code")
-    
-#     func = mod.__dict__[func_name]
-    
-#     # Call the function with the input data
-#     return func(input_data)
 
 
 def call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callable):
@@ -111,27 +82,3 @@ def call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callab
     except:
         output_dict = {}
     return output_dict
-
-
-def compile_check(code: str, input_data: Dict[str, Any], expected_output_type: Any) -> Tuple[bool, str]:
-    """
-    Check the fitness of the node by verifying compilation success and input/output correctness.
-    Returns a tuple of (is_fit: bool, error_message: str)
-    """
-    # Check compilation success
-    try:
-        compile(code, '<string>', 'exec')
-    except Exception as e:
-        return False, f"Compilation Error: {str(e)}"
-
-    # Check input/output type consistency
-    try:
-        result = call_func_code(input_data, code, 'main')
-        if not isinstance(result, expected_output_type) and expected_output_type != Any:
-            return False, f"Output type mismatch. Expected {expected_output_type}, got {type(result)}"
-    except TypeError as e:
-        return False, f"Type Error: {str(e)}"
-    except Exception as e:
-        return False, f"Runtime Error: {str(e)}"
-
-    return True, "Compilation and type check successful"
