@@ -24,6 +24,8 @@ class MetaPrompt:
     func_name: str
     input: str
     output: str
+    input_types: list 
+    output_types: list
     mode: PromptMode
     
     @property
@@ -45,9 +47,10 @@ class MetaPrompt:
             prompt_content = f"First, describe your new algorithm and main steps in one sentence. "\
                 "The description must be inside a brace. Next, implement it in Python as a function named "\
                 f"{self.func_name}. This function should accept {len(self.input)} input(s): "\
-                f"{self.joined_inputs}. The function should return {len(self.output)} output(s): "\
-                f"{self.joined_outputs}."\
-                "Specify types for input and output."
+                f"{self.joined_inputs} with types {', '.join(self.input_types)}. "\
+                f"The function should return {len(self.output)} output(s): "\
+                f"{self.joined_outputs} with types {', '.join(self.output_types)}."\
+                "Make sure to include type hints in your function signature."
             return prompt_content
         elif self.mode == PromptMode.PROMPT:
             prompt_content = f"First, describe your new reasoning and main thoughts in one sentence."\
@@ -80,6 +83,7 @@ class MetaPrompt:
                          "    ...\n"\
                          "]\n\n"\
                          "Provide 5 such pairs, ensuring type correctness and diversity in the inputs and outputs."        
+        return prompt_content
         
     def _get_prompt_i1(self):
         prompt_content = f"{self.task}\n{self._base_prompt()}"
