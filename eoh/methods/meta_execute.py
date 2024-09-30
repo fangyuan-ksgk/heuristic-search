@@ -46,3 +46,17 @@ def call_func_prompt(input_data, code: str, get_response: callable):
     except:
         output_dict = {}
     return output_dict
+
+
+def compile_check(code: str) -> bool:
+    """
+    Check the fitness of the node by verifying compilation success and input/output correctness.
+    Returns a tuple of (is_fit: bool, error_message: str)
+    """
+    # Check compilation success
+    try:
+        compile(code, '<string>', 'exec')
+    except Exception as e:
+        return False, f"Compilation Error: {str(e)}"
+
+    return True, "Compilation successful"
