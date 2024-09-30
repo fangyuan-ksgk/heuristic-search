@@ -1,2 +1,2 @@
-# heuristic-search
-Minimal Implmenetation of Evolution of Heuristic, originally used for algorithm search, extended for more general purpose goal-oriented idea search.
+# Evolution-of-Plan
+![Evolution-of-Plan](https://github.com/user-attachments/assets/af98faeb-66d6-4278-af86-67d668d1954e)
