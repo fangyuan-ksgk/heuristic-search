@@ -31,26 +31,18 @@ class EvolNode:
 
 
     def _evolve(self, method: str, parents: list = None, replace=False):
+        """
+        Note: Evolution process will be decoupled with the fitness assignment process
+        """
         prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
         prompt_content = prompt_method()
+     
+        response = get_response(prompt_content)
+        reasoning, code = parse_evol_response(response)
         
-        max_attempts = 3
-        for attempt in range(max_attempts):
-            response = get_response(prompt_content)
-            reasoning, code = parse_evol_response(response)
-            
-            is_fit, error_message = compile_check(code)
-
-            if is_fit:
-                if replace:
-                    self.reasoning, self.code = reasoning, code
-                print("Bingo!")
-                return reasoning, code
-            else:
-                prompt_content += f"\nPrevious attempt failed: {error_message}\nPlease try again."
-                print("failed compilation, retrying ...")
-        
-        return self.reasoning, self.code
+        if replace:
+            self.reasoning, self.code = reasoning, code
+        return reasoning, code
     
 
     def i1(self):

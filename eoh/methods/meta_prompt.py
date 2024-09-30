@@ -60,6 +60,27 @@ class MetaPrompt:
         elif self.mode == PromptMode.TOOL:
             raise NotImplementedError
         
+    def _get_eval_prompt(self):
+        """ 
+        Asking for (input, output) pairs for evaluation
+        """
+        prompt_content = f"Task: {self.task}\n\n"\
+                         f"For the Python function '{self.func_name}', generate 5 diverse (input, output) pairs for evaluation. "\
+                         "These pairs should cover different scenarios, including edge cases.\n\n"\
+                         "Function signature:\n"\
+                         f"def {self.func_name}({', '.join(f'{inp}: {type_hint}' for inp, type_hint in zip(self.input, self.input_types))}) -> {self.output_type}:\n\n"\
+                         "Provide your response as a Python list of dictionaries. Each dictionary should have 'input' and 'expected_output' keys. "\
+                         "Ensure that the types match the function signature.\n\n"\
+                         "Example format:\n"\
+                         "[\n"\
+                         "    {\n"\
+                         "        'input': {" + ', '.join(f"'{inp}': {type_hint}(...)" for inp, type_hint in zip(self.input, self.input_types)) + "},\n"\
+                         "        'expected_output': {self.output_type}(...)\n"\
+                         "    },\n"\
+                         "    ...\n"\
+                         "]\n\n"\
+                         "Provide 5 such pairs, ensuring type correctness and diversity in the inputs and outputs."        
+        
     def _get_prompt_i1(self):
         prompt_content = f"{self.task}\n{self._base_prompt()}"
         return prompt_content
