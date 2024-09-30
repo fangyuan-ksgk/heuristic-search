@@ -47,6 +47,36 @@ class EvolNode:
             self.reasoning, self.code = reasoning, code
         return reasoning, code
     
+    def _evaluate_structure_fitness(self, test_cases: List[Dict], code: Optional[str] = None) -> float:
+        """ 
+        Check for compilation sucess, type consistency
+        """
+        total_tests = len(test_cases)
+        passed_tests = 0
+
+        if code is None:
+            code = self.code
+
+        for test_case in test_cases:
+        
+            if self.meta_prompt.mode == PromptMode.CODE:
+                try:
+                    output_value = call_func_code(test_case, code, self.meta_prompt.func_name, file_path=None)
+                    passed_tests += 1
+                except Exception as e:
+                    continue
+            elif self.meta_prompt.mode == PromptMode.PROMPT:
+                try:
+                    output_value = call_func_prompt(test_case, code, get_response)
+                    passed_tests += 1
+                except Exception as e:
+                    continue
+            else:
+                raise ValueError(f"Unknown mode: {self.meta_prompt.mode}")
+
+        return passed_tests / total_tests
+
+
 
     def i1(self):
         return self._evolve('i1')

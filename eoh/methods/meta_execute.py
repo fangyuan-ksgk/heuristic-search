@@ -8,11 +8,30 @@ from typing import get_origin, get_args
 
 
 def check_type(value, expected_type):
-    if get_origin(expected_type) is None:
+    if expected_type is Any:
+        return True
+    
+    origin = get_origin(expected_type)
+    if origin is None:
+        # For non-generic types
         return isinstance(value, expected_type)
     else:
-        return (isinstance(value, get_origin(expected_type)) and
-                all(isinstance(arg, get_args(expected_type)[i]) for i, arg in enumerate(value)))
+        # For generic types
+        if not isinstance(value, origin):
+            return False
+        
+        args = get_args(expected_type)
+        if not args:
+            return True  # No arguments to check
+        
+        if isinstance(value, (list, tuple, set)):
+            return all(check_type(item, args[0]) for item in value)
+        elif isinstance(value, dict):
+            return (all(check_type(k, args[0]) for k in value.keys()) and
+                    all(check_type(v, args[1]) for v in value.values()))
+        else:
+            # For other types of generics, you might need to add more specific checks
+            return True
     
 
 def call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_path: str = None) -> Any:
