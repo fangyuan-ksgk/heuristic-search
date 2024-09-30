@@ -47,6 +47,16 @@ class EvolNode:
             self.reasoning, self.code = reasoning, code
         return reasoning, code
     
+    def _evaluate_fitness(self, test_cases: List[Dict]) -> float:
+        """ 
+        Fitness evaluation: 
+        - Structure: 
+        - Functionality: 
+        """
+        structure_fitness, _ = self._evaluate_structure_fitness(test_cases)
+        functionality_fitness = self._evaluate_functionality_fitness(test_cases)
+        return structure_fitness + functionality_fitness
+    
     def _evaluate_structure_fitness(self, test_cases: List[Dict], code: Optional[str] = None) -> float:
         """ 
         Check for compilation sucess, type consistency
@@ -57,6 +67,7 @@ class EvolNode:
         if code is None:
             code = self.code
 
+        error_msg = ""
         for test_case in test_cases:
         
             if self.meta_prompt.mode == PromptMode.CODE:
@@ -64,18 +75,21 @@ class EvolNode:
                     output_value = call_func_code(test_case, code, self.meta_prompt.func_name, file_path=None)
                     passed_tests += 1
                 except Exception as e:
-                    continue
+                    error_msg += str(e)
             elif self.meta_prompt.mode == PromptMode.PROMPT:
                 try:
                     output_value = call_func_prompt(test_case, code, get_response)
                     passed_tests += 1
                 except Exception as e:
-                    continue
+                    error_msg += str(e)
             else:
                 raise ValueError(f"Unknown mode: {self.meta_prompt.mode}")
 
-        return passed_tests / total_tests
-
+        return passed_tests / total_tests, error_msg
+    
+    def _evaluate_functionality_fitness(self, test_cases: List[Dict], code: Optional[str] = None) -> float:
+        # raise NotImplementedError
+        return 0.0
 
 
     def i1(self):
