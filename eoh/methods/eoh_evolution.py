@@ -66,9 +66,13 @@ class EvolNode:
         TBD: Stricter input / output type checking to ensure composibility
         """
         if self.meta_prompt.mode == PromptMode.CODE:
-            return call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None)
+            output_value = call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None)
+            output_name = self.meta_prompt.output[0]
+            return {output_name: output_value}
         elif self.meta_prompt.mode == PromptMode.PROMPT:
-            return call_func_prompt(inputs, self.code, get_response)
+            output_value = call_func_prompt(inputs, self.code, get_response)
+            output_name = self.meta_prompt.output[0]
+            return {output_name: output_value}
         
     def save(self, node_path: str) -> None:
         node_data = {
