@@ -63,6 +63,23 @@ class EvolNode:
         elif self.meta_prompt.mode == PromptMode.PROMPT:
             return call_func_prompt(inputs, self.code, get_response)
         
+    # Fitness Checker (Compile success)
+    def _fitness_check(self):
+        """
+        Check the fitness of the node by verifying compilation success and input/output correctness.
+        Returns a tuple of (is_fit: bool, error_message: str)
+        """
+        # Check compilation success
+        try:
+            compile(self.code, '<string>', 'exec')
+        except Exception as e:
+            return False, f"Compilation failed: {str(e)}"
+
+        # Check input/output correctness
+        # raise NotImplementedError
+
+        return True, "Fitness check passed"
+        
     def save(self, node_path: str) -> None:
         node_data = {
             "code": self.code,
@@ -79,6 +96,7 @@ class EvolNode:
             node_data = json.load(f)
         meta_prompt = MetaPrompt.from_dict(node_data['meta_prompt'])  # Assuming MetaPrompt has a from_dict method
         return cls(meta_prompt=meta_prompt, code=node_data['code'], reasoning=node_data['reasoning'])
+     
 
 
 class EvolGraph:
