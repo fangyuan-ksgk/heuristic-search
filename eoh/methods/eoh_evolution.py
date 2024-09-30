@@ -70,7 +70,12 @@ class EvolNode:
             output_name = self.meta_prompt.output[0]
             return {output_name: output_value}
         elif self.meta_prompt.mode == PromptMode.PROMPT:
-            return call_func_prompt(inputs, self.code, get_response) # I think prompt asks for dictionary output already
+            output_name = self.meta_prompt.output[0]
+            output_dict = call_func_prompt(inputs, self.code, get_response)
+            output_value = output_dict.get(output_name, None) # We don't like surprises
+            if output_value is None:
+                raise ValueError(f"Output value for {output_name} is None")
+            return {output_name: output_value}
         
     def save(self, node_path: str) -> None:
         node_data = {
