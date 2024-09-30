@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
 from .meta_prompt import MetaPlan, extract_json_from_text
-from .meta_execute import call_func_code, call_func_prompt, compile_check
+from .meta_execute import call_func_code, call_func_prompt
 from .llm import get_openai_response as get_response
 import re, os, json
 from typing import Optional, Dict, List
