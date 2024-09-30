@@ -47,14 +47,15 @@ class MetaPrompt:
                 f"{self.func_name}. This function should accept {len(self.input)} input(s): "\
                 f"{self.joined_inputs}. The function should return {len(self.output)} output(s): "\
                 f"{self.joined_outputs}."\
-                "Do not give additional explanations."
+                "Specify types for input and output."
             return prompt_content
         elif self.mode == PromptMode.PROMPT:
             prompt_content = f"First, describe your new reasoning and main thoughts in one sentence."\
                 "The description must be inside a brace. Implement a Python function that generates a prompt to guide an AI in completing the task. "\
                 f"Follow these specifications: - Function name: generate_prompt - Input parameters: {self.joined_inputs} - Return value: A string containing the final prompt for the AI."\
                 "Ask for JSON-style response with Output values: {self.joined_outputs}"\
-                "Your function should incorporate the reasoning from step 1 and use the input parameters to create a tailored prompt for the task."
+                "Your function should incorporate the reasoning from step 1 and use the input parameters to create a tailored prompt for the task."\
+                "Specify types for input and output."
             return prompt_content
         elif self.mode == PromptMode.TOOL:
             raise NotImplementedError
