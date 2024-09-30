@@ -25,6 +25,9 @@ from typing import Optional, Dict, List
 class EvolNode:
     
     def __init__(self, meta_prompt: MetaPrompt, code: Optional[str] = None, reasoning: Optional[str] = None):
+        """ 
+        Executable Task
+        """
         self.code = code
         self.reasoning = reasoning
         self.meta_prompt = meta_prompt
@@ -97,10 +100,11 @@ class EvolNode:
 
 
 class EvolGraph:
-    """ 
-    EvolGraph: DNA -- EvolNode: 
-    """
+    
     def __init__(self, nodes: Optional[List[EvolNode]], edges: Optional[List], eval_node: Optional[EvolNode]):
+        """ 
+        EvolGraph: Topology of Node functions -- Plan. 
+        """
         self.nodes: Dict[str, EvolNode] = nodes
         self.edges = edges
         self.eval_node = eval_node
