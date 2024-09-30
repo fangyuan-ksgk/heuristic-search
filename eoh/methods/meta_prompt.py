@@ -17,6 +17,7 @@ class PromptMode(Enum):
 # -- Covering 3 types of Node (Code, Prompt, Tool)
 # -- Covering Generation (i1) Evolution (e1, e2) and Mutation (m1, m2) for each node
 
+
 @dataclass
 class MetaPrompt:
     task: str
@@ -179,6 +180,7 @@ class MetaPrompt:
             output=data["output"],
             mode=PromptMode(data["mode"])
         )
+
         
         
 def parse_evol_response(response: str):
