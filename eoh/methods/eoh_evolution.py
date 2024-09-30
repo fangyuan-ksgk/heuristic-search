@@ -63,7 +63,7 @@ class EvolNode:
                 return reasoning, code
             
             # If not successful, log the attempt
-            print(f"Attempt {attempt + 1} failed. Fitness: {fitness:.2f}. Error: {error_msg}")
+            print(f" - Attempt {attempt + 1} failed. Fitness: {fitness:.2f}. Error: {error_msg}")
         
         # If all attempts fail, return None
         print(f"Evolution failed after {max_attempts} attempts.")
@@ -100,7 +100,9 @@ class EvolNode:
                     error_msg += str(e)
             elif self.meta_prompt.mode == PromptMode.PROMPT:
                 try:
-                    output_value = call_func_prompt(test_case, code, get_response)
+                    output_dict = call_func_prompt(test_case, code, get_response)
+                    output_name = self.meta_prompt.output[0]
+                    output_dict.get(output_name)
                     passed_tests += 1
                 except Exception as e:
                     error_msg += str(e)
