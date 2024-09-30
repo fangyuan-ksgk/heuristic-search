@@ -33,12 +33,13 @@ class EvolNode:
         self.meta_prompt = meta_prompt
 
 
-    def _evolve(self, method: str, parents: list = None, replace=False):
+    def _evolve(self, method: str, parents: list = None, replace=False, error_msg: str = ""):
         """
         Note: Evolution process will be decoupled with the fitness assignment process
         """
         prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
         prompt_content = prompt_method()
+        prompt_content += error_msg # Append error message to the prompt
      
         response = get_response(prompt_content)
         reasoning, code = parse_evol_response(response)
@@ -46,6 +47,27 @@ class EvolNode:
         if replace:
             self.reasoning, self.code = reasoning, code
         return reasoning, code
+    
+    def evolve(self, test_cases: List[Dict], method: str, parents: list = None, replace=False, max_attempts: int = 3, fitness_threshold: float = 0.8):
+        """
+        Evolve node and only accept structurally fit solutions
+        Attempts multiple evolutions before returning the final output
+        """
+        for attempt in range(max_attempts):
+            reasoning, code = self._evolve(method, parents, replace=False)
+            fitness, error_msg = self._evaluate_structure_fitness(test_cases, code)
+            
+            if fitness >= fitness_threshold:
+                if replace:
+                    self.reasoning, self.code = reasoning, code
+                return reasoning, code
+            
+            # If not successful, log the attempt
+            print(f"Attempt {attempt + 1} failed. Fitness: {fitness:.2f}. Error: {error_msg}")
+        
+        # If all attempts fail, return None
+        print(f"Evolution failed after {max_attempts} attempts.")
+        return None, None
     
     def _evaluate_fitness(self, test_cases: List[Dict], code: Optional[str] = None) -> float:
         """ 
