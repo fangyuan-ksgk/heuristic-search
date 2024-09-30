@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
 from .meta_prompt import MetaPlan, extract_json_from_text
-from .meta_execute import call_func_code, call_func_prompt
+from .meta_execute import call_func_code, call_func_prompt, compile_check
 from .llm import get_openai_response as get_response
 import re, os, json
 from typing import Optional, Dict, List
@@ -28,15 +28,28 @@ class EvolNode:
         self.code = code
         self.reasoning = reasoning
         self.meta_prompt = meta_prompt
-    
+
+
     def _evolve(self, method: str, parents: list = None, replace=False):
         prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
         prompt_content = prompt_method()
-        response = get_response(prompt_content)
-        reasoning, code = parse_evol_response(response)
-        if replace:
-            self.reasoning, self.code = reasoning, code
-        return reasoning, code
+        
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            response = get_response(prompt_content)
+            reasoning, code = parse_evol_response(response)
+            
+            is_fit, error_message = compile_check(code)
+                        
+            if is_fit:
+                if replace:
+                    self.reasoning, self.code = reasoning, code
+                return reasoning, code
+            else:
+                prompt_content += f"\nPrevious attempt failed: {error_message}\nPlease try again."
+        
+        return self.reasoning, self.code
+    
 
     def i1(self):
         return self._evolve('i1')
@@ -62,23 +75,6 @@ class EvolNode:
             return call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None)
         elif self.meta_prompt.mode == PromptMode.PROMPT:
             return call_func_prompt(inputs, self.code, get_response)
-        
-    # Fitness Checker (Compile success)
-    def _fitness_check(self):
-        """
-        Check the fitness of the node by verifying compilation success and input/output correctness.
-        Returns a tuple of (is_fit: bool, error_message: str)
-        """
-        # Check compilation success
-        try:
-            compile(self.code, '<string>', 'exec')
-        except Exception as e:
-            return False, f"Compilation failed: {str(e)}"
-
-        # Check input/output correctness
-        # raise NotImplementedError
-
-        return True, "Fitness check passed"
         
     def save(self, node_path: str) -> None:
         node_data = {
