@@ -107,8 +107,10 @@ def call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callab
     prompt_func = mod.__dict__[func_name]
     prompt = prompt_func(input_data)
     response = get_response(prompt)
+    
     try:
         output_dict = extract_json_from_text(response)
     except:
+        print("Error in parsing LLM response: \n",response)
         output_dict = {}
     return output_dict
