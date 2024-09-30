@@ -2,9 +2,18 @@ import types
 import importlib.util
 import sys
 from .meta_prompt import extract_json_from_text
-from typing import Any, get_type_hints, Dict, Tuple
+from typing import Any, get_type_hints, Dict
 import inspect
+from typing import get_origin, get_args
 
+
+def check_type(value, expected_type):
+    if get_origin(expected_type) is None:
+        return isinstance(value, expected_type)
+    else:
+        return (isinstance(value, get_origin(expected_type)) and
+                all(isinstance(arg, get_args(expected_type)[i]) for i, arg in enumerate(value)))
+    
 
 def call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_path: str = None) -> Any:
     """ 
@@ -53,15 +62,17 @@ def call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_p
     for param_name, expected_type in type_hints.items():
         if param_name in input_data:
             actual_value = input_data[param_name]
-            if not isinstance(actual_value, expected_type) and expected_type != Any:
+            if not check_type(actual_value, expected_type) and expected_type != Any:
                 raise TypeError(f"Input data type mismatch for parameter '{param_name}'. Expected {expected_type}, got {type(actual_value)}")
 
     # Call the function with the input data
     result = func(**input_data)
 
     # Check output type
-    if expected_return_type != Any and not isinstance(result, expected_return_type):
+    if expected_return_type != Any and not check_type(result, expected_return_type):
         raise TypeError(f"Output data type mismatch. Expected {expected_return_type}, got {type(result)}")
+
+    # Fold result into a dictionary 
 
     return result
 
