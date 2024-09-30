@@ -293,7 +293,7 @@ class MetaPlan:
         return prompt_content
     
     def _get_eval_prompt_i1(self):
-        prompt_content = f"Goal: Evaluating wether the goal {self.goal} has been achieved.\n{self._base_prompt}"
+        prompt_content = f"Goal: Evaluating wether the goal {self.goal} has been achieved.\n{self._eval_prompt}"
         return prompt_content
     
     # e1/e2/m1/m2 to be implemented
