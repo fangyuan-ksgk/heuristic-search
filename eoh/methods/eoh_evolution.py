@@ -3,7 +3,7 @@ from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
 from .meta_prompt import MetaPlan, extract_json_from_text
 from .meta_execute import call_func_code, call_func_prompt
 from .llm import get_openai_response as get_response
-import re
+import re, os, json
 from typing import Optional, Dict, List
 
 
@@ -62,6 +62,24 @@ class EvolNode:
             return call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None)
         elif self.meta_prompt.mode == PromptMode.PROMPT:
             return call_func_prompt(inputs, self.code, get_response)
+        
+    def save(self, node_path: str) -> None:
+        node_data = {
+            "code": self.code,
+            "reasoning": self.reasoning,
+            "meta_prompt": self.meta_prompt.to_dict()  # Assuming MetaPrompt has a to_dict method
+        }
+        os.makedirs(os.path.dirname(node_path), exist_ok=True)
+        with open(node_path, 'w') as f:
+            json.dump(node_data, f, indent=2)
+
+    @classmethod 
+    def load(cls, node_path: str) -> 'EvolNode':
+        with open(node_path, 'r') as f:
+            node_data = json.load(f)
+        meta_prompt = MetaPrompt.from_dict(node_data['meta_prompt'])  # Assuming MetaPrompt has a from_dict method
+        return cls(meta_prompt=meta_prompt, code=node_data['code'], reasoning=node_data['reasoning'])
+
 
 class EvolGraph:
     """ 
@@ -128,3 +146,26 @@ class EvolGraph:
             elif method in ['e1', 'e2', 'm1', 'm2']:
                 return getattr(node, method)(input_nodes)
         return None
+    
+    def save(self, graph_path: str) -> None:
+        graph_data = {
+            "nodes": {name: node.save(os.path.join(graph_path, f"node_{name}.json")) 
+                      for name, node in self.nodes.items()},
+            "edges": self.edges,
+            "eval_node": self.eval_node.save(os.path.join(graph_path, "eval_node.json")) if self.eval_node else None
+        }
+        os.makedirs(graph_path, exist_ok=True)
+        with open(os.path.join(graph_path, "graph_structure.json"), 'w') as f:
+            json.dump(graph_data, f, indent=2)
+
+    @classmethod
+    def load(cls, graph_path: str) -> 'EvolGraph':
+        with open(os.path.join(graph_path, "graph_structure.json"), 'r') as f:
+            graph_data = json.load(f)
+        
+        nodes = {name: EvolNode.load(os.path.join(graph_path, f"node_{name}.json")) 
+                 for name in graph_data["nodes"]}
+        edges = graph_data["edges"]
+        eval_node = EvolNode.load(os.path.join(graph_path, "eval_node.json")) if graph_data["eval_node"] else None
+        
+        return cls(nodes=nodes, edges=edges, eval_node=eval_node)
