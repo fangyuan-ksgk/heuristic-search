@@ -161,6 +161,25 @@ class MetaPrompt:
         elif self.mode == PromptMode.TOOL:
             raise NotImplementedError
         
+    def to_dict(self) -> dict:
+        return {
+            "task": self.task,
+            "func_name": self.func_name,
+            "input": self.input,
+            "output": self.output,
+            "mode": self.mode.value
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> 'MetaPrompt':
+        return cls(
+            task=data["task"],
+            func_name=data["func_name"],
+            input=data["input"],
+            output=data["output"],
+            mode=PromptMode(data["mode"])
+        )
+        
         
 def parse_evol_response(response: str):
     reasoning = re.findall(r"\{(.*)\}", response, re.DOTALL)
