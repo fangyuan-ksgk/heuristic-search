@@ -47,14 +47,14 @@ class EvolNode:
             self.reasoning, self.code = reasoning, code
         return reasoning, code
     
-    def _evaluate_fitness(self, test_cases: List[Dict]) -> float:
+    def _evaluate_fitness(self, test_cases: List[Dict], code: Optional[str] = None) -> float:
         """ 
         Fitness evaluation: 
         - Structure: 
         - Functionality: 
         """
-        structure_fitness, _ = self._evaluate_structure_fitness(test_cases)
-        functionality_fitness = self._evaluate_functionality_fitness(test_cases)
+        structure_fitness, _ = self._evaluate_structure_fitness(test_cases, code)
+        functionality_fitness = self._evaluate_functionality_fitness(test_cases, code)
         return structure_fitness + functionality_fitness
     
     def _evaluate_structure_fitness(self, test_cases: List[Dict], code: Optional[str] = None) -> float:
