@@ -1,133 +1,22 @@
 graph TD
-    file_1["models.py"]
-    file_1_swish["swish"]
-    file_1_swish --> file_1
-    file_1___init__["__init__"]
-    file_1___init__ --> file_1
-    file_1___init__ --> file_1_super
-    file_1_forward["forward"]
-    file_1_forward --> file_1
-    file_1_decode["decode"]
-    file_1_decode --> file_1
-    file_1_randn["randn"]
-    file_1_randn --> file_1
-    file_1 --> file_2
-    file_2["nlm.py"]
-    file_2__get_tuple_n["_get_tuple_n"]
-    file_2__get_tuple_n --> file_2
-    file_2__get_tuple_n --> file_2_len
-    file_2__get_tuple_n --> file_2_type
-    file_2___init__["__init__"]
-    file_2___init__ --> file_2
-    file_2___init__ --> file_2_super
-    file_2___init__ --> file_2_LogicLayer
-    file_2___init__ --> file_2_len
-    file_2___init__ --> file_2_range
-    file_2___init__ --> file_2_add_
-    file_2_forward["forward"]
-    file_2_forward --> file_2
-    file_2_forward --> file_2_range
-    file_2_forward --> file_2_enumerate
-    file_2_forward --> file_2_layer
-    file_2_forward --> file_2_merge
-    file_2_forward --> file_2_min
-    file_2_make_prog_block_parser["make_prog_block_parser"]
-    file_2_make_prog_block_parser --> file_2
-    file_2_make_prog_block_parser --> file_2_str
-    file_2_from_args["from_args"]
-    file_2_from_args --> file_2
-    file_2_from_args --> file_2_str
-    file_2_from_args --> file_2_cls
-    file_2_from_args --> file_2_getattr
-    file_2_from_args --> file_2_setattr
-    file_2__mask["_mask"]
-    file_2__mask --> file_2
-    file_2__mask --> file_2_len
-    file_2__mask --> file_2_zip
-    file_2_add_["add_"]
-    file_2_add_ --> file_2
-    file_2_add_ --> file_2_len
-    file_2_add_ --> file_2_range
-    file_2_merge["merge"]
-    file_2_merge --> file_2
-    file_2 --> file_3
-    file_3["nlm_utils.py"]
-    file_3_broadcast["broadcast"]
-    file_3_broadcast --> file_3
-    file_3_broadcast --> file_3_concat_shape
-    file_3_concat_shape["concat_shape"]
-    file_3_concat_shape --> file_3
-    file_3_concat_shape --> file_3_int
-    file_3_concat_shape --> file_3_tuple
-    file_3_concat_shape --> file_3_isinstance
-    file_3_meshgrid["meshgrid"]
-    file_3_meshgrid --> file_3
-    file_3_meshgrid --> file_3_broadcast
-    file_3_meshgrid_exclude_self["meshgrid_exclude_self"]
-    file_3_meshgrid_exclude_self --> file_3
-    file_3_meshgrid_exclude_self --> file_3_concat_shape
-    file_3_meshgrid_exclude_self --> file_3_range
-    file_3_exclude_mask["exclude_mask"]
-    file_3_exclude_mask --> file_3
-    file_3_exclude_mask --> file_3_range
-    file_3_mask_value["mask_value"]
-    file_3_mask_value --> file_3
-    file_3_get_batcnnorm["get_batcnnorm"]
-    file_3_get_batcnnorm --> file_3
-    file_3_get_batcnnorm --> file_3_NotImplementedError
-    file_3_get_batcnnorm --> file_3_ValueError
-    file_3_get_batcnnorm --> file_3_getattr
-    file_3_get_batcnnorm --> file_3_isinstance
-    file_3_get_dropout["get_dropout"]
-    file_3_get_dropout --> file_3
-    file_3_get_dropout --> file_3_getattr
-    file_3_get_dropout --> file_3_isinstance
-    file_3_get_activation["get_activation"]
-    file_3_get_activation --> file_3
-    file_3_get_activation --> file_3_ValueError
-    file_3_get_activation --> file_3_getattr
-    file_3_get_activation --> file_3_type
-    file_3_get_activation --> file_3_isinstance
-    file_3_get_output_dim["get_output_dim"]
-    file_3_get_output_dim --> file_3
-    file_3_get_output_dim --> file_3_ValueError
-    file_3___init__["__init__"]
-    file_3___init__ --> file_3
-    file_3___init__ --> file_3_super
-    file_3_forward["forward"]
-    file_3_forward --> file_3
-    file_3_forward --> file_3_meshgrid_exclude_self
-    file_3_forward --> file_3_ValueError
-    file_3_forward --> file_3_meshgrid
-    file_3_input_dim["input_dim"]
-    file_3_input_dim --> file_3
-    file_3_output_dim["output_dim"]
-    file_3_output_dim --> file_3
-    file_3_reset_parameters["reset_parameters"]
-    file_3_reset_parameters --> file_3
-    file_3_reset_parameters --> file_3_isinstance
-    file_3___repr__["__repr__"]
-    file_3___repr__ --> file_3
-    file_1 --> file_4
-    file_4["transformer.py"]
-    file_4___init__["__init__"]
-    file_4___init__ --> file_4
-    file_4___init__ --> file_4_super
-    file_4___init__ --> file_4_Block
-    file_4___init__ --> file_4_sum
-    file_4___init__ --> file_4_range
-    file_4___init__ --> file_4_print
-    file_4_forward["forward"]
-    file_4_forward --> file_4
-    file_4_forward --> file_4_block
-    file_4__init_weights["_init_weights"]
-    file_4__init_weights --> file_4
-    file_4__init_weights --> file_4_isinstance
-    file_4_make_optimizer["make_optimizer"]
-    file_4_make_optimizer --> file_4
-    file_4_make_optimizer --> file_4_sorted
-    file_4_make_optimizer --> file_4_isinstance
-    file_4_make_optimizer --> file_4_set
-    file_4_make_optimizer --> file_4_str
-    file_4_make_optimizer --> file_4_list
-    file_4_make_optimizer --> file_4_len
+    node1["comp.py"]
+    node2["another_function"]
+    node1 --> node2
+    node3["CompositeClass"]
+    node1 --> node3
+    node4["__init__"]
+    node3 --> node4
+    node5["composite_method"]
+    node3 --> node5
+    node6["test.py"]
+    node7["test_subfunction"]
+    node6 --> node7
+    node8["TestClass"]
+    node6 --> node8
+    node9["__init__"]
+    node8 --> node9
+    node10["test_method"]
+    node8 --> node10
+    node10 --> node7
+    node1 --> node6
+    node5 --> node2
