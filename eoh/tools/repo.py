@@ -281,11 +281,99 @@ def build_minimal_mermaid_graph(directory, file_name):
     return _build_minimal_mermaid_graph(module_dict, file_name)
 
 
+# def build_cross_file_mermaid_graph(directory, file_name):
+#     graph = ['graph TD']
+#     node_counter = 0
+#     all_nodes = {}
+#     processed_files = set()
+#     class_dependencies = {}
+
+#     def get_node_id():
+#         nonlocal node_counter
+#         node_counter += 1
+#         return f'node{node_counter}'
+
+#     def process_file(file_path):
+#         if file_path in processed_files:
+#             return
+#         processed_files.add(file_path)
+
+#         rel_file_name = os.path.relpath(file_path, directory)
+#         module_dict = parse_module(file_path)
+        
+#         # Add file node
+#         file_id = get_node_id()
+#         all_nodes[rel_file_name] = file_id
+#         graph.append(f'    {file_id}["{rel_file_name}"]')
+        
+#         # Process top-level functions
+#         for func_name, func_info in module_dict['functions'].items():
+#             func_id = get_node_id()
+#             all_nodes[f"{rel_file_name}:{func_name}"] = func_id
+#             graph.append(f'    {func_id}["{func_name}"]')
+#             graph.append(f'    {file_id} --> {func_id}')
+            
+#             # Add function calls
+#             for called_func in func_info['calls']:
+#                 add_call_edge(rel_file_name, func_name, called_func)
+        
+#         # Process classes
+#         for class_name, class_info in module_dict['classes'].items():
+#             class_id = get_node_id()
+#             all_nodes[f"{rel_file_name}:{class_name}"] = class_id
+#             graph.append(f'    {class_id}["{class_name}"]')
+#             graph.append(f'    {file_id} --> {class_id}')
+            
+#             class_dependencies[f"{rel_file_name}:{class_name}"] = set()
+            
+#             for method_name, method_info in class_info['methods'].items():
+#                 method_id = get_node_id()
+#                 all_nodes[f"{rel_file_name}:{class_name}.{method_name}"] = method_id
+#                 graph.append(f'    {method_id}["{method_name}"]')
+#                 graph.append(f'    {class_id} --> {method_id}')
+                
+#                 # Add method calls
+#                 for called_func in method_info['calls']:
+#                     add_call_edge(rel_file_name, f"{class_name}.{method_name}", called_func)
+#                     class_dependencies[f"{rel_file_name}:{class_name}"].add(called_func)
+
+#         # Process imports and add connections
+#         imports = parse_imports(file_path)
+#         for imp in imports:
+#             imp_file = find_file(imp, directory)
+#             if imp_file:
+#                 process_file(os.path.join(directory, imp_file))
+#                 graph.append(f'    {file_id} --> {all_nodes[imp_file]}')
+
+#     def add_call_edge(file_name, caller, called_func):
+#         caller_id = all_nodes[f"{file_name}:{caller}"]
+#         for node_key, node_id in all_nodes.items():
+#             if node_key.endswith(f":{called_func}") or node_key.endswith(f".{called_func}"):
+#                 graph.append(f'    {caller_id} --> {node_id}')
+#                 break
+
+#     # Start processing from the given file
+#     start_file_path = os.path.join(directory, file_name)
+#     process_file(start_file_path)
+
+#     # Add class dependency connections
+#     for class_key, dependencies in class_dependencies.items():
+#         class_id = all_nodes[class_key]
+#         for dep in dependencies:
+#             for node_key, node_id in all_nodes.items():
+#                 if node_key.endswith(f":{dep}") or node_key.endswith(f".{dep}"):
+#                     graph.append(f'    {class_id} --> {node_id}')
+#                     break
+
+#     return '\n'.join(graph)
+
+
 def build_cross_file_mermaid_graph(directory, file_name):
     graph = ['graph TD']
     node_counter = 0
     all_nodes = {}
     processed_files = set()
+    class_dependencies = {}
 
     def get_node_id():
         nonlocal node_counter
@@ -303,26 +391,40 @@ def build_cross_file_mermaid_graph(directory, file_name):
         # Add file node
         file_id = get_node_id()
         all_nodes[rel_file_name] = file_id
-        graph.append(f'    {file_id}["{rel_file_name}"]')
+        graph.append(f'    {file_id}["<b>{rel_file_name}</b>"]')
+        graph.append(f'    style {file_id} fill:#f9f,stroke:#333,stroke-width:2px')
         
-        # Process functions
-        for func_name in module_dict['functions']:
+        # Process top-level functions
+        for func_name, func_info in module_dict['functions'].items():
             func_id = get_node_id()
             all_nodes[f"{rel_file_name}:{func_name}"] = func_id
-            graph.append(f'    {func_id}["{func_name}"]')
+            graph.append(f'    {func_id}("{func_name}")')
             graph.append(f'    {file_id} --> {func_id}')
+            
+            # Add function calls
+            for called_func in func_info['calls']:
+                add_call_edge(rel_file_name, func_name, called_func)
         
         # Process classes
         for class_name, class_info in module_dict['classes'].items():
             class_id = get_node_id()
+            all_nodes[f"{rel_file_name}:{class_name}"] = class_id
             graph.append(f'    {class_id}["{class_name}"]')
+            graph.append(f'    style {class_id} fill:#bbf,stroke:#333,stroke-width:2px')
             graph.append(f'    {file_id} --> {class_id}')
             
-            for method_name in class_info['methods']:
+            class_dependencies[f"{rel_file_name}:{class_name}"] = set()
+            
+            for method_name, method_info in class_info['methods'].items():
                 method_id = get_node_id()
                 all_nodes[f"{rel_file_name}:{class_name}.{method_name}"] = method_id
-                graph.append(f'    {method_id}["{method_name}"]')
+                graph.append(f'    {method_id}("{method_name}")')
                 graph.append(f'    {class_id} --> {method_id}')
+                
+                # Add method calls
+                for called_func in method_info['calls']:
+                    add_call_edge(rel_file_name, f"{class_name}.{method_name}", called_func)
+                    class_dependencies[f"{rel_file_name}:{class_name}"].add(called_func)
 
         # Process imports and add connections
         imports = parse_imports(file_path)
@@ -330,17 +432,7 @@ def build_cross_file_mermaid_graph(directory, file_name):
             imp_file = find_file(imp, directory)
             if imp_file:
                 process_file(os.path.join(directory, imp_file))
-                graph.append(f'    {file_id} --> {all_nodes[imp_file]}')
-
-        # Process function and method calls
-        for func_name, func_info in module_dict['functions'].items():
-            for called_func in func_info['calls']:
-                add_call_edge(rel_file_name, func_name, called_func)
-
-        for class_name, class_info in module_dict['classes'].items():
-            for method_name, method_info in class_info['methods'].items():
-                for called_func in method_info['calls']:
-                    add_call_edge(rel_file_name, f"{class_name}.{method_name}", called_func)
+                graph.append(f'    {file_id} -.-> {all_nodes[imp_file]}')
 
     def add_call_edge(file_name, caller, called_func):
         caller_id = all_nodes[f"{file_name}:{caller}"]
@@ -353,7 +445,28 @@ def build_cross_file_mermaid_graph(directory, file_name):
     start_file_path = os.path.join(directory, file_name)
     process_file(start_file_path)
 
+    # Add class dependency connections
+    for class_key, dependencies in class_dependencies.items():
+        class_id = all_nodes[class_key]
+        for dep in dependencies:
+            for node_key, node_id in all_nodes.items():
+                if node_key.endswith(f":{dep}") or node_key.endswith(f".{dep}"):
+                    graph.append(f'    {class_id} -.-> {node_id}')
+                    break
+
+    # Add legend
+    # graph.append('    subgraph Legend [Legend]')
+    # graph.append('        direction LR')  # Sets the layout to left-to-right
+    # graph.append('        legend_file["File"] --- legend_function["Function"] --- legend_class["Class"]')
+    # graph.append('    end')
+    # graph.append('    style legend_file fill:#f9f,stroke:#333,stroke-width:2px')
+    # graph.append('    style legend_function fill:#fff,stroke:#333,stroke-width:1px')
+    # graph.append('    style legend_class fill:#bbf,stroke:#333,stroke-width:2px')
+    # graph.append('    classDef legendItem width:100px, height:50px, text-align:center;')  # Adjusted width and height for better visibility
+    # graph.append('    class legend_file,legend_function,legend_class legendItem;')
+
     return '\n'.join(graph)
+
 
 
 def visualize_function_level_graph(mermaid_code):
