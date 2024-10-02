@@ -1,10 +1,273 @@
 graph TD
-    test_method["test_method"]
-    __init__["__init__"]
-    test_subfunction["test_subfunction"]
-    TestClass["TestClass"]
-    TestClass -.-> test_subfunction
-    test_method --> test_subfunction
-    TestClass --> __init__
-    TestClass --> test_method
-    style TestClass fill:#bbf,stroke:#333,stroke-width:2px
+    node35["__init__"]
+    node35 --> node15
+    node4["__init__"]
+    node5["forward"]
+    node13["__init__"]
+    node11["forward"]
+    node78["diffusion_lib/transformer.py"]
+    node78 --> node82
+    node78 --> node85
+    node78 --> node79
+    node19["__init__"]
+    node19 --> node15
+    node103["diffusion_lib/nlm_utils.py"]
+    node16["__init__"]
+    node39["forward"]
+    node33["forward"]
+    node33 --> node2
+    node41["__init__"]
+    node41 --> node15
+    node90["diffusion_lib/nlm.py"]
+    node90 --> node91
+    node90 --> node97
+    node90 --> node92
+    node90 -..-> node103
+    node7["__init__"]
+    node18["EBM"]
+    node18 --> node19
+    node18 -..-> node2
+    node18 -..-> node15
+    node18 --> node20
+    node61["forward"]
+    node79["CausalSelfAttention"]
+    node17["forward"]
+    node36["forward"]
+    node42["forward"]
+    node76["forward"]
+    node22["__init__"]
+    node28["SudokuEBM"]
+    node28 -..-> node15
+    node28 --> node29
+    node28 --> node30
+    node28 -..-> node2
+    node28 -..-> node12
+    node28 -..-> node9
+    node1["models.py"]
+    node1 --> node63
+    node1 --> node6
+    node1 --> node37
+    node1 --> node2
+    node1 --> node74
+    node1 --> node56
+    node1 -..-> node90
+    node1 --> node40
+    node1 --> node59
+    node1 --> node25
+    node1 --> node47
+    node1 --> node21
+    node1 -..-> node78
+    node1 --> node50
+    node1 --> node28
+    node1 --> node70
+    node1 --> node9
+    node1 --> node31
+    node1 --> node18
+    node1 --> node34
+    node1 --> node66
+    node1 --> node44
+    node1 --> node3
+    node1 --> node15
+    node1 --> node53
+    node1 --> node12
+    node77["randn"]
+    node68["forward"]
+    node26["__init__"]
+    node26 --> node15
+    node26 --> node9
+    node26 --> node12
+    node38["__init__"]
+    node38 --> node15
+    node21["AutoencodeModel"]
+    node21 --> node24
+    node21 --> node23
+    node21 --> node22
+    node50["GNNConvEBM"]
+    node50 --> node51
+    node50 -..-> node47
+    node50 --> node52
+    node50 -..-> node15
+    node50 -..-> node44
+    node48["__init__"]
+    node54["__init__"]
+    node66["GNNDiffusionWrapper"]
+    node66 --> node69
+    node66 --> node68
+    node66 --> node67
+    node30["forward"]
+    node30 --> node2
+    node6["Attend"]
+    node6 --> node7
+    node6 --> node8
+    node56["GNNConv1DEBMV2"]
+    node56 --> node58
+    node56 --> node57
+    node56 -..-> node15
+    node56 -..-> node53
+    node15["SinusoidalPosEmb"]
+    node15 --> node16
+    node15 --> node17
+    node40["GraphReverse"]
+    node40 --> node43
+    node40 -..-> node15
+    node40 --> node41
+    node40 --> node42
+    node40 -..-> node97
+    node45["__init__"]
+    node55["forward"]
+    node55 --> node2
+    node29["__init__"]
+    node29 --> node15
+    node29 --> node9
+    node29 --> node12
+    node27["forward"]
+    node27 --> node2
+    node97["LogicMachine"]
+    node97 -..-> node92
+    node60["__init__"]
+    node60 --> node15
+    node60 --> node53
+    node73["randn"]
+    node58["forward"]
+    node62["randn"]
+    node2["swish"]
+    node3["RMSNorm"]
+    node3 --> node5
+    node3 --> node4
+    node20["forward"]
+    node20 --> node2
+    node49["forward"]
+    node49 --> node2
+    node65["forward"]
+    node37["GraphEBM"]
+    node37 --> node38
+    node37 --> node39
+    node37 -..-> node97
+    node37 -..-> node15
+    node24["forward"]
+    node10["__init__"]
+    node10 --> node3
+    node10 --> node6
+    node31["SudokuDenoise"]
+    node31 --> node33
+    node31 -..-> node15
+    node31 -..-> node2
+    node31 -..-> node12
+    node31 --> node32
+    node31 -..-> node9
+    node74["GNNConv1DV2DiffusionWrapper"]
+    node74 --> node76
+    node74 --> node77
+    node74 --> node75
+    node44["NLMConvBlock"]
+    node44 -..-> node2
+    node44 -..-> node97
+    node44 --> node45
+    node44 --> node46
+    node52["forward"]
+    node47["NLMConv1DBlock"]
+    node47 --> node48
+    node47 -..-> node2
+    node47 -..-> node97
+    node47 --> node49
+    node59["GNNConv1DReverse"]
+    node59 --> node61
+    node59 -..-> node15
+    node59 --> node60
+    node59 --> node62
+    node59 -..-> node53
+    node63["DiffusionWrapper"]
+    node63 --> node65
+    node63 --> node64
+    node46["forward"]
+    node46 --> node2
+    node34["SudokuTransformerEBM"]
+    node34 --> node36
+    node34 -..-> node85
+    node34 --> node35
+    node34 -..-> node15
+    node9["Attention"]
+    node9 --> node11
+    node9 -..-> node6
+    node9 -..-> node3
+    node9 --> node10
+    node92["LogicLayer"]
+    node92 -..-> node91
+    node85["GPT"]
+    node85 -..-> node82
+    node71["__init__"]
+    node70["GNNConvDiffusionWrapper"]
+    node70 --> node72
+    node70 --> node71
+    node70 --> node73
+    node75["__init__"]
+    node57["__init__"]
+    node57 --> node15
+    node57 --> node53
+    node12["ResBlock"]
+    node12 --> node13
+    node12 -..-> node2
+    node12 --> node14
+    node43["randn"]
+    node51["__init__"]
+    node51 --> node47
+    node51 --> node15
+    node51 --> node44
+    node14["forward"]
+    node14 --> node2
+    node67["__init__"]
+    node32["__init__"]
+    node32 --> node15
+    node32 --> node9
+    node32 --> node12
+    node82["Block"]
+    node82 -..-> node79
+    node53["NLMConv1DBlockV2"]
+    node53 -..-> node2
+    node53 --> node55
+    node53 --> node54
+    node69["randn"]
+    node72["forward"]
+    node8["forward"]
+    node23["decode"]
+    node64["__init__"]
+    node91["_get_tuple_n"]
+    node25["SudokuLatentEBM"]
+    node25 --> node27
+    node25 -..-> node15
+    node25 -..-> node2
+    node25 --> node26
+    node25 -..-> node12
+    node25 -..-> node9
+    style node78 fill:#f9f,stroke:#333,stroke-width:2px
+    style node103 fill:#f9f,stroke:#333,stroke-width:2px
+    style node90 fill:#f9f,stroke:#333,stroke-width:2px
+    style node18 fill:#bbf,stroke:#333,stroke-width:2px
+    style node79 fill:#bbf,stroke:#333,stroke-width:2px
+    style node28 fill:#bbf,stroke:#333,stroke-width:2px
+    style node1 fill:#f9f,stroke:#333,stroke-width:2px
+    style node21 fill:#bbf,stroke:#333,stroke-width:2px
+    style node50 fill:#bbf,stroke:#333,stroke-width:2px
+    style node66 fill:#bbf,stroke:#333,stroke-width:2px
+    style node6 fill:#bbf,stroke:#333,stroke-width:2px
+    style node56 fill:#bbf,stroke:#333,stroke-width:2px
+    style node15 fill:#bbf,stroke:#333,stroke-width:2px
+    style node40 fill:#bbf,stroke:#333,stroke-width:2px
+    style node97 fill:#bbf,stroke:#333,stroke-width:2px
+    style node3 fill:#bbf,stroke:#333,stroke-width:2px
+    style node37 fill:#bbf,stroke:#333,stroke-width:2px
+    style node31 fill:#bbf,stroke:#333,stroke-width:2px
+    style node74 fill:#bbf,stroke:#333,stroke-width:2px
+    style node44 fill:#bbf,stroke:#333,stroke-width:2px
+    style node47 fill:#bbf,stroke:#333,stroke-width:2px
+    style node59 fill:#bbf,stroke:#333,stroke-width:2px
+    style node63 fill:#bbf,stroke:#333,stroke-width:2px
+    style node34 fill:#bbf,stroke:#333,stroke-width:2px
+    style node9 fill:#bbf,stroke:#333,stroke-width:2px
+    style node92 fill:#bbf,stroke:#333,stroke-width:2px
+    style node85 fill:#bbf,stroke:#333,stroke-width:2px
+    style node70 fill:#bbf,stroke:#333,stroke-width:2px
+    style node12 fill:#bbf,stroke:#333,stroke-width:2px
+    style node82 fill:#bbf,stroke:#333,stroke-width:2px
+    style node53 fill:#bbf,stroke:#333,stroke-width:2px
+    style node25 fill:#bbf,stroke:#333,stroke-width:2px
