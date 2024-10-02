@@ -1,0 +1,133 @@
+graph TD
+    file_1["models.py"]
+    file_1_swish["swish"]
+    file_1_swish --> file_1
+    file_1___init__["__init__"]
+    file_1___init__ --> file_1
+    file_1___init__ --> file_1_super
+    file_1_forward["forward"]
+    file_1_forward --> file_1
+    file_1_decode["decode"]
+    file_1_decode --> file_1
+    file_1_randn["randn"]
+    file_1_randn --> file_1
+    file_1 --> file_2
+    file_2["transformer.py"]
+    file_2___init__["__init__"]
+    file_2___init__ --> file_2
+    file_2___init__ --> file_2_print
+    file_2___init__ --> file_2_sum
+    file_2___init__ --> file_2_Block
+    file_2___init__ --> file_2_range
+    file_2___init__ --> file_2_super
+    file_2_forward["forward"]
+    file_2_forward --> file_2
+    file_2_forward --> file_2_block
+    file_2__init_weights["_init_weights"]
+    file_2__init_weights --> file_2
+    file_2__init_weights --> file_2_isinstance
+    file_2_make_optimizer["make_optimizer"]
+    file_2_make_optimizer --> file_2
+    file_2_make_optimizer --> file_2_sorted
+    file_2_make_optimizer --> file_2_list
+    file_2_make_optimizer --> file_2_set
+    file_2_make_optimizer --> file_2_str
+    file_2_make_optimizer --> file_2_isinstance
+    file_2_make_optimizer --> file_2_len
+    file_1 --> file_3
+    file_3["nlm.py"]
+    file_3__get_tuple_n["_get_tuple_n"]
+    file_3__get_tuple_n --> file_3
+    file_3__get_tuple_n --> file_3_type
+    file_3__get_tuple_n --> file_3_len
+    file_3___init__["__init__"]
+    file_3___init__ --> file_3
+    file_3___init__ --> file_3_LogicLayer
+    file_3___init__ --> file_3_add_
+    file_3___init__ --> file_3_range
+    file_3___init__ --> file_3_super
+    file_3___init__ --> file_3_len
+    file_3_forward["forward"]
+    file_3_forward --> file_3
+    file_3_forward --> file_3_min
+    file_3_forward --> file_3_layer
+    file_3_forward --> file_3_enumerate
+    file_3_forward --> file_3_range
+    file_3_forward --> file_3_merge
+    file_3_make_prog_block_parser["make_prog_block_parser"]
+    file_3_make_prog_block_parser --> file_3
+    file_3_make_prog_block_parser --> file_3_str
+    file_3_from_args["from_args"]
+    file_3_from_args --> file_3
+    file_3_from_args --> file_3_getattr
+    file_3_from_args --> file_3_str
+    file_3_from_args --> file_3_setattr
+    file_3_from_args --> file_3_cls
+    file_3__mask["_mask"]
+    file_3__mask --> file_3
+    file_3__mask --> file_3_zip
+    file_3__mask --> file_3_len
+    file_3_add_["add_"]
+    file_3_add_ --> file_3
+    file_3_add_ --> file_3_range
+    file_3_add_ --> file_3_len
+    file_3_merge["merge"]
+    file_3_merge --> file_3
+    file_3 --> file_4
+    file_4["nlm_utils.py"]
+    file_4_broadcast["broadcast"]
+    file_4_broadcast --> file_4
+    file_4_broadcast --> file_4_concat_shape
+    file_4_concat_shape["concat_shape"]
+    file_4_concat_shape --> file_4
+    file_4_concat_shape --> file_4_int
+    file_4_concat_shape --> file_4_tuple
+    file_4_concat_shape --> file_4_isinstance
+    file_4_meshgrid["meshgrid"]
+    file_4_meshgrid --> file_4
+    file_4_meshgrid --> file_4_broadcast
+    file_4_meshgrid_exclude_self["meshgrid_exclude_self"]
+    file_4_meshgrid_exclude_self --> file_4
+    file_4_meshgrid_exclude_self --> file_4_range
+    file_4_meshgrid_exclude_self --> file_4_concat_shape
+    file_4_exclude_mask["exclude_mask"]
+    file_4_exclude_mask --> file_4
+    file_4_exclude_mask --> file_4_range
+    file_4_mask_value["mask_value"]
+    file_4_mask_value --> file_4
+    file_4_get_batcnnorm["get_batcnnorm"]
+    file_4_get_batcnnorm --> file_4
+    file_4_get_batcnnorm --> file_4_NotImplementedError
+    file_4_get_batcnnorm --> file_4_getattr
+    file_4_get_batcnnorm --> file_4_ValueError
+    file_4_get_batcnnorm --> file_4_isinstance
+    file_4_get_dropout["get_dropout"]
+    file_4_get_dropout --> file_4
+    file_4_get_dropout --> file_4_getattr
+    file_4_get_dropout --> file_4_isinstance
+    file_4_get_activation["get_activation"]
+    file_4_get_activation --> file_4
+    file_4_get_activation --> file_4_ValueError
+    file_4_get_activation --> file_4_type
+    file_4_get_activation --> file_4_isinstance
+    file_4_get_activation --> file_4_getattr
+    file_4_get_output_dim["get_output_dim"]
+    file_4_get_output_dim --> file_4
+    file_4_get_output_dim --> file_4_ValueError
+    file_4___init__["__init__"]
+    file_4___init__ --> file_4
+    file_4___init__ --> file_4_super
+    file_4_forward["forward"]
+    file_4_forward --> file_4
+    file_4_forward --> file_4_meshgrid_exclude_self
+    file_4_forward --> file_4_meshgrid
+    file_4_forward --> file_4_ValueError
+    file_4_input_dim["input_dim"]
+    file_4_input_dim --> file_4
+    file_4_output_dim["output_dim"]
+    file_4_output_dim --> file_4
+    file_4_reset_parameters["reset_parameters"]
+    file_4_reset_parameters --> file_4
+    file_4_reset_parameters --> file_4_isinstance
+    file_4___repr__["__repr__"]
+    file_4___repr__ --> file_4
