@@ -2,7 +2,7 @@
 ![Evolution-of-Plan](https://github.com/user-attachments/assets/af98faeb-66d6-4278-af86-67d668d1954e)
 
 
-## Dependency Graph Visualization
+## Sub-Project on Codebase Parsing: Dependency Graph Visualization
 
 Below is a visualization of the function-level dependency graph for our project:
 
