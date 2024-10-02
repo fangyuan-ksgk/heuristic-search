@@ -162,61 +162,201 @@ def get_python_files(directory):
     return python_files
 
 # Add parser for function parsing within the file (function-level dependency parsing, not just file-level)
-def parse_functions(file_path):
+import ast
+from typing import Dict, Set, Any
+def parse_module(file_path: str) -> Dict[str, Any]:
     with open(file_path, 'r') as file:
         tree = ast.parse(file.read())
     
-    functions = {}
+    module_info = {
+        "functions": {},
+        "classes": {},
+        "global_vars": {},
+        "imports": [],
+        "module_level_code": [],
+        "decorators": set(),
+        "type_aliases": {},
+    }
     
-    for node in ast.walk(tree):
+    def extract_calls(node: ast.AST) -> Set[str]:
+        calls = set()
+        for sub_node in ast.walk(node):
+            if isinstance(sub_node, ast.Call):
+                if isinstance(sub_node.func, ast.Name):
+                    calls.add(sub_node.func.id)
+                elif isinstance(sub_node.func, ast.Attribute):
+                    calls.add(f"{ast.unparse(sub_node.func.value)}.{sub_node.func.attr}")
+                else:
+                    calls.add(ast.unparse(sub_node.func))
+        return calls
+
+    def process_function(node: ast.FunctionDef, parent: str = None) -> Dict[str, Any]:
+        func_info = {
+            "calls": extract_calls(node),
+            "decorators": [ast.unparse(d) for d in node.decorator_list],
+            "is_async": isinstance(node, ast.AsyncFunctionDef),
+        }
+        if parent:
+            func_info["parent"] = parent
+        return func_info
+
+    for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.FunctionDef):
-            function_name = node.name
-            called_functions = set()
-            
-            for sub_node in ast.walk(node):
-                if isinstance(sub_node, ast.Call) and isinstance(sub_node.func, ast.Name):
-                    called_functions.add(sub_node.func.id)
-            
-            functions[function_name] = called_functions
-    
-    return functions
+            module_info["functions"][node.name] = process_function(node)
+        
+        elif isinstance(node, ast.ClassDef):
+            class_info = {"methods": {}, "class_vars": {}}
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef):
+                    class_info["methods"][item.name] = process_function(item, node.name)
+                elif isinstance(item, ast.Assign):
+                    for target in item.targets:
+                        if isinstance(target, ast.Name):
+                            class_info["class_vars"][target.id] = ast.unparse(item.value)
+            module_info["classes"][node.name] = class_info
+        
+        elif isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
+            module_info["global_vars"][node.targets[0].id] = ast.unparse(node.value)
+        
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            module_info["imports"].append(ast.unparse(node))
+        
+        elif isinstance(node, ast.Expr):
+            module_info["module_level_code"].append(ast.unparse(node))
+        
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            module_info["type_aliases"][node.target.id] = ast.unparse(node.annotation)
 
-def build_function_level_mermaid_graph(start_file, directory):
-    graph = []
-    visited = set()
+    return module_info
 
-    def trace_dependencies(file_path):
-        if file_path in visited:
+
+def _build_minimal_mermaid_graph(module_dict, file_name):
+    """ 
+    Mermaid Graph Construction w/o inter-file dependencies
+    """
+    graph = ['graph TD']
+    node_counter = 0
+
+    def get_node_id():
+        nonlocal node_counter
+        node_counter += 1
+        return f'node{node_counter}'
+
+    # Add file node
+    file_id = get_node_id()
+    graph.append(f'    {file_id}["{file_name}"]')
+
+    # Keep track of all nodes
+    all_nodes = {}
+
+    # Process functions
+    for func_name, func_info in module_dict['functions'].items():
+        func_id = get_node_id()
+        all_nodes[func_name] = func_id
+        graph.append(f'    {func_id}["{func_name}"]')
+        graph.append(f'    {file_id} --> {func_id}')
+
+    # Process classes
+    for class_name, class_info in module_dict['classes'].items():
+        class_id = get_node_id()
+        graph.append(f'    {class_id}["{class_name}"]')
+        graph.append(f'    {file_id} --> {class_id}')
+
+        for method_name, method_info in class_info['methods'].items():
+            method_id = get_node_id()
+            all_nodes[f"{class_name}.{method_name}"] = method_id
+            graph.append(f'    {method_id}["{method_name}"]')
+            graph.append(f'    {class_id} --> {method_id}')
+
+            # Add connections to called functions
+            for called_func in method_info['calls']:
+                if called_func in all_nodes:
+                    graph.append(f'    {method_id} --> {all_nodes[called_func]}')
+
+    return '\n'.join(graph)
+
+
+def build_minimal_mermaid_graph(directory, file_name):
+    module_dict = parse_module(os.path.join(directory, file_name))
+    return _build_minimal_mermaid_graph(module_dict, file_name)
+
+
+def build_cross_file_mermaid_graph(directory, file_name):
+    graph = ['graph TD']
+    node_counter = 0
+    all_nodes = {}
+    processed_files = set()
+
+    def get_node_id():
+        nonlocal node_counter
+        node_counter += 1
+        return f'node{node_counter}'
+
+    def process_file(file_path):
+        if file_path in processed_files:
             return
-        visited.add(file_path)
+        processed_files.add(file_path)
+
+        rel_file_name = os.path.relpath(file_path, directory)
+        module_dict = parse_module(file_path)
         
-        imports = parse_imports(os.path.join(directory, file_path))
-        functions = parse_functions(os.path.join(directory, file_path))
+        # Add file node
+        file_id = get_node_id()
+        all_nodes[rel_file_name] = file_id
+        graph.append(f'    {file_id}["{rel_file_name}"]')
         
-        file_id = f"file_{len(visited)}"
-        graph.append(f'    {file_id}["{os.path.basename(file_path)}"]')
-        
-        for func_name, called_funcs in functions.items():
-            func_id = f"{file_id}_{func_name}"
+        # Process functions
+        for func_name in module_dict['functions']:
+            func_id = get_node_id()
+            all_nodes[f"{rel_file_name}:{func_name}"] = func_id
             graph.append(f'    {func_id}["{func_name}"]')
-            graph.append(f'    {func_id} --> {file_id}')
-            for called_func in called_funcs:
-                called_func_id = f"{file_id}_{called_func}"
-                graph.append(f'    {func_id} --> {called_func_id}')
+            graph.append(f'    {file_id} --> {func_id}')
         
+        # Process classes
+        for class_name, class_info in module_dict['classes'].items():
+            class_id = get_node_id()
+            graph.append(f'    {class_id}["{class_name}"]')
+            graph.append(f'    {file_id} --> {class_id}')
+            
+            for method_name in class_info['methods']:
+                method_id = get_node_id()
+                all_nodes[f"{rel_file_name}:{class_name}.{method_name}"] = method_id
+                graph.append(f'    {method_id}["{method_name}"]')
+                graph.append(f'    {class_id} --> {method_id}')
+
+        # Process imports and add connections
+        imports = parse_imports(file_path)
         for imp in imports:
-            dep_file = find_file(imp, directory)
-            if dep_file:
-                dep_file_id = f"file_{len(visited) + 1}"
-                graph.append(f'    {file_id} --> {dep_file_id}')
-                trace_dependencies(dep_file)
+            imp_file = find_file(imp, directory)
+            if imp_file:
+                process_file(os.path.join(directory, imp_file))
+                graph.append(f'    {file_id} --> {all_nodes[imp_file]}')
 
-    trace_dependencies(start_file)
-    return graph
+        # Process function and method calls
+        for func_name, func_info in module_dict['functions'].items():
+            for called_func in func_info['calls']:
+                add_call_edge(rel_file_name, func_name, called_func)
 
-def visualize_function_level_graph(graph):
-    mermaid_code = "graph TD\n" + "\n".join(graph)
-    
+        for class_name, class_info in module_dict['classes'].items():
+            for method_name, method_info in class_info['methods'].items():
+                for called_func in method_info['calls']:
+                    add_call_edge(rel_file_name, f"{class_name}.{method_name}", called_func)
+
+    def add_call_edge(file_name, caller, called_func):
+        caller_id = all_nodes[f"{file_name}:{caller}"]
+        for node_key, node_id in all_nodes.items():
+            if node_key.endswith(f":{called_func}") or node_key.endswith(f".{called_func}"):
+                graph.append(f'    {caller_id} --> {node_id}')
+                break
+
+    # Start processing from the given file
+    start_file_path = os.path.join(directory, file_name)
+    process_file(start_file_path)
+
+    return '\n'.join(graph)
+
+
+def visualize_function_level_graph(mermaid_code):
     # Encode the Mermaid code
     graphbytes = mermaid_code.encode("utf8")
     base64_bytes = base64.urlsafe_b64encode(graphbytes)
@@ -243,5 +383,5 @@ def visualize_function_level_graph(graph):
     print("Function-level Mermaid graph saved to 'function_level_dependency_graph.mmd'")
 
 def create_function_level_graph(start_file, directory):
-    graph = build_function_level_mermaid_graph(start_file, directory)
-    visualize_function_level_graph(graph)
+    mermaid_code = build_function_level_mermaid_graph(start_file, directory)
+    visualize_function_level_graph(mermaid_code)
