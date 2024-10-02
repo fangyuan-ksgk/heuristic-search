@@ -281,7 +281,7 @@ def build_minimal_mermaid_graph(directory, file_name):
     return _build_minimal_mermaid_graph(module_dict, file_name)
 
 
-def build_cross_file_mermaid_graph(directory, file_name):
+def _build_cross_file_mermaid_graph(directory, file_name):
     graph = ['graph TD']
     node_counter = 0
     all_nodes = {}
@@ -369,6 +369,160 @@ def build_cross_file_mermaid_graph(directory, file_name):
 
     return '\n'.join(graph)
 
+
+def _extract_subgraph(graph, target_class):
+    lines = graph.split('\n')
+    subgraph = ['graph TD']
+    related_nodes = set()
+    target_node = None
+    node_id_to_name = {}
+
+    # First pass: find the target node and build node_id_to_name mapping
+    for line in lines:
+        node_match = re.match(r'\s*(node\d+)\s*[\[\(]"(.+?)"[\]\)]', line)
+        if node_match:
+            node_id, node_name = node_match.groups()
+            node_id_to_name[node_id] = node_name
+            if node_name == target_class:
+                target_node = node_id
+                related_nodes.add(node_id)
+                subgraph.append(line)
+
+    if not target_node:
+        return f"Error: {target_class} not found in the graph"
+
+    # Second pass: find all directly connected nodes (only lower dependencies)
+    for line in lines:
+        if '-->' in line:
+            source, target = re.findall(r'node\d+', line)
+            if source == target_node:
+                related_nodes.add(target)
+                updated_line = line.replace(source, f'"{node_id_to_name[source]}"').replace(target, f'"{node_id_to_name[target]}"')
+                subgraph.append(updated_line)
+
+    # Third pass: add node definitions and styles
+    for line in lines:
+        node_match = re.match(r'\s*(node\d+)', line)
+        if node_match and node_match.group(1) in related_nodes:
+            updated_line = re.sub(r'(node\d+)', lambda m: f'"{node_id_to_name[m.group(1)]}"', line)
+            subgraph.append(updated_line)
+            style_line = next((l for l in lines if l.startswith(f"    style {node_match.group(1)}")), None)
+            if style_line:
+                updated_style_line = re.sub(r'(node\d+)', lambda m: f'"{node_id_to_name[m.group(1)]}"', style_line)
+                subgraph.append(updated_style_line)
+
+    return '\n'.join(subgraph)
+
+
+import re
+
+def clean_mermaid_graph(graph_string):
+    lines = graph_string.split('\n')
+    cleaned_lines = ['graph TD']
+    nodes = {}
+    edges = set()
+    styles = {}
+
+    for line in lines:
+        line = line.strip()
+        
+        # Node definitions
+        node_match = re.match(r'(node\d+)(\[".+?"\]|\(".+?"\))', line)
+        if node_match:
+            node_id, node_content = node_match.groups()
+            nodes[node_id] = node_content
+        
+        # Edges
+        edge_match = re.match(r'(node\d+)\s*(-->|-\.->)\s*(node\d+)', line)
+        if edge_match:
+            source, edge_type, target = edge_match.groups()
+            edges.add(f'    {source} {edge_type} {target}')
+        
+        # Styles
+        style_match = re.match(r'style\s+(node\d+)\s+(.+)', line)
+        if style_match:
+            node_id, style = style_match.groups()
+            styles[node_id] = style
+
+    # Add nodes
+    for node_id, node_content in nodes.items():
+        cleaned_lines.append(f'    {node_id}{node_content}')
+
+    # Add edges
+    cleaned_lines.extend(edges)
+
+    # Add styles
+    for node_id, style in styles.items():
+        cleaned_lines.append(f'    style {node_id} {style}')
+
+    return '\n'.join(cleaned_lines)
+
+
+
+def clean_mermaid_subgraph(graph_string):
+    lines = graph_string.split('\n')
+    cleaned_lines = ['graph TD']
+    nodes = set()
+    edges = set()
+    styles = {}
+    file_node = None
+    connected_nodes = set()
+
+    for line in lines:
+        line = line.strip()
+        
+        # Node definitions
+        node_match = re.match(r'(\w+)\s*[\[\(]"?(.+?)"?[\]\)]', line)
+        if node_match:
+            node_id, node_name = node_match.groups()
+            nodes.add(node_id)
+        
+        # Edges
+        edge_match = re.match(r'"?(\w+)"?\s*(-->|-\.->)\s*"?(\w+)"?', line)
+        if edge_match:
+            source, edge_type, target = edge_match.groups()
+            edge = f'    {source} {edge_type} {target}'
+            edges.add(edge)
+            connected_nodes.add(source)
+            connected_nodes.add(target)
+        
+        # Styles
+        style_match = re.match(r'style\s+"?(\w+)"?\s+(.+)', line)
+        if style_match:
+            node_id, style = style_match.groups()
+            styles[node_id] = style
+        
+        # File node
+        if 'fill:#f9f' in line:
+            file_match = re.search(r'"<b>(.+?)</b>"', line)
+            if file_match:
+                file_node = file_match.group(1)
+
+    # Add connected nodes and edges
+    for node in connected_nodes:
+        cleaned_lines.append(f'    {node}["{node}"]')
+    cleaned_lines.extend(edges)
+
+    # Add styles for connected nodes
+    for node in connected_nodes:
+        if node in styles:
+            cleaned_lines.append(f'    style {node} {styles[node]}')
+
+    # Add file node
+    if file_node:
+        cleaned_lines.append(f'    File["{file_node}"]')
+        cleaned_lines.append(f'    style File fill:#f9f,stroke:#333,stroke-width:2px')
+
+    return '\n'.join(cleaned_lines)
+
+
+def build_cross_file_mermaid_graph(directory, file_name):
+    graph = _build_cross_file_mermaid_graph(directory, file_name)
+    return graph
+
+def extract_subgraph(graph, target_class):
+    subgraph = _extract_subgraph(graph, target_class)
+    return clean_mermaid_subgraph(subgraph)
 
 
 def visualize_function_level_graph(mermaid_code):
