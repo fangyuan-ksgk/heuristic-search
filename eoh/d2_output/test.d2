@@ -1,0 +1,86 @@
+vars: {
+  d2-config: {
+    sketch: true
+  }
+}
+classes: {
+  file: {
+    label: ""
+    shape: circle
+    width: 40
+    style: {
+      fill: yellow
+      shadow: true
+    }
+  }
+}
+
+classes: {
+  class object: {
+    label: ""
+    shape: diamond
+    width: 45
+    height: 40
+    style: {
+      fill: blue
+      shadow: true
+    }
+  }
+}
+
+classes: {
+  class object: {
+    label: ""
+    shape: square
+    width: 40
+    height: 30
+    style: {
+      fill: gray
+      shadow: false
+    }
+  }
+}
+models_py.Attend.class: class
+models_py.Attend.label: "Attend"
+models_py.Attend: {
+  style: {
+    opacity: 1.00
+    stroke: "black"
+    stroke-width: 5
+    shadow: true
+  }
+}
+models_py.__init__.class: function
+models_py.__init__.label: "__init__"
+models_py.__init__: {
+  style: {
+    opacity: 1.00
+    stroke: "black"
+    stroke-width: 5
+    shadow: true
+  }
+}
+models_py.forward.class: function
+models_py.forward.label: "forward"
+models_py.forward: {
+  style: {
+    opacity: 1.00
+    stroke: "black"
+    stroke-width: 5
+    shadow: true
+  }
+}
+models_py.Attend -> models_py.__init__: {
+  style.stroke: green
+  style.opacity: 1.00
+  style.stroke-width: 2
+  style.stroke-dash: 5
+  style.animated: true
+}
+models_py.Attend -> models_py.forward: {
+  style.stroke: green
+  style.opacity: 1.00
+  style.stroke-width: 2
+  style.stroke-dash: 5
+  style.animated: true
+}

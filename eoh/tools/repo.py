@@ -1,17 +1,11 @@
 import os
 import ast
 import git
-import networkx as nx
-import matplotlib.pyplot as plt
 import os
 import ast
-import networkx as nx
-import matplotlib.pyplot as plt
 import re
 import base64
-import requests
 from IPython.display import Image, display
-import subprocess
 
 
 def clone_repo(repo_url, target_dir):
@@ -231,147 +225,35 @@ def parse_module(file_path: str) -> Dict[str, Any]:
     return module_info
 
 
-def _build_minimal_mermaid_graph(module_dict, file_name):
+def assign_importance_score_to_dag(dag: dict) -> dict:
     """ 
-    Mermaid Graph Construction w/o inter-file dependencies
+    Importance Score Calculation
+    - v1. Important node has more sub-nodes
     """
-    graph = ['graph TD']
-    node_counter = 0
-
-    def get_node_id():
-        nonlocal node_counter
-        node_counter += 1
-        return f'node{node_counter}'
-
-    # Add file node
-    file_id = get_node_id()
-    graph.append(f'    {file_id}["{file_name}"]')
-
-    # Keep track of all nodes
-    all_nodes = {}
-
-    # Process functions
-    for func_name, func_info in module_dict['functions'].items():
-        func_id = get_node_id()
-        all_nodes[func_name] = func_id
-        graph.append(f'    {func_id}["{func_name}"]')
-        graph.append(f'    {file_id} --> {func_id}')
-
-    # Process classes
-    for class_name, class_info in module_dict['classes'].items():
-        class_id = get_node_id()
-        graph.append(f'    {class_id}["{class_name}"]')
-        graph.append(f'    {file_id} --> {class_id}')
-
-        for method_name, method_info in class_info['methods'].items():
-            method_id = get_node_id()
-            all_nodes[f"{class_name}.{method_name}"] = method_id
-            graph.append(f'    {method_id}["{method_name}"]')
-            graph.append(f'    {class_id} --> {method_id}')
-
-            # Add connections to called functions
-            for called_func in method_info['calls']:
-                if called_func in all_nodes:
-                    graph.append(f'    {method_id} --> {all_nodes[called_func]}')
-
-    return '\n'.join(graph)
-
-
-def build_minimal_mermaid_graph(directory, file_name):
-    module_dict = parse_module(os.path.join(directory, file_name))
-    return _build_minimal_mermaid_graph(module_dict, file_name)
-
-
-def _build_cross_file_mermaid_graph(directory, file_name):
-    graph = ['graph TD']
-    node_counter = 0
-    all_nodes = {}
-    processed_files = set()
-    class_dependencies = {}
-
-    def get_node_id():
-        nonlocal node_counter
-        node_counter += 1
-        return f'node{node_counter}'
-
-    def process_file(file_path):
-        """ 
-        Recursive Parsing
-        """
-        if file_path in processed_files:
-            return
-        processed_files.add(file_path)
-
-        rel_file_name = os.path.relpath(file_path, directory)
-        module_dict = parse_module(file_path)
+    def calc_subnodes(node_id, visited=None):
+        if visited is None:
+            visited = set()
         
-        # Add file node
-        file_id = get_node_id()
-        all_nodes[rel_file_name] = file_id
-        graph.append(f'    {file_id}["<b>{rel_file_name}</b>"]')
-        graph.append(f'    style {file_id} fill:#f9f,stroke:#333,stroke-width:2px,file_object')
+        if node_id in visited:
+            return 0
         
-        # Process top-level functions
-        for func_name, func_info in module_dict['functions'].items():
-            func_id = get_node_id()
-            all_nodes[f"{rel_file_name}:{func_name}"] = func_id
-            graph.append(f'    {func_id}("{func_name}")')
-            graph.append(f'    {file_id} --> {func_id}')
-            
-            # Add function calls
-            for called_func in func_info['calls']:
-                add_call_edge(rel_file_name, func_name, called_func)
+        visited.add(node_id)
+        count = 1  # Count the node itself
         
-        # Process classes
-        for class_name, class_info in module_dict['classes'].items():
-            class_id = get_node_id()
-            all_nodes[f"{rel_file_name}:{class_name}"] = class_id
-            graph.append(f'    {class_id}["{class_name}"]')
-            graph.append(f'    style {class_id} fill:#bbf,stroke:#333,stroke-width:2px,class_object')
-            graph.append(f'    {file_id} --> {class_id}')
-            
-            class_dependencies[f"{rel_file_name}:{class_name}"] = set()
-            
-            for method_name, method_info in class_info['methods'].items():
-                method_id = get_node_id()
-                all_nodes[f"{rel_file_name}:{class_name}.{method_name}"] = method_id
-                graph.append(f'    {method_id}("{method_name}")')
-                graph.append(f'    {class_id} --> {method_id}')
-                
-                # Add method calls
-                for called_func in method_info['calls']:
-                    add_call_edge(rel_file_name, f"{class_name}.{method_name}", called_func)
-                    class_dependencies[f"{rel_file_name}:{class_name}"].add(called_func)
+        for edge in dag[node_id]['edges']:
+            count += calc_subnodes(edge, visited)
+        
+        return count
 
-        # Process imports and add connections
-        imports = parse_imports(file_path)
-        for imp in imports:
-            imp_file = find_file(imp, directory)
-            if imp_file:
-                process_file(os.path.join(directory, imp_file))
-                graph.append(f'    {file_id} -.-> {all_nodes[imp_file]}')
+    importance_scores = {}
+    for node_id in dag:
+        importance_scores[node_id] = calc_subnodes(node_id)
 
-    def add_call_edge(file_name, caller, called_func):
-        caller_id = all_nodes[f"{file_name}:{caller}"]
-        for node_key, node_id in all_nodes.items():
-            if node_key.endswith(f":{called_func}") or node_key.endswith(f".{called_func}"):
-                graph.append(f'    {caller_id} --> {node_id}')
-                break
+    # Add importance scores to the original DAG
+    for node_id in dag:
+        dag[node_id]['importance'] = importance_scores[node_id]
 
-    # Start processing from the given file
-    start_file_path = os.path.join(directory, file_name)
-    process_file(start_file_path)
-
-    # Add class dependency connections
-    for class_key, dependencies in class_dependencies.items():
-        class_id = all_nodes[class_key]
-        for dep in dependencies:
-            for node_key, node_id in all_nodes.items():
-                if node_key.endswith(f":{dep}") or node_key.endswith(f".{dep}"):
-                    graph.append(f'    {class_id} -.-> {node_id}')
-                    break
-
-    return '\n'.join(graph)
+    return dag
 
 
 def build_cross_file_dag(directory, file_name):
@@ -401,6 +283,7 @@ def build_cross_file_dag(directory, file_name):
             'name': rel_file_name,
             'type': 'file',
             'file': rel_file_name,
+            'file_path': file_path,  # Add full file path
             'edges': set()
         }
         
@@ -411,6 +294,7 @@ def build_cross_file_dag(directory, file_name):
                 'name': func_name,
                 'type': 'function',
                 'file': rel_file_name,
+                'file_path': file_path,  # Add full file path
                 'edges': set()
             }
             dag[file_id]['edges'].add(func_id)
@@ -426,6 +310,7 @@ def build_cross_file_dag(directory, file_name):
                 'name': class_name,
                 'type': 'class',
                 'file': rel_file_name,
+                'file_path': file_path,  # Add full file path
                 'edges': set()
             }
             dag[file_id]['edges'].add(class_id)
@@ -436,6 +321,7 @@ def build_cross_file_dag(directory, file_name):
                     'name': method_name,
                     'type': 'method',
                     'file': rel_file_name,
+                    'file_path': file_path,  # Add full file path
                     'edges': set()
                 }
                 dag[class_id]['edges'].add(method_id)
@@ -465,7 +351,7 @@ def build_cross_file_dag(directory, file_name):
     start_file_path = os.path.join(directory, file_name)
     process_file(start_file_path)
 
-    return dag
+    return assign_importance_score_to_dag(dag)
 
 
 def extract_subgraph_dag(dag, center_node, depth=6, filter_nonclass=False):
@@ -504,143 +390,3 @@ def extract_subgraph_dag(dag, center_node, depth=6, filter_nonclass=False):
                     subgraph_dag[node]['edges'].add(edge)
     
     return subgraph_dag
-
-
-def build_cross_file_mermaid_graph(directory, file_name):
-    graph = _build_cross_file_mermaid_graph(directory, file_name)
-    return graph
-
-    
-    
-import re
-from collections import defaultdict
-
-def build_dag_from_mermaid(graph_string):
-    """ 
-    Convert Mermaid string into a DAG
-    """
-    lines = graph_string.split("\n")
-    
-    dag = defaultdict(lambda: {'edges': set(), 'style': None, 'label': None})
-    
-    for line in lines[1:]:  # Skip the 'graph TD' line
-        # Clean up the line
-        line = re.sub(r'(\w+)\(("[^"]*")\)', r'\1[\2]', line)
-        
-        # Node declarations
-        node_declare = re.search(r'node(\d+)\["(.+?)"\]', line)
-        if node_declare:
-            node_id = f"node{node_declare.group(1)}"
-            dag[node_id]['label'] = node_declare.group(2)
-        
-        # Node styles
-        node_style = re.search(r'style\s+node(\d+)\s+(.+)', line)
-        if node_style:
-            node_id = f"node{node_style.group(1)}"
-            dag[node_id]['style'] = node_style.group(2)
-        
-        # Edges
-        edge_declare = re.search(r'node(\d+)\s*(-->|-\.->)\s*node(\d+)', line)
-        if edge_declare:
-            node1 = f"node{edge_declare.group(1)}"
-            node2 = f"node{edge_declare.group(3)}"
-            edge_type = 'solid' if edge_declare.group(2) == '-->' else 'dashed'
-            dag[node1]['edges'].add((node2, edge_type))
-    
-    return dag
-
-
-def build_mermaid_subgraph(dag, center_node, depth=6, filter_nonclass=False):
-    """ 
-    Build SubGraph of any 'node' from DAG into Mermaid Graph String, max_depth is set.
-    """
-    def get_neighbors(node, current_depth):
-        if current_depth > depth:
-            return set()
-        neighbors = set(edge[0] for edge in dag[node]['edges'])
-        for neighbor in list(neighbors):
-            neighbors.update(get_neighbors(neighbor, current_depth + 1))
-        return neighbors
-
-    def clean_label(label):
-        return label.replace('"', '\\"').replace('<b>', '').replace('</b>', '')
-
-    def should_include_node(node):
-        if not filter_nonclass:
-            return True
-        label = dag[node]['label']
-        return label[0].isupper() if label else False
-
-    subgraph_nodes = {center_node} | get_neighbors(center_node, 1)
-    
-    mermaid_lines = ['graph TD']
-    
-    for node in subgraph_nodes:
-        if should_include_node(node):
-            label = clean_label(dag[node]['label'])
-            mermaid_lines.append(f'    {node}["{label}"]')
-        
-            for edge in dag[node]['edges']:
-                if edge[0] in subgraph_nodes and should_include_node(edge[0]):
-                    edge_style = '-->' if edge[1] == 'solid' else '-..->'
-                    mermaid_lines.append(f'    {node} {edge_style} {edge[0]}')
-    
-    for node in subgraph_nodes:
-        if should_include_node(node) and dag[node]['style']:
-            mermaid_lines.append(f'    style {node} {dag[node]["style"]}')
-    
-    return '\n'.join(mermaid_lines)
-
-
-def extract_subgraph(graph, target_class, filter_class=False, max_depth=6):
-    dag = build_dag_from_mermaid(graph)
-    # search for node with name as 'target_class'
-    name_map = {dag[k]["label"].replace("</b>", "").replace("<b>", ""): k for k in dag}
-    assert target_class in name_map, f"Target Class not found in repo, available objects: \n{', '.join(name_map.keys())}"
-    center_node = name_map[target_class]
-    return build_mermaid_subgraph(dag, center_node, max_depth, filter_nonclass=filter_class)
-    
-
-
-
-def visualize_function_level_graph(mermaid_code):
-    # Encode the Mermaid code
-    graphbytes = mermaid_code.encode("utf8")
-    base64_bytes = base64.urlsafe_b64encode(graphbytes)
-    base64_string = base64_bytes.decode("ascii")
-    
-    # Generate the image URL
-    image_url = f"https://mermaid.ink/img/{base64_string}"
-    
-    # Display the graph
-    display(Image(url=image_url))
-    
-    # Download and save the image
-    response = requests.get(image_url)
-    if response.status_code == 200:
-        with open("function_level_dependency_graph.png", "wb") as f:
-            f.write(response.content)
-        print("Function-level dependency graph saved as 'function_level_dependency_graph.png'")
-    else:
-        print("Failed to download the image")
-
-    # Optionally, save the Mermaid code to a file
-    with open("function_level_dependency_graph.mmd", "w") as f:
-        f.write(mermaid_code)
-    print("Function-level Mermaid graph saved to 'function_level_dependency_graph.mmd'")
-    
-def write_svg(mmd_file: str):
-    target_file = mmd_file.replace(".mmd", ".svg")
-    subprocess.run(['mmdc', '-i', f'{mmd_file}', '-o', f'{target_file}'])
-    
-def write_graph(graph: str, file_name: str, save_dir: str =".", mmd: bool = True, svg: bool = True):
-    """ 
-    Write Mermaid Graph
-    """
-    # Write the subgraph to a .mmd file
-    with open(f"{save_dir}/{file_name}.mmd", "w") as f:
-        f.write(graph)
-
-    # Save to .svg image 
-    write_svg(f"{save_dir}/{file_name}.mmd")
-    print("Function-level Mermaid graph saved to 'function_level_dependency_graph.mmd'")
