@@ -256,6 +256,52 @@ def assign_importance_score_to_dag(dag: dict) -> dict:
     return dag
 
 
+def merge_special_method(dag: dict):
+    """ 
+    Merge __init__ method back into Class Object itself
+    - Hint: name of method is ClassName::methodname
+    Also remove any self-to-self edges
+    """
+    merged_dag = dag.copy()
+    to_remove = []
+
+    for node_id, node in merged_dag.items():
+        if node['type'] == 'method' and '::__init__' in node['name']:
+            class_name = node['name'].split('::')[0]
+            
+            # Find the corresponding class node
+            class_node_id = next((cid for cid, cnode in merged_dag.items() 
+                                  if cnode['type'] == 'class' and cnode['name'] == class_name), None)
+            
+            if class_node_id:
+                # Merge __init__ method into class node
+                class_node = merged_dag[class_node_id]
+                class_node['init_method'] = node
+                
+                # Update edges
+                class_node['edges'] = class_node.get('edges', set()) | node.get('edges', set())
+                
+                # Mark __init__ node for removal
+                to_remove.append(node_id)
+                
+                # Update references to __init__ node in other nodes' edges
+                for other_node in merged_dag.values():
+                    if node_id in other_node.get('edges', set()):
+                        other_node['edges'].remove(node_id)
+                        other_node['edges'].add(class_node_id)
+
+    # Remove merged __init__ nodes
+    for node_id in to_remove:
+        del merged_dag[node_id]
+
+    # Remove self-to-self edges
+    for node_id, node in merged_dag.items():
+        if 'edges' in node:
+            node['edges'] = set(edge for edge in node['edges'] if edge != node_id)
+
+    return merged_dag
+
+
 def build_cross_file_dag(directory, file_name):
     """ 
     Build all dependencies starting of a certain file
@@ -275,12 +321,13 @@ def build_cross_file_dag(directory, file_name):
         processed_files.add(file_path)
 
         rel_file_name = os.path.relpath(file_path, directory)
+        file_name = rel_file_name.split("/")[-1]
         module_dict = parse_module(file_path)
         
         # Add file node
         file_id = get_node_id()
         dag[file_id] = {
-            'name': rel_file_name,
+            'name': file_name,
             'type': 'file',
             'file': rel_file_name,
             'file_path': file_path,  # Add full file path
@@ -318,7 +365,7 @@ def build_cross_file_dag(directory, file_name):
             for method_name, method_info in class_info['methods'].items():
                 method_id = get_node_id()
                 dag[method_id] = {
-                    'name': method_name,
+                    'name': class_name + "::" + method_name,
                     'type': 'method',
                     'file': rel_file_name,
                     'file_path': file_path,  # Add full file path
@@ -351,7 +398,11 @@ def build_cross_file_dag(directory, file_name):
     start_file_path = os.path.join(directory, file_name)
     process_file(start_file_path)
 
+    dag = merge_special_method(dag)
+    dag = assign_importance_score_to_dag(dag)
     return dag 
+
+
 
 
 def extract_subgraph_dag(dag, center_node, depth=6, filter_nonclass=False):
