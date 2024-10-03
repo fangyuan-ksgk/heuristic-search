@@ -1,5 +1,6 @@
 import os
 import subprocess
+import numpy as np
 
 d2_prefix = """vars: {
   d2-config: {
@@ -153,3 +154,46 @@ def save_d2_and_svg(d2_code, file_name, output_dir="d2_output"):
     return d2_file_path, svg_file_path
 
 
+def decide_opacity_of_dag(dag: dict, progress: float, cap_node_number: int = 15) -> dict:
+    # Adjust importance scores based on hierarchy
+    importance_groups = {}
+    for node, data in dag.items():
+        importance = data.get('importance', 0)
+        file_path = data.get('file_path', '')
+        level = file_path.count('/')
+        adjusted_importance = importance + (1 / (level + 1))  # Adjust importance based on level
+        if adjusted_importance not in importance_groups:
+            importance_groups[adjusted_importance] = []
+        importance_groups[adjusted_importance].append(node)
+
+    # Sort nodes by adjusted importance
+    sorted_nodes = sorted(dag.items(), key=lambda x: x[1]['importance'], reverse=True)
+
+    # Calculate opacities
+    scores = np.array([data['importance'] for (_, data) in sorted_nodes])
+    opacities = scores / scores.max()
+    
+    # buffer period 
+    bp = 0.2
+    if progress < 0.2:
+        max_opacity = opacities[opacities < 1.0].max() if len(opacities[opacities < 1.0]) > 0 else 0
+        target_add_opacity = (1.0 - max_opacity) * bp 
+        target_opacities = np.minimum(opacities + target_add_opacity, 1.0)
+        begin_opacity = np.where(opacities < 1.0, 0.0, opacities)
+        # interpolate between 
+        interpolate_progress = progress * (1/bp)
+        opacities = interpolate_progress * (target_opacities - begin_opacity) + begin_opacity
+    else: 
+        # Apply progress
+        max_opacity = opacities[opacities < 1.0].max() if len(opacities[opacities < 1.0]) > 0 else 0
+        add_opacity = (1.0 - max_opacity) * progress
+        opacities = np.minimum(opacities + add_opacity, 1.0)
+
+    # Cap the number of visible nodes
+    opacities[cap_node_number:] = 0
+
+    # Update the dag with new opacities
+    for (node, data), opacity in zip(sorted_nodes, opacities):
+        dag[node]['opacity'] = float(opacity)
+
+    return dag
