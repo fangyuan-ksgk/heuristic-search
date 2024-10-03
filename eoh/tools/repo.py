@@ -351,7 +351,7 @@ def build_cross_file_dag(directory, file_name):
     start_file_path = os.path.join(directory, file_name)
     process_file(start_file_path)
 
-    return assign_importance_score_to_dag(dag)
+    return dag 
 
 
 def extract_subgraph_dag(dag, center_node, depth=6, filter_nonclass=False):
@@ -382,6 +382,8 @@ def extract_subgraph_dag(dag, center_node, depth=6, filter_nonclass=False):
                 'name': dag[node]['name'],
                 'type': dag[node]['type'],
                 'file': dag[node]['file'],
+                'importance': dag[node]['importance'],
+                'file_path': dag[node]['file_path'],
                 'edges': set()
             }
             
