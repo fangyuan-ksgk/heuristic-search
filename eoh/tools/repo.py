@@ -309,7 +309,7 @@ def _build_cross_file_mermaid_graph(directory, file_name):
         file_id = get_node_id()
         all_nodes[rel_file_name] = file_id
         graph.append(f'    {file_id}["<b>{rel_file_name}</b>"]')
-        graph.append(f'    style {file_id} fill:#f9f,stroke:#333,stroke-width:2px')
+        graph.append(f'    style {file_id} fill:#f9f,stroke:#333,stroke-width:2px,file_object')
         
         # Process top-level functions
         for func_name, func_info in module_dict['functions'].items():
@@ -327,7 +327,7 @@ def _build_cross_file_mermaid_graph(directory, file_name):
             class_id = get_node_id()
             all_nodes[f"{rel_file_name}:{class_name}"] = class_id
             graph.append(f'    {class_id}["{class_name}"]')
-            graph.append(f'    style {class_id} fill:#bbf,stroke:#333,stroke-width:2px')
+            graph.append(f'    style {class_id} fill:#bbf,stroke:#333,stroke-width:2px,class_object')
             graph.append(f'    {file_id} --> {class_id}')
             
             class_dependencies[f"{rel_file_name}:{class_name}"] = set()
@@ -372,6 +372,138 @@ def _build_cross_file_mermaid_graph(directory, file_name):
                     break
 
     return '\n'.join(graph)
+
+
+def build_cross_file_dag(directory, file_name):
+    """ 
+    Build all dependencies starting of a certain file
+    """
+    dag = {}
+    node_counter = 0
+    processed_files = set()
+
+    def get_node_id():
+        nonlocal node_counter
+        node_counter += 1
+        return f'node{node_counter}'
+
+    def process_file(file_path):
+        if file_path in processed_files:
+            return
+        processed_files.add(file_path)
+
+        rel_file_name = os.path.relpath(file_path, directory)
+        module_dict = parse_module(file_path)
+        
+        # Add file node
+        file_id = get_node_id()
+        dag[file_id] = {
+            'name': rel_file_name,
+            'type': 'file',
+            'file': rel_file_name,
+            'edges': set()
+        }
+        
+        # Process top-level functions
+        for func_name, func_info in module_dict['functions'].items():
+            func_id = get_node_id()
+            dag[func_id] = {
+                'name': func_name,
+                'type': 'function',
+                'file': rel_file_name,
+                'edges': set()
+            }
+            dag[file_id]['edges'].add(func_id)
+            
+            # Add function calls
+            for called_func in func_info['calls']:
+                add_call_edge(func_id, called_func)
+        
+        # Process classes
+        for class_name, class_info in module_dict['classes'].items():
+            class_id = get_node_id()
+            dag[class_id] = {
+                'name': class_name,
+                'type': 'class',
+                'file': rel_file_name,
+                'edges': set()
+            }
+            dag[file_id]['edges'].add(class_id)
+            
+            for method_name, method_info in class_info['methods'].items():
+                method_id = get_node_id()
+                dag[method_id] = {
+                    'name': method_name,
+                    'type': 'method',
+                    'file': rel_file_name,
+                    'edges': set()
+                }
+                dag[class_id]['edges'].add(method_id)
+                
+                # Add method calls
+                for called_func in method_info['calls']:
+                    add_call_edge(method_id, called_func)
+
+        # Process imports and add connections
+        imports = parse_imports(file_path)
+        for imp in imports:
+            imp_file = find_file(imp, directory)
+            if imp_file:
+                imp_file_id = process_file(os.path.join(directory, imp_file))
+                if imp_file_id:
+                    dag[file_id]['edges'].add(imp_file_id)
+
+        return file_id
+
+    def add_call_edge(caller_id, called_func):
+        for node_id, node_info in dag.items():
+            if node_info['name'] == called_func:
+                dag[caller_id]['edges'].add(node_id)
+                break
+
+    # Start processing from the given file
+    start_file_path = os.path.join(directory, file_name)
+    process_file(start_file_path)
+
+    return dag
+
+
+def extract_subgraph_dag(dag, center_node, depth=6, filter_nonclass=False):
+    """ 
+    Extract SubGraph of any 'node' from DAG into a new DAG dictionary, max_depth is set.
+    """
+    def get_neighbors(node, current_depth):
+        if current_depth > depth:
+            return set()
+        neighbors = dag[node]['edges']
+        for neighbor in list(neighbors):
+            neighbors.update(get_neighbors(neighbor, current_depth + 1))
+        return neighbors
+
+    def should_include_node(node):
+        if not filter_nonclass:
+            return True
+        node_name = dag[node]['name']
+        return node_name[0].isupper() if node_name else False
+
+    subgraph_nodes = {center_node} | get_neighbors(center_node, 1)
+    
+    subgraph_dag = {}
+    
+    for node in subgraph_nodes:
+        if should_include_node(node):
+            subgraph_dag[node] = {
+                'name': dag[node]['name'],
+                'type': dag[node]['type'],
+                'file': dag[node]['file'],
+                'edges': set()
+            }
+            
+            for edge in dag[node]['edges']:
+                if edge in subgraph_nodes and should_include_node(edge):
+                    subgraph_dag[node]['edges'].add(edge)
+    
+    return subgraph_dag
 
 
 def build_cross_file_mermaid_graph(directory, file_name):
