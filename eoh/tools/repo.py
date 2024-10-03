@@ -11,6 +11,7 @@ import re
 import base64
 import requests
 from IPython.display import Image, display
+import subprocess
 
 
 def clone_repo(repo_url, target_dir):
@@ -417,7 +418,7 @@ def build_dag_from_mermaid(graph_string):
     return dag
 
 
-def build_mermaid_subgraph(dag, center_node, depth=6, filter_lowercase=False):
+def build_mermaid_subgraph(dag, center_node, depth=6, filter_nonclass=False):
     """ 
     Build SubGraph of any 'node' from DAG into Mermaid Graph String, max_depth is set.
     """
@@ -433,7 +434,7 @@ def build_mermaid_subgraph(dag, center_node, depth=6, filter_lowercase=False):
         return label.replace('"', '\\"').replace('<b>', '').replace('</b>', '')
 
     def should_include_node(node):
-        if not filter_lowercase:
+        if not filter_nonclass:
             return True
         label = dag[node]['label']
         return label[0].isupper() if label else False
@@ -465,7 +466,7 @@ def extract_subgraph(graph, target_class, filter_class=False, max_depth=6):
     name_map = {dag[k]["label"].replace("</b>", "").replace("<b>", ""): k for k in dag}
     assert target_class in name_map, f"Target Class not found in repo, available objects: \n{', '.join(name_map.keys())}"
     center_node = name_map[target_class]
-    return build_mermaid_subgraph(dag, center_node, max_depth, filter_lowercase=filter_class)
+    return build_mermaid_subgraph(dag, center_node, max_depth, filter_nonclass=filter_class)
     
 
 
@@ -494,4 +495,20 @@ def visualize_function_level_graph(mermaid_code):
     # Optionally, save the Mermaid code to a file
     with open("function_level_dependency_graph.mmd", "w") as f:
         f.write(mermaid_code)
+    print("Function-level Mermaid graph saved to 'function_level_dependency_graph.mmd'")
+    
+def write_svg(mmd_file: str):
+    target_file = mmd_file.replace(".mmd", ".svg")
+    subprocess.run(['mmdc', '-i', f'{mmd_file}', '-o', f'{target_file}'])
+    
+def write_graph(graph: str, file_name: str, save_dir: str =".", mmd: bool = True, svg: bool = True):
+    """ 
+    Write Mermaid Graph
+    """
+    # Write the subgraph to a .mmd file
+    with open(f"{save_dir}/{file_name}.mmd", "w") as f:
+        f.write(graph)
+
+    # Save to .svg image 
+    write_svg(f"{save_dir}/{file_name}.mmd")
     print("Function-level Mermaid graph saved to 'function_level_dependency_graph.mmd'")
