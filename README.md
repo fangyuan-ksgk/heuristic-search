@@ -7,7 +7,7 @@
 Below is a visualization of the function-level dependency graph for our project:
 
 <div align="center">
-  <img src="eoh/commit_dag_evolution.gif" width="800" alt="Mini-LLaVA Demo">
+  <img src="eoh/entropy_evolution.gif" width="800" alt="RepoViz">
   <p><em>Evolution of github repo with commit history.</em></p>
 </div>
 

@@ -10,6 +10,7 @@ import requests
 from typing import Dict, Any, Set
 from datetime import datetime, timedelta
 from IPython.display import Image, display
+import shutil
 from tools.diagram import *
 
 def clone_repo(repo_url, target_dir):
@@ -574,7 +575,7 @@ def get_fastest_growing_repos(days_ago=7, top_n=10, print=False):
     return fastest_growing
 
 
-def build_commit_evolution_gif_of_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir: str = "d2_output"):
+def build_commit_evolution_gif_of_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir: str = "d2_output", clean: bool = True):
 
     # Print some terminal info about the function
     print("Starting build_commit_evolution_gif_of_repo function")
@@ -591,10 +592,15 @@ def build_commit_evolution_gif_of_repo(repo_url: str, temp_repo: str = "temp_rep
     
     _, dags = obtain_repo_evolution(temp_repo)
     
-    write_dependency_dags(dags) # write interpolated frames
+    write_dependency_dags(dags, output_dir=output_dir) # write interpolated frames
     
     gif_file = f"{temp_repo}_evolution.gif"
     png_files = sorted(glob.glob(f"{output_dir}/*.png"))
     create_gif(png_files, gif_file) # create gif
     
-    return Image.open(png_files[-1])
+    img = Image.open(png_files[-1])
+    
+    if clean:
+        shutil.rmtree(output_dir)  # delete output_dir
+    
+    return img
