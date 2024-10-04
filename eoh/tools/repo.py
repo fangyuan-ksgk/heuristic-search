@@ -5,6 +5,7 @@ import os
 import ast
 import re
 import base64
+from datetime import datetime
 from IPython.display import Image, display
 
 
@@ -443,3 +444,78 @@ def extract_subgraph_dag(dag, center_node, depth=6, filter_nonclass=False):
                     subgraph_dag[node]['edges'].add(edge)
     
     return subgraph_dag
+
+
+# FunPlot of Github Commit history
+
+import os
+import ast
+from typing import Dict, Any, Set
+
+def commit_tree_to_file_dag(repo: git.Repo, commit: git.Commit, base_path: str = '') -> Dict[str, Dict[str, Any]]:
+    file_dag = {}
+    node_id = 1
+
+    def parse_imports(file_content: str) -> Set[str]:
+        imports = set()
+        try:
+            tree = ast.parse(file_content)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        imports.add(alias.name)
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module:
+                        imports.add(node.module)
+        except SyntaxError:
+            # If there's a syntax error, we'll just skip the imports
+            pass
+        return imports
+
+    def traverse_tree(tree, current_path=''):
+        nonlocal node_id
+        for item in tree.traverse():
+            full_path = os.path.join(current_path, item.name)
+            if item.type == 'blob' and item.name.endswith('.py'):
+                # It's a Python file
+                file_content = item.data_stream.read().decode('utf-8')
+                imports = parse_imports(file_content)
+                
+                file_dag[f"node{node_id}"] = {
+                    'name': item.name,
+                    'type': 'file',
+                    'file': full_path,
+                    'file_path': os.path.join(base_path, full_path),
+                    'edges': set(),
+                    'imports': imports
+                }
+                node_id += 1
+
+    traverse_tree(commit.tree)
+
+    # Add edges based on imports
+    for node, data in file_dag.items():
+        for imp in data['imports']:
+            for other_node, other_data in file_dag.items():
+                if imp in other_data['file'].replace('/', '.'):
+                    data['edges'].add(other_node)
+
+    return file_dag
+
+
+def obtain_repo_evolution(repo_path):
+    # Open the repository
+    repo = git.Repo(repo_path)
+
+    # Get all commits
+    commits = list(repo.iter_commits('main'))
+
+    # Prepare data
+    dates = []
+    file_dags = []
+
+    for commit in commits:
+        dates.append(datetime.fromtimestamp(commit.committed_date))
+        file_dags.append(commit_tree_to_file_dag(repo, commit, repo_path))
+
+    return dates, file_dags
