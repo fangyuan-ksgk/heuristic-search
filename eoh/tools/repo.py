@@ -5,9 +5,12 @@ import os
 import ast
 import re
 import base64
-from datetime import datetime
+import glob
+import requests
+from typing import Dict, Any, Set
+from datetime import datetime, timedelta
 from IPython.display import Image, display
-
+from tools.diagram import *
 
 def clone_repo(repo_url, target_dir):
     git.Repo.clone_from(repo_url, target_dir)
@@ -442,15 +445,12 @@ def extract_subgraph_dag(dag, center_node, depth=6, filter_nonclass=False):
             for edge in dag[node]['edges']:
                 if edge in subgraph_nodes and should_include_node(edge):
                     subgraph_dag[node]['edges'].add(edge)
-    
+                    
+    print(f"  Number of objects in the subgraph: {len(subgraph_dag.keys())}")
     return subgraph_dag
 
 
 # FunPlot of Github Commit history
-
-import os
-import ast
-from typing import Dict, Any, Set
 
 def commit_tree_to_file_dag(repo: git.Repo, commit: git.Commit, base_path: str = '') -> Dict[str, Dict[str, Any]]:
     file_dag = {}
@@ -523,7 +523,78 @@ def obtain_repo_evolution(repo_path):
     file_dags = []
 
     for commit in commits:
-        dates.append(datetime.fromtimestamp(commit.committed_date))
-        file_dags.append(commit_tree_to_file_dag(repo, commit, repo_path))
+        file_dag = commit_tree_to_file_dag(repo, commit, repo_path)
+        file_dag = assign_importance_score_to_dag(file_dag)
+        if len(file_dag) > 0:
+            dates.append(datetime.fromtimestamp(commit.committed_date))
+            file_dags.append(file_dag)
 
     return dates, file_dags
+
+def present_repo_info(fastest_repos):
+    for i, repo in enumerate(fastest_repos, 1):
+        repo_url =repo['html_url']
+        print(f"{i}. {repo['full_name']}")
+        print(f"   Stars: {repo['stargazers_count']}")
+        print(f"   Growth Rate: {repo['growth_rate']:.2f} stars/day")
+        print(f"   URL: {repo['html_url']}")
+        
+        print()
+        
+def get_fastest_growing_repos(days_ago=7, top_n=10, print=False):
+    # GitHub API endpoint
+    url = "https://api.github.com/search/repositories"
+    
+    # Calculate the date for 7 days ago
+    date_7_days_ago = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
+    
+    # Query parameters
+    params = {
+        "q": f"created:>{date_7_days_ago}",
+        "sort": "stars",
+        "order": "desc",
+        "per_page": 100
+    }
+    
+    # Make the API request
+    response = requests.get(url, params=params)
+    repos = response.json()["items"]
+    
+    # Calculate growth rate (stars per day)
+    for repo in repos:
+        created_at = datetime.strptime(repo["created_at"], "%Y-%m-%dT%H:%M:%SZ")
+        days_since_creation = (datetime.now() - created_at).days or 1  # Avoid division by zero
+        repo["growth_rate"] = repo["stargazers_count"] / days_since_creation
+    
+    # Sort by growth rate and get top N
+    fastest_growing = sorted(repos, key=lambda x: x["growth_rate"], reverse=True)[:top_n]
+    
+    if print:
+        present_repo_info(fastest_growing)
+    return fastest_growing
+
+
+def build_commit_evolution_gif_of_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir: str = "d2_output"):
+
+    # Print some terminal info about the function
+    print("Starting build_commit_evolution_gif_of_repo function")
+    print(f"Repository URL: {repo_url}")
+    print(f"Temporary repository path: {temp_repo}")
+    print(f"Output directory: {output_dir}")
+    print("This function will clone the repository, analyze its evolution,")
+    print("generate dependency diagrams, and create a GIF of the evolution.")
+    
+    if not os.path.exists(temp_repo):
+        clone_repo(repo_url, temp_repo)
+    else:
+        print("Repo already cloned, skipping cloning...")
+    
+    _, dags = obtain_repo_evolution(temp_repo)
+    
+    write_dependency_dags(dags) # write interpolated frames
+    
+    gif_file = f"{temp_repo}_evolution.gif"
+    png_files = sorted(glob.glob(f"{output_dir}/*.png"))
+    create_gif(png_files, gif_file) # create gif
+    
+    return Image.open(png_files[-1])

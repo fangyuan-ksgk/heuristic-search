@@ -2,6 +2,9 @@ import os
 import subprocess
 import numpy as np
 from PIL import Image
+import time
+from tqdm import tqdm
+
 d2_prefix = """vars: {
   d2-config: {
     sketch: true
@@ -148,6 +151,41 @@ def build_d2_from_dag(dag: dict, include_overhead: bool = False) -> str:
     return d2_code
 
 
+def save_png_from_d2(d2_code, file_name, output_dir="d2_output"):
+    """
+    Save the d2_code as a .d2 file and generate the corresponding .svg file.
+    
+    Args:
+    d2_code (str): The D2 diagram code.
+    file_name (str): The base name for the output files (without extension).
+    output_dir (str): The directory to save the files in.
+    
+    Returns:
+    str: The path to the saved PNG file, or None if an error occurred.
+    """
+    # Create the output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Save the .d2 file
+    d2_file_path = os.path.join(output_dir, f"{file_name}.d2")
+    with open(d2_file_path, "w") as f:
+        f.write(d2_code)
+    
+    # Generate the PNG file using the d2 command-line tool
+    png_file_path = os.path.join(output_dir, f"{file_name}.png")
+    try:
+        subprocess.run(["d2", d2_file_path, png_file_path], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error generating PNG: {e}")
+        png_file_path = None
+    except FileNotFoundError:
+        print("Error: d2 command not found. Make sure d2 is installed and in your PATH.")
+        png_file_path = None
+    
+    return png_file_path
+    
+    
+    
 def save_d2_and_svg(d2_code, file_name, output_dir="d2_output"):
     """
     Save the d2_code as a .d2 file and generate the corresponding .svg file.
@@ -171,11 +209,9 @@ def save_d2_and_svg(d2_code, file_name, output_dir="d2_output"):
     # Generate the .svg file using the d2 command-line tool
     svg_file_path = os.path.join(output_dir, f"{file_name}.svg")
     try:
+      # Redirect stdout and stderr to devnull
         subprocess.run(["d2", d2_file_path, svg_file_path], check=True)
-        print(f"D2 diagram saved as {d2_file_path}")
-        print(f"SVG file generated at {svg_file_path}")
     except subprocess.CalledProcessError as e:
-        print(f"Error generating SVG: {e}")
         svg_file_path = None
     except FileNotFoundError:
         print("Error: d2 command not found. Make sure d2 is installed and in your PATH.")
@@ -183,10 +219,12 @@ def save_d2_and_svg(d2_code, file_name, output_dir="d2_output"):
     
     return d2_file_path, svg_file_path
   
-def save_d2_as_png(d2_file_path: str, png_file_path: str):
-  png_file_path = d2_file_path.replace(".d2", ".png")
+def save_d2_as_png(save_name: str):
+  d2_file_path = save_name + ".d2"
+  png_file_path = save_name + ".png"
   try: 
-    subprocess.run(["d2", d2_file_path, png_file_path], check=True)
+    with open(os.devnull, 'w') as devnull:
+      subprocess.run(["d2", d2_file_path, png_file_path], check=True, stdout=devnull, stderr=devnull)
     print(f"D2 diagram saved as {png_file_path}")
   except subprocess.CalledProcessError as e:
     print(f"Error generating PNG: {e}")
@@ -266,7 +304,7 @@ def create_gif(png_files: list, output_file: str = "commit_dag_evolution.gif"):
 
     # Create GIF
     images = []
-    for png_file in png_files:
+    for png_file in tqdm(png_files, desc="Creating GIF"):
         if os.path.exists(png_file):
             # Open the image
             img = Image.open(png_file)
@@ -286,6 +324,40 @@ def create_gif(png_files: list, output_file: str = "commit_dag_evolution.gif"):
     if images:
         images[0].save(output_file, save_all=True, append_images=images[1:], 
                     duration=500, loop=0)
-        print(f"Animation saved as {output_file}")
+        # print(f"Animation saved as {output_file}")
     else:
         print("No PNG files were found to create the GIF.")
+        
+        
+def create_gif_from_d2_files(d2_files):
+    # Convert D2 to PNGs
+    png_files = []
+    for d2_file in d2_files:
+        png_file = d2_file.replace(".d2", ".png")
+        save_d2_as_png(d2_file, png_file)
+        png_files.append(png_file)
+
+    # Create GIF
+    create_gif(png_files)
+    
+    
+def write_dependency_dags(dags, output_dir="d2_output"):
+    
+    pbar = tqdm(total=len(dags)*10, desc="Processing DAGs into PNG frames")
+
+    for i, dag in enumerate(dags):
+        
+        # Animate the growing process by increasing progress from 0 to 1
+        for progress in np.linspace(0, 1, 10):
+            sub_dag = decide_opacity_of_dag(dag, progress=progress, cap_node_number=15)
+            d2_code = build_d2_from_dag(sub_dag, include_overhead=True)
+            
+            # Save each frame as an SVG
+            filename = f"commit_{i}_progress_{progress:.2f}"
+            save_png_from_d2(d2_code, filename, output_dir=output_dir)
+            
+            time.sleep(0.5)  # Add a small delay between frames
+            
+            pbar.update(1)  # Update progress bar
+
+    pbar.close()  # Close the progress bar when done
