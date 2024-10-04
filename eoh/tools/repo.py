@@ -472,20 +472,28 @@ def commit_tree_to_file_dag(repo: git.Repo, commit: git.Commit, base_path: str =
             pass
         return imports
 
-    def traverse_tree(tree, current_path=''):
+    def traverse_tree(tree):
         nonlocal node_id
         for item in tree.traverse():
-            full_path = os.path.join(current_path, item.name)
             if item.type == 'blob' and item.name.endswith('.py'):
                 # It's a Python file
                 file_content = item.data_stream.read().decode('utf-8')
                 imports = parse_imports(file_content)
                 
+                file_path = item.path
+                if "/" in file_path.replace(".py", ""):
+                    module, name = file_path.replace(".py", "").rsplit("/", 1)
+                    name = name + ".py"
+                else:
+                    module = ""
+                    name = file_path.replace(".py", "")
+
                 file_dag[f"node{node_id}"] = {
-                    'name': item.name,
+                    'name': name,
                     'type': 'file',
-                    'file': full_path,
-                    'file_path': os.path.join(base_path, full_path),
+                    'file': file_path.replace("/","."),
+                    'file_path': os.path.join(base_path, file_path),
+                    'module': module,
                     'edges': set(),
                     'imports': imports
                 }
@@ -497,7 +505,7 @@ def commit_tree_to_file_dag(repo: git.Repo, commit: git.Commit, base_path: str =
     for node, data in file_dag.items():
         for imp in data['imports']:
             for other_node, other_data in file_dag.items():
-                if imp in other_data['file'].replace('/', '.'):
+                if imp == other_data['module'] or imp == other_data['file'].replace('/', '.').replace('.py', ''):
                     data['edges'].add(other_node)
 
     return file_dag
