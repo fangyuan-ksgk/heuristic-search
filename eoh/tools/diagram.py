@@ -1,7 +1,7 @@
 import os
 import subprocess
 import numpy as np
-
+from PIL import Image
 d2_prefix = """vars: {
   d2-config: {
     sketch: true
@@ -67,10 +67,12 @@ object_template = """{object_name}.class: {object_type}
   }}
 }}"""
 
+get_parent_file = lambda node: node['file'].replace(".py", "").replace("/",".")
+get_object_label = lambda node: node['name'].split("::")[-1].replace(".py", "")
 
 def build_d2_node(node: dict, node_id: str, include_overhead: bool = False) -> str:
-    parent_file = node['file'].replace(".", "_")
-    object_label = node['name'].split("::")[-1].replace(".", "_")
+    parent_file = get_parent_file(node)
+    object_label = get_object_label(node)
     if include_overhead:
         object_name = f"{parent_file}.{object_label}"  
     else:
@@ -92,7 +94,7 @@ link_template = """{start_object_id} -> {end_object_id}: {{
 }}"""
 
 link_file_template = """{start_object_id} -> {end_object_id}: {{
-  style.stroke: yellow
+  style.stroke: red
   style.opacity: {opacity}
   style.stroke-width: 2
   style.stroke-dash: 5
@@ -100,8 +102,8 @@ link_file_template = """{start_object_id} -> {end_object_id}: {{
 }}"""
 
 def get_object_name(node: dict) -> str:
-    parent_file = node['file'].replace(".", "_")
-    object_label = node['name'].split("::")[-1].replace(".", "_")
+    parent_file = get_parent_file(node)
+    object_label = get_object_label(node)
     object_name = f"{parent_file}.{object_label}" 
     return object_name
 
@@ -180,6 +182,19 @@ def save_d2_and_svg(d2_code, file_name, output_dir="d2_output"):
         svg_file_path = None
     
     return d2_file_path, svg_file_path
+  
+def save_d2_as_png(d2_file_path: str, png_file_path: str):
+  png_file_path = d2_file_path.replace(".d2", ".png")
+  try: 
+    subprocess.run(["d2", d2_file_path, png_file_path], check=True)
+    print(f"D2 diagram saved as {png_file_path}")
+  except subprocess.CalledProcessError as e:
+    print(f"Error generating PNG: {e}")
+    png_file_path = None
+  except FileNotFoundError:
+    print("Error: d2 command not found. Make sure d2 is installed and in your PATH.")
+    png_file_path = None
+  return png_file_path
 
 
 def filter_opacity_graph(graph):
@@ -243,3 +258,34 @@ def decide_opacity_of_dag(dag: dict, progress: float, cap_node_number: int = 15)
         dag[node]['opacity'] = float(opacity)
 
     return filter_opacity_graph(dag)
+  
+  
+def create_gif(png_files: list, output_file: str = "commit_dag_evolution.gif"):
+    # Define a common size for all frames
+    MAX_SIZE = (1024, 512)  # You can adjust this as needed
+
+    # Create GIF
+    images = []
+    for png_file in png_files:
+        if os.path.exists(png_file):
+            # Open the image
+            img = Image.open(png_file)
+            
+            # Resize the image while maintaining aspect ratio
+            img.thumbnail(MAX_SIZE, Image.LANCZOS)
+            
+            # Create a new image with white background
+            new_img = Image.new("RGB", MAX_SIZE, (255, 255, 255))
+            
+            # Paste the resized image onto the center of the new image
+            new_img.paste(img, ((MAX_SIZE[0] - img.size[0]) // 2,
+                                (MAX_SIZE[1] - img.size[1]) // 2))
+            
+            images.append(new_img)
+
+    if images:
+        images[0].save(output_file, save_all=True, append_images=images[1:], 
+                    duration=500, loop=0)
+        print(f"Animation saved as {output_file}")
+    else:
+        print("No PNG files were found to create the GIF.")
