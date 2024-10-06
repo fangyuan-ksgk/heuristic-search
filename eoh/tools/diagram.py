@@ -24,7 +24,7 @@ classes: {
 classes: {
   class: {
     label: ""
-    shape: rectangle
+    shape: hexagon
     style: {
       fill: lightblue
       shadow: true
@@ -33,11 +33,11 @@ classes: {
 }
 
 classes: {
-  object: {
+  function: {
     label: ""
-    shape: hexagon
+    shape: rectangle
     style: {
-      fill: while
+      fill: white
       shadow: false
     }
   }
@@ -70,12 +70,21 @@ object_template = """{object_name}.class: {object_type}
   }}
 }}"""
 
+# used for file-level dependency parsing
 get_parent_file = lambda node: node['file'].replace(".py", "").replace("/",".")
 get_object_label = lambda node: node['name'].split("::")[-1].replace(".py", "")
 
-def build_d2_node(node: dict, node_id: str, include_overhead: bool = False) -> str:
-    parent_file = get_parent_file(node)
-    object_label = get_object_label(node)
+# used for function-level dependency parsing | avoid name conflict between file and function (main.py -- main)
+_get_parent_file = lambda node: node['file'].replace(".py", "").replace("/",".")
+_get_object_label = lambda node: node['name'].split("::")[-1].replace(".py", "_")
+
+def build_d2_node(node: dict, node_id: str, include_overhead: bool = False, file_level: bool = True) -> str:
+    if file_level:
+        parent_file = get_parent_file(node)
+        object_label = get_object_label(node)
+    else:
+        parent_file = _get_parent_file(node)
+        object_label = _get_object_label(node)
     if include_overhead:
         object_name = f"{parent_file}.{object_label}"  
     else:
@@ -104,24 +113,33 @@ link_file_template = """{start_object_id} -> {end_object_id}: {{
   style.animated: true
 }}"""
 
-def get_object_name(node: dict) -> str:
-    parent_file = get_parent_file(node)
-    object_label = get_object_label(node)
-    object_name = f"{parent_file}.{object_label}" 
+def get_object_name(node: dict, file_level: bool = True) -> str:
+    if file_level:
+        parent_file = get_parent_file(node)
+        object_label = get_object_label(node)
+        object_name = f"{parent_file}.{object_label}" 
+    else:
+        parent_file = _get_parent_file(node)
+        object_label = _get_object_label(node)
+        object_name = f"{parent_file}.{object_label}" 
     return object_name
 
-def get_label_name(node: dict) -> str:
-    return node['name'].split("::")[-1].replace(".", "_")
+def get_label_name(node: dict, file_level: bool = True) -> str:
+    if file_level:
+        return node['name'].split("::")[-1].replace(".", "_")
+    else:
+        return node['name'].split("::")[-1].replace(".", "_")
 
-def build_d2_edge(str_node: dict, end_node: dict, include_overhead: bool = False) -> str:
+def build_d2_edge(str_node: dict, end_node: dict, include_overhead: bool = False, file_level: bool = True) -> str:
     opacity = min(1.0, max(0.0, end_node["opacity"]))
     opacity_str = f"{opacity:.2f}"
+    
     if include_overhead:
-        start_object_name = get_object_name(str_node)
-        end_object_name = get_object_name(end_node)
+        start_object_name = get_object_name(str_node, file_level=file_level)
+        end_object_name = get_object_name(end_node, file_level=file_level)
     else:
-        start_object_name = get_label_name(str_node)
-        end_object_name = get_label_name(end_node)
+        start_object_name = get_label_name(str_node, file_level=file_level)
+        end_object_name = get_label_name(end_node, file_level=file_level)
     
     if str_node["type"] == "file" and end_node["type"] == "file":
         return link_file_template.format(start_object_id=start_object_name, end_object_id=end_object_name, opacity=opacity_str)
@@ -131,20 +149,20 @@ def build_d2_edge(str_node: dict, end_node: dict, include_overhead: bool = False
         return link_template.format(start_object_id=start_object_name, end_object_id=end_object_name, opacity=opacity_str)
 
 
-def build_d2_from_dag(dag: dict, include_overhead: bool = False) -> str:
+def build_d2_from_dag(dag: dict, include_overhead: bool = False, file_level: bool = True) -> str:
     """
     Convert Sub-DAG dictionary into d2 code
     """
     d2_code = d2_prefix 
 
     for node_id, node in dag.items():
-        object_str = build_d2_node(node, node_id, include_overhead)
+        object_str = build_d2_node(node, node_id, include_overhead, file_level)
         d2_code += "\n" + object_str
 
     for node_id, node in dag.items():
         edge_pairs = [(node_id, end_node) for end_node in node['edges']]    
         for start, end in edge_pairs:
-            link_str = build_d2_edge(dag[start], dag[end], include_overhead)
+            link_str = build_d2_edge(dag[start], dag[end], include_overhead, file_level)
             if link_str:
                 d2_code += f"\n{link_str}"
             
@@ -186,7 +204,7 @@ def save_png_from_d2(d2_code, file_name, output_dir="d2_output"):
     
     
     
-def save_d2_and_svg(d2_code, file_name, output_dir="d2_output"):
+def save_svg_from_d2(d2_code, file_name, output_dir="d2_output"):
     """
     Save the d2_code as a .d2 file and generate the corresponding .svg file.
     
@@ -218,21 +236,6 @@ def save_d2_and_svg(d2_code, file_name, output_dir="d2_output"):
         svg_file_path = None
     
     return d2_file_path, svg_file_path
-  
-def save_d2_as_png(save_name: str):
-  d2_file_path = save_name + ".d2"
-  png_file_path = save_name + ".png"
-  try: 
-    with open(os.devnull, 'w') as devnull:
-      subprocess.run(["d2", d2_file_path, png_file_path], check=True, stdout=devnull, stderr=devnull)
-    print(f"D2 diagram saved as {png_file_path}")
-  except subprocess.CalledProcessError as e:
-    print(f"Error generating PNG: {e}")
-    png_file_path = None
-  except FileNotFoundError:
-    print("Error: d2 command not found. Make sure d2 is installed and in your PATH.")
-    png_file_path = None
-  return png_file_path
 
 
 def filter_opacity_graph(graph):
@@ -327,28 +330,16 @@ def create_gif(png_files: list, output_file: str = "commit_dag_evolution.gif"):
         # print(f"Animation saved as {output_file}")
     else:
         print("No PNG files were found to create the GIF.")
-        
-        
-def create_gif_from_d2_files(d2_files):
-    # Convert D2 to PNGs
-    png_files = []
-    for d2_file in d2_files:
-        png_file = d2_file.replace(".d2", ".png")
-        save_d2_as_png(d2_file, png_file)
-        png_files.append(png_file)
-
-    # Create GIF
-    create_gif(png_files)
     
     
-def write_dependency_dags(dags, output_dir="d2_output"):
+def write_dependency_dags(dags, output_dir="d2_output", n_frames=10):
     
-    pbar = tqdm(total=len(dags)*10, desc="Processing DAGs into PNG frames")
+    pbar = tqdm(total=len(dags)*n_frames, desc="Processing DAGs into PNG frames")
 
     for i, dag in enumerate(dags):
         
         # Animate the growing process by increasing progress from 0 to 1
-        for progress in np.linspace(0, 1, 10):
+        for progress in np.linspace(0, 1, n_frames):
             sub_dag = decide_opacity_of_dag(dag, progress=progress, cap_node_number=15)
             d2_code = build_d2_from_dag(sub_dag, include_overhead=True)
             

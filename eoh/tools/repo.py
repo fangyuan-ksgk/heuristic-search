@@ -575,7 +575,7 @@ def get_fastest_growing_repos(days_ago=7, top_n=10, print=False):
     return fastest_growing
 
 
-def build_commit_evolution_gif_of_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir: str = "d2_output", clean: bool = True):
+def build_commit_evolution_gif_of_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir: str = "d2_output", clean: bool = True, n_frames: int = 10):
 
     # Print some terminal info about the function
     print("Starting build_commit_evolution_gif_of_repo function")
@@ -592,7 +592,7 @@ def build_commit_evolution_gif_of_repo(repo_url: str, temp_repo: str = "temp_rep
     
     _, dags = obtain_repo_evolution(temp_repo)
     
-    write_dependency_dags(dags, output_dir=output_dir) # write interpolated frames
+    write_dependency_dags(dags, output_dir=output_dir, n_frames=n_frames) # write interpolated frames
     
     gif_file = f"{temp_repo}_evolution.gif"
     png_files = sorted(glob.glob(f"{output_dir}/*.png"))
