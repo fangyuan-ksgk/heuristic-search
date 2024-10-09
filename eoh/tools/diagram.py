@@ -247,13 +247,14 @@ def filter_opacity_graph(graph):
     """
     filtered_graph = {}
     for node_id, node_data in graph.items():
-        if node_data['opacity'] > 0:
+        if node_data['opacity'] > -1:
             filtered_graph[node_id] = node_data.copy()
             filtered_graph[node_id]['edges'] = [
                 edge for edge in node_data['edges']
                 if graph[edge]['opacity'] > 0
             ]
     return filtered_graph
+
 
 
 def decide_opacity_of_dag(dag: dict, progress: float, cap_node_number: int = 15) -> dict:
@@ -292,7 +293,33 @@ def decide_opacity_of_dag(dag: dict, progress: float, cap_node_number: int = 15)
         opacities = np.minimum(opacities + add_opacity, 1.0)
 
     # Cap the number of visible nodes
-    opacities[cap_node_number:] = 0
+    opacities[cap_node_number:] = -1
+
+    # Update the dag with new opacities
+    for (node, data), opacity in zip(sorted_nodes, opacities):
+        dag[node]['opacity'] = float(opacity)
+
+    return filter_opacity_graph(dag)
+
+
+def cap_dag_count(dag: dict, cap_node_number: int = 15) -> dict:
+    # Adjust importance scores based on hierarchy
+    importance_groups = {}
+    for node, data in dag.items():
+        importance = data.get('importance', 0)
+        file_path = data.get('file_path', '')
+        level = file_path.count('/')
+        adjusted_importance = importance + (1 / (level + 1))  # Adjust importance based on level
+        if adjusted_importance not in importance_groups:
+            importance_groups[adjusted_importance] = []
+        importance_groups[adjusted_importance].append(node)
+
+    # Sort nodes by adjusted importance
+    sorted_nodes = sorted(dag.items(), key=lambda x: x[1]['importance'], reverse=True)
+    
+    # Assign 1.0 opacity to the first `cap_node_number` nodes, rest are set to -1
+    opacities = np.ones(len(sorted_nodes))
+    opacities[cap_node_number:] = -1
 
     # Update the dag with new opacities
     for (node, data), opacity in zip(sorted_nodes, opacities):
