@@ -3,6 +3,7 @@ import subprocess
 import numpy as np
 from PIL import Image
 import time
+import copy
 from tqdm import tqdm
 
 d2_prefix = """vars: {
@@ -126,7 +127,7 @@ def get_object_name(node: dict, file_level: bool = True) -> str:
 
 def get_label_name(node: dict, file_level: bool = True) -> str:
     if file_level:
-        return node['name'].split("::")[-1].replace(".", "_")
+        return node['name'].split("::")[-1].replace(".py", "")
     else:
         return node['name'].split("::")[-1].replace(".", "_")
 
@@ -302,6 +303,8 @@ def decide_opacity_of_dag(dag: dict, progress: float, cap_node_number: int = 15)
     return filter_opacity_graph(dag)
 
 
+# SUDO Gif: level-wise appearing animation with D2-diagram
+
 def cap_dag_count(dag: dict, cap_node_number: int = 15) -> dict:
     # Adjust importance scores based on hierarchy
     importance_groups = {}
@@ -326,6 +329,67 @@ def cap_dag_count(dag: dict, cap_node_number: int = 15) -> dict:
         dag[node]['opacity'] = float(opacity)
 
     return filter_opacity_graph(dag)
+
+
+def assign_levels(sub_dag):
+    # Create a dictionary to store incoming edges for each node
+    incoming_edges = {node: set() for node in sub_dag}
+    for node, data in sub_dag.items():
+        for edge in data.get('edges', []):
+            incoming_edges[edge].add(node)
+    
+    # Find nodes with no incoming edges (level 1)
+    level = 1
+    current_level_nodes = [node for node, edges in incoming_edges.items() if not edges]
+    
+    # Assign levels to all nodes
+    while current_level_nodes:
+        for node in current_level_nodes:
+            sub_dag[node]['level'] = level
+        
+        # Find next level nodes
+        next_level_nodes = []
+        for node in sub_dag:
+            if 'level' not in sub_dag[node]:
+                if all(sub_dag.get(parent, {}).get('level') is not None for parent in incoming_edges[node]):
+                    next_level_nodes.append(node)
+        
+        current_level_nodes = next_level_nodes
+        level += 1
+    
+    return sub_dag
+
+
+def generate_opacity_frames(sub_dag, frame_count, opacity_steps=4):
+    
+    # Reset opacity to zero for all nodes
+    for node in sub_dag:
+        sub_dag[node]['opacity'] = 0.0
+    
+    # Sort nodes by level and then by their order in the dictionary
+    sorted_nodes = sorted(sub_dag.items(), key=lambda x: (x[1]['level'], list(sub_dag.keys()).index(x[0])))
+    
+    
+    # Calculate how many nodes should appear in each frame
+    nodes_per_frame = max(1, len(sorted_nodes) // frame_count)
+    
+    frames = []
+    for frame in range(frame_count):
+        current_frame_dag = copy.deepcopy(sub_dag)
+        
+        for i, (node_id, node_data) in enumerate(sorted_nodes):
+            node_frame = i // nodes_per_frame
+            if node_frame > frame:
+                current_frame_dag[node_id]['opacity'] = 0.0
+            elif node_frame == frame:
+                progress = (frame % opacity_steps) / (opacity_steps - 1)
+                current_frame_dag[node_id]['opacity'] = progress
+            else:
+                current_frame_dag[node_id]['opacity'] = 1.0
+        
+        frames.append(current_frame_dag)
+    
+    return frames
   
   
 def create_gif(png_files: list, output_file: str = "commit_dag_evolution.gif"):

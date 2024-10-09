@@ -604,3 +604,52 @@ def build_commit_evolution_gif_of_repo(repo_url: str, temp_repo: str = "temp_rep
         shutil.rmtree(output_dir)  # delete output_dir
     
     return img
+
+
+
+def create_gif_from_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir: str = "d2_output", cap_node_number: int = 15, frame_count: int = 100, opacity_steps: int = 5):
+    """
+    Create a GIF of the repository evolution with level-wise opacity change.
+
+    Args:
+        temp_repo (str): The path to the repository to visualize.
+        cap_node_number (int): The maximum number of nodes to display.
+        frame_count (int): The number of frames in the GIF.
+        opacity_steps (int): The number of steps in the opacity change.
+    """
+    
+    if not os.path.exists(temp_repo):
+        clone_repo(repo_url, temp_repo)
+    else:
+        print("Repo already cloned, skipping cloning...")
+    
+    dates, file_dags = obtain_repo_evolution(temp_repo)
+    dag = file_dags[-1]
+
+    # Get Sub-DAG and assign level values to node 
+    sub_dag = cap_dag_count(dag, cap_node_number=cap_node_number)
+    sub_dag = assign_levels(sub_dag)
+
+    # Make GIF with opacity change (level-wise appearing)
+    opacity_frames = generate_opacity_frames(sub_dag, frame_count, opacity_steps)
+
+    png_files = []
+    for i, frame in enumerate(opacity_frames):
+        d2_code = build_d2_from_dag(frame, include_overhead=True)
+        png_file = f"evolve_graph_{i}.png"
+        save_png_from_d2(d2_code, f"evolve_graph_{i}", output_dir="d2_output")
+        png_files.append(png_file)
+
+    import glob
+    png_files = sorted(glob.glob("d2_output/evolve_graph_*.png"), key=lambda x: int(x.split('_')[-1].split('.')[0]))
+    create_gif(png_files, output_file="evolve_graph.gif")
+
+    img = Image.open(png_files[-1])
+    
+    # Clean up temporary PNG files
+    import shutil
+    shutil.rmtree("d2_output")
+    
+    return img
+    
+    
