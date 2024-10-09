@@ -359,6 +359,7 @@ def assign_levels(sub_dag):
     
     return sub_dag
 
+
 def generate_opacity_frames(sub_dag, frame_count):
     # Reset opacity to zero for all nodes
     for node in sub_dag:
@@ -374,57 +375,35 @@ def generate_opacity_frames(sub_dag, frame_count):
         # Calculate the overall progress for this frame
         overall_progress = (frame + 1) / frame_count
         
-        # Check if we're in the last 5% of frames
+        for i, (node_id, node_data) in enumerate(sorted_nodes):
+            # Calculate the node's individual progress
+            node_progress = i / (len(sorted_nodes) - 1)
+            
+            # If the overall progress has reached this node's turn to appear
+            if overall_progress >= node_progress:
+                # Calculate the node's opacity based on how long it's been visible
+                node_opacity = min(1.0, (overall_progress - node_progress) / (1 / (len(sorted_nodes) - 1)))
+                current_frame_dag[node_id]['opacity'] = node_opacity
+            else:
+                current_frame_dag[node_id]['opacity'] = 0.0
+                    
+                    
+        # Check if we're in the last 20% of frames
         if frame >= frame_count * 0.8:
-            # Set all nodes to 1.0 opacity for the last 5% of frames
+            # Calculate progress for the final interpolation
+            final_progress = (frame - frame_count * 0.8) / (frame_count * 0.2)
+            
+            # Gradually increase opacity for all nodes to reach 1.0 at the end
             for node_id in current_frame_dag:
-                current_frame_dag[node_id]['opacity'] = 1.0
-        else:
-            for i, (node_id, node_data) in enumerate(sorted_nodes):
-                # Calculate the node's individual progress
-                node_progress = i / (len(sorted_nodes) - 1)
-                
-                # If the overall progress has reached this node's turn to appear
-                if overall_progress >= node_progress:
-                    # Calculate the node's opacity based on how long it's been visible
-                    node_opacity = min(1.0, (overall_progress - node_progress) / (1 / (len(sorted_nodes) - 1)))
-                    current_frame_dag[node_id]['opacity'] = node_opacity
-                else:
-                    current_frame_dag[node_id]['opacity'] = 0.0
+                current_opacity = current_frame_dag[node_id]['opacity']
+                # Ensure we don't decrease opacity, only increase it
+                new_opacity = max(current_opacity, min(1.0, current_opacity + (1.0 - current_opacity) * final_progress))
+                current_frame_dag[node_id]['opacity'] = new_opacity            
         
         frames.append(current_frame_dag)
     
     return frames
   
-# def create_gif(png_files: list, output_file: str = "commit_dag_evolution.gif"):
-#     # Define a common size for all frames
-#     MAX_SIZE = (1024, 512)  # You can adjust this as needed
-
-#     # Create GIF
-#     images = []
-#     for png_file in tqdm(png_files, desc="Creating GIF"):
-#         if os.path.exists(png_file):
-#             # Open the image
-#             img = Image.open(png_file)
-            
-#             # Resize the image while maintaining aspect ratio
-#             img.thumbnail(MAX_SIZE, Image.LANCZOS)
-            
-#             # Create a new image with white background
-#             new_img = Image.new("RGB", MAX_SIZE, (255, 255, 255))
-            
-#             # Paste the resized image onto the center of the new image
-#             new_img.paste(img, ((MAX_SIZE[0] - img.size[0]) // 2,
-#                                 (MAX_SIZE[1] - img.size[1]) // 2))
-            
-#             images.append(new_img)
-
-#     if images:
-#         images[0].save(output_file, save_all=True, append_images=images[1:], 
-#                     duration=500, loop=0)
-#         # print(f"Animation saved as {output_file}")
-#     else:
-#         print("No PNG files were found to create the GIF.")
 
 def create_gif(png_files: list, output_file: str = "commit_dag_evolution.gif", fps: int = 2):
     # Define a common size for all frames
