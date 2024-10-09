@@ -359,9 +359,7 @@ def assign_levels(sub_dag):
     
     return sub_dag
 
-
-def generate_opacity_frames(sub_dag, frame_count, opacity_steps=4):
-    
+def generate_opacity_frames(sub_dag, frame_count):
     # Reset opacity to zero for all nodes
     for node in sub_dag:
         sub_dag[node]['opacity'] = 0.0
@@ -369,28 +367,34 @@ def generate_opacity_frames(sub_dag, frame_count, opacity_steps=4):
     # Sort nodes by level and then by their order in the dictionary
     sorted_nodes = sorted(sub_dag.items(), key=lambda x: (x[1]['level'], list(sub_dag.keys()).index(x[0])))
     
-    
-    # Calculate how many nodes should appear in each frame
-    nodes_per_frame = max(1, len(sorted_nodes) // frame_count)
-    
     frames = []
     for frame in range(frame_count):
         current_frame_dag = copy.deepcopy(sub_dag)
         
-        for i, (node_id, node_data) in enumerate(sorted_nodes):
-            node_frame = i // nodes_per_frame
-            if node_frame > frame:
-                current_frame_dag[node_id]['opacity'] = 0.0
-            elif node_frame == frame:
-                progress = (frame % opacity_steps) / (opacity_steps - 1)
-                current_frame_dag[node_id]['opacity'] = progress
-            else:
+        # Calculate the overall progress for this frame
+        overall_progress = (frame + 1) / frame_count
+        
+        # Check if we're in the last 5% of frames
+        if frame >= frame_count * 0.95:
+            # Set all nodes to 1.0 opacity for the last 5% of frames
+            for node_id in current_frame_dag:
                 current_frame_dag[node_id]['opacity'] = 1.0
+        else:
+            for i, (node_id, node_data) in enumerate(sorted_nodes):
+                # Calculate the node's individual progress
+                node_progress = i / (len(sorted_nodes) - 1)
+                
+                # If the overall progress has reached this node's turn to appear
+                if overall_progress >= node_progress:
+                    # Calculate the node's opacity based on how long it's been visible
+                    node_opacity = min(1.0, (overall_progress - node_progress) / (1 / (len(sorted_nodes) - 1)))
+                    current_frame_dag[node_id]['opacity'] = node_opacity
+                else:
+                    current_frame_dag[node_id]['opacity'] = 0.0
         
         frames.append(current_frame_dag)
     
     return frames
-  
   
 def create_gif(png_files: list, output_file: str = "commit_dag_evolution.gif"):
     # Define a common size for all frames

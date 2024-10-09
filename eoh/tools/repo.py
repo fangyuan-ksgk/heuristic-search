@@ -607,7 +607,7 @@ def build_commit_evolution_gif_of_repo(repo_url: str, temp_repo: str = "temp_rep
 
 
 
-def create_gif_from_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir: str = "d2_output", cap_node_number: int = 15, frame_count: int = 100, opacity_steps: int = 5):
+def create_gif_from_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir: str = "d2_output", cap_node_number: int = 15, frame_count: int = 100):
     """
     Create a GIF of the repository evolution with level-wise opacity change.
 
@@ -615,7 +615,6 @@ def create_gif_from_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir
         temp_repo (str): The path to the repository to visualize.
         cap_node_number (int): The maximum number of nodes to display.
         frame_count (int): The number of frames in the GIF.
-        opacity_steps (int): The number of steps in the opacity change.
     """
     
     if not os.path.exists(temp_repo):
@@ -631,7 +630,7 @@ def create_gif_from_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir
     sub_dag = assign_levels(sub_dag)
 
     # Make GIF with opacity change (level-wise appearing)
-    opacity_frames = generate_opacity_frames(sub_dag, frame_count, opacity_steps)
+    opacity_frames = generate_opacity_frames(sub_dag, frame_count)
 
     png_files = []
     for i, frame in enumerate(opacity_frames):
