@@ -607,7 +607,7 @@ def build_commit_evolution_gif_of_repo(repo_url: str, temp_repo: str = "temp_rep
 
 
 
-def create_gif_from_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir: str = "d2_output", cap_node_number: int = 15, frame_count: int = 100):
+def create_gif_from_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir: str = "d2_output", cap_node_number: int = 15, frame_count: int = 100, fps: int = 2):
     """
     Create a GIF of the repository evolution with level-wise opacity change.
 
@@ -641,7 +641,7 @@ def create_gif_from_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir
 
     import glob
     png_files = sorted(glob.glob("d2_output/evolve_graph_*.png"), key=lambda x: int(x.split('_')[-1].split('.')[0]))
-    create_gif(png_files, output_file="evolve_graph.gif")
+    create_gif(png_files, output_file="evolve_graph.gif", fps=fps)
 
     img = Image.open(png_files[-1])
     
