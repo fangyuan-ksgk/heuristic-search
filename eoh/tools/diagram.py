@@ -375,7 +375,7 @@ def generate_opacity_frames(sub_dag, frame_count):
         overall_progress = (frame + 1) / frame_count
         
         # Check if we're in the last 5% of frames
-        if frame >= frame_count * 0.95:
+        if frame >= frame_count * 0.8:
             # Set all nodes to 1.0 opacity for the last 5% of frames
             for node_id in current_frame_dag:
                 current_frame_dag[node_id]['opacity'] = 1.0
@@ -396,7 +396,37 @@ def generate_opacity_frames(sub_dag, frame_count):
     
     return frames
   
-def create_gif(png_files: list, output_file: str = "commit_dag_evolution.gif"):
+# def create_gif(png_files: list, output_file: str = "commit_dag_evolution.gif"):
+#     # Define a common size for all frames
+#     MAX_SIZE = (1024, 512)  # You can adjust this as needed
+
+#     # Create GIF
+#     images = []
+#     for png_file in tqdm(png_files, desc="Creating GIF"):
+#         if os.path.exists(png_file):
+#             # Open the image
+#             img = Image.open(png_file)
+            
+#             # Resize the image while maintaining aspect ratio
+#             img.thumbnail(MAX_SIZE, Image.LANCZOS)
+            
+#             # Create a new image with white background
+#             new_img = Image.new("RGB", MAX_SIZE, (255, 255, 255))
+            
+#             # Paste the resized image onto the center of the new image
+#             new_img.paste(img, ((MAX_SIZE[0] - img.size[0]) // 2,
+#                                 (MAX_SIZE[1] - img.size[1]) // 2))
+            
+#             images.append(new_img)
+
+#     if images:
+#         images[0].save(output_file, save_all=True, append_images=images[1:], 
+#                     duration=500, loop=0)
+#         # print(f"Animation saved as {output_file}")
+#     else:
+#         print("No PNG files were found to create the GIF.")
+
+def create_gif(png_files: list, output_file: str = "commit_dag_evolution.gif", fps: int = 2):
     # Define a common size for all frames
     MAX_SIZE = (1024, 512)  # You can adjust this as needed
 
@@ -420,8 +450,10 @@ def create_gif(png_files: list, output_file: str = "commit_dag_evolution.gif"):
             images.append(new_img)
 
     if images:
+        # Calculate duration based on fps
+        duration = int(1000 / fps)  # Convert fps to milliseconds between frames
         images[0].save(output_file, save_all=True, append_images=images[1:], 
-                    duration=500, loop=0)
+                    duration=duration, loop=0)
         # print(f"Animation saved as {output_file}")
     else:
         print("No PNG files were found to create the GIF.")
