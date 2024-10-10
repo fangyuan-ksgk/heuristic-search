@@ -314,7 +314,10 @@ def decide_opacity_of_dag(dag: dict, progress: float, cap_node_number: int = 15)
     for (node, data), opacity in zip(sorted_nodes, opacities):
         dag[node]['opacity'] = float(opacity)
 
-    return filter_opacity_graph(dag)
+    dag = filter_opacity_graph(dag)
+    dag = assign_levels(dag)
+
+    return dag
 
 
 # SUDO Gif: level-wise appearing animation with D2-diagram

@@ -7,7 +7,7 @@ import re
 import base64
 import glob
 import requests
-from typing import Dict, Any, Set
+from typing import Dict, Any, Set, Callable
 from datetime import datetime, timedelta
 from IPython.display import Image, display
 import shutil
@@ -740,3 +740,45 @@ def read_node_content(node: dict) -> str:
     raise ValueError(f"Node content not found for {node_type} '{node_name}' in {file_path}")
     
     
+SUMMARY_WITH_CODE_PROMPT = """
+Analyze the following python program: 
+
+{code}
+
+Please provide: 
+1. A concise and intuitive summary of the code. 
+2. A minimal implementation of the code.
+
+Example Output:
+
+Summary: 
+[Your Summary]
+
+Minimal Implementation: 
+```python 
+[Your Minimal Implementation]
+```
+"""
+
+def analyze_node_content(node_content: str, get_llm_response: Callable) -> str:
+    analysis_response = get_llm_response(SUMMARY_WITH_CODE_PROMPT.format(code=node_content))
+    return analysis_response.strip()
+
+
+def sanitize_summary(summary_str: str) -> str:
+    for line in summary_str.split("\n"):
+        if line.strip():
+            return line.strip()
+        
+def parse_summary_and_minimal_implementation(response: str):
+    summary_str = response.split("Minimal Implementation")[0].strip().split("Summary:")[1].strip()
+    summary_str = sanitize_summary(summary_str)
+    code_match = re.search(r"```python\s*(.*?)\s*```", response, re.DOTALL)
+    code_str = code_match.group(1).strip() if code_match else ""
+    return summary_str, code_str
+
+
+def get_summary_and_code(node: dict, get_llm_response: Callable):
+    response = analyze_node_content(read_node_content(node), get_llm_response)
+    summary_str, code_str = parse_summary_and_minimal_implementation(response)
+    return summary_str, code_str
