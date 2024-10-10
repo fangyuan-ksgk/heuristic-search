@@ -672,5 +672,56 @@ def create_gif_from_repo(repo_url: str,
     img, output_file = create_evolution_gif(dag, frame_count=frame_count, cap_node_number=cap_node_number, output_dir=output_dir, output_file=f"{output_name}.gif", fps=fps, static_portion=static_portion)
     
     return img
+
+
+
+def read_node_content(node: dict) -> str:
+    """ 
+    Parse code-string content from a given node in a DAG object
+    Work for node type: file, class, method (standalone and class-related)
+    """
+    assert node['type'] in ['file', 'class', 'method'], f"Node type {node['type']} is not supported"
+
+    # Extract information from the node
+    file_path = node['file_path']
+    node_type = node['type']
+    node_name = node['name']
+
+
+    with open(file_path, 'r') as file:
+        content = file.read()
+
+    if node_type == 'file':
+        return content
+
+    tree = ast.parse(content)
+
+    for item in ast.walk(tree):
+        if isinstance(item, ast.FunctionDef) and node_type == 'method': # Caveat: Only works for standalone functions
+            if item.name == node_name:
+                node_content = ast.get_source_segment(content, item)
+                print("Found function with name: ", node_name)
+                return node_content
+
+
+        if isinstance(item, ast.ClassDef) and node_type == 'class':
+            if item.name == node_name:
+                node_content = ast.get_source_segment(content, item)
+                print("Found class with name: ", node_name)
+                return node_content
+
+        if isinstance(item, ast.ClassDef) and node_type == 'method':
+            methods = []
+            for sub_item in item.body:
+                if isinstance(sub_item, ast.FunctionDef):
+                    methods.append(sub_item.name)
+                    name_str = f"{item.name}::{sub_item.name}"
+
+                    if name_str == node_name:
+                        node_content = ast.get_source_segment(content, sub_item)
+                        print("Found class method with name: ", node_name)
+                        return node_content
+                    
+    raise ValueError(f"Node content not found for {node_type} '{node_name}' in {file_path}")
     
     
