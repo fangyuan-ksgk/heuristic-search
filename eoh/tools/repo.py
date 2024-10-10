@@ -714,14 +714,12 @@ def read_node_content(node: dict) -> str:
         if isinstance(item, ast.FunctionDef) and node_type == 'function': # Caveat: Only works for standalone functions
             if item.name == node_name:
                 node_content = ast.get_source_segment(content, item)
-                print("Found function with name: ", node_name)
                 return node_content
 
 
         if isinstance(item, ast.ClassDef) and node_type == 'class':
             if item.name == node_name:
                 node_content = ast.get_source_segment(content, item)
-                print("Found class with name: ", node_name)
                 return node_content
 
         if isinstance(item, ast.ClassDef) and node_type == 'method':
@@ -734,7 +732,6 @@ def read_node_content(node: dict) -> str:
                     if name_str == node_name:
                         node_content = ast.get_source_segment(content, sub_item)
                         node_content = hot_fix_on_method_content(node_content)
-                        print("Found class method with name: ", node_name)
                         return node_content
                     
     raise ValueError(f"Node content not found for {node_type} '{node_name}' in {file_path}")
@@ -782,3 +779,44 @@ def get_summary_and_code(node: dict, get_llm_response: Callable):
     response = analyze_node_content(read_node_content(node), get_llm_response)
     summary_str, code_str = parse_summary_and_minimal_implementation(response)
     return summary_str, code_str
+
+
+def summarize_node(node, sub_dag, get_llm_response):
+    node_content = read_node_content(node)
+    
+    # Get summaries of dependent nodes (nodes with higher level)
+    dependent_summaries = []
+    for dep_id, dep_node in sub_dag.items():
+        if dep_node['level'] > node['level'] and 'summary' in dep_node:
+            dependent_summaries.append(f"{dep_node['name']}: {dep_node['summary']}")
+    
+    dependent_context = "\n".join(dependent_summaries)
+    
+    full_code = f"""
+# Dependent node summaries:
+'''
+{dependent_context}
+'''
+
+# Current node code:
+{node_content}
+"""
+    
+    prompt = SUMMARY_WITH_CODE_PROMPT.format(code=full_code)
+    
+    response = get_llm_response(prompt)
+    summary, minimal_code = parse_summary_and_minimal_implementation(response)
+    
+    return summary, minimal_code
+
+def bottom_up_summarization(sub_dag, get_llm_response):
+    # Sort nodes by level in descending order (highest level first)
+    sorted_nodes = sorted(sub_dag.keys(), key=lambda x: sub_dag[x]['level'], reverse=True)
+    
+    # Summarize nodes in bottom-up order
+    for node_id in sorted_nodes:
+        summary, minimal_code = summarize_node(sub_dag[node_id], sub_dag, get_llm_response)
+        sub_dag[node_id]['summary'] = summary
+        sub_dag[node_id]['minimal_code'] = minimal_code
+    
+    return sub_dag
