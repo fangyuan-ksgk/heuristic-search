@@ -608,7 +608,7 @@ def build_commit_evolution_gif_of_repo(repo_url: str, temp_repo: str = "temp_rep
     return img
 
 
-def create_evolution_gif(sub_dag, frame_count, cap_node_number: int = 15, output_dir="d2_output", output_file="evolve_graph.gif", fps=2):
+def create_evolution_gif(sub_dag, frame_count, cap_node_number: int = 15, output_dir="d2_output", output_file="evolve_graph.gif", fps=2, static_portion: float = 0.2):
     
     sub_dag = cap_dag_count(sub_dag, cap_node_number=cap_node_number)
     sub_dag = assign_levels(sub_dag)
@@ -617,7 +617,7 @@ def create_evolution_gif(sub_dag, frame_count, cap_node_number: int = 15, output
     os.makedirs(output_dir, exist_ok=True)
 
     # Generate opacity frames
-    opacity_frames = generate_opacity_frames(sub_dag, frame_count)
+    opacity_frames = generate_opacity_frames(sub_dag, frame_count, static_portion=static_portion)
 
     # Generate and save PNG files
     png_files = []
@@ -642,7 +642,14 @@ def create_evolution_gif(sub_dag, frame_count, cap_node_number: int = 15, output
     return img, output_file
 
 
-def create_gif_from_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir: str = "d2_output", cap_node_number: int = 15, frame_count: int = 100, fps: int = 2):
+def create_gif_from_repo(repo_url: str, 
+                         temp_repo: str = "temp_repo", 
+                         output_dir: str = "d2_output", 
+                         cap_node_number: int = 15, 
+                         frame_count: int = 100, 
+                         fps: int = 2,
+                         static_seconds: int = 4,
+                         output_name: str = "evolve_graph"):
     """
     Create a GIF of the repository evolution with level-wise opacity change.
 
@@ -661,7 +668,8 @@ def create_gif_from_repo(repo_url: str, temp_repo: str = "temp_repo", output_dir
     dag = file_dags[-1]
 
     # Get Sub-DAG and assign level values to node 
-    img, output_file = create_evolution_gif(dag, frame_count=60, cap_node_number=15, output_dir="d2_output", output_file="evolve_graph.gif", fps=10)
+    static_portion = static_seconds * fps / frame_count 
+    img, output_file = create_evolution_gif(dag, frame_count=frame_count, cap_node_number=cap_node_number, output_dir=output_dir, output_file=f"{output_name}.gif", fps=fps, static_portion=static_portion)
     
     return img
     

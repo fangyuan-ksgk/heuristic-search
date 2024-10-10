@@ -360,7 +360,12 @@ def assign_levels(sub_dag):
     return sub_dag
 
 
-def generate_opacity_frames(sub_dag, frame_count):
+def generate_opacity_frames(sub_dag, frame_count, static_portion: float = 0.2):
+    """ 
+    Generate opacity frames for the DAG animation
+    - Nodes appear gradually from top to bottom
+    - At the end, all nodes will be fully visible for 'static_portion * frame_count' frames
+    """
     # Reset opacity to zero for all nodes
     for node in sub_dag:
         sub_dag[node]['opacity'] = 0.0
@@ -401,6 +406,10 @@ def generate_opacity_frames(sub_dag, frame_count):
                 current_frame_dag[node_id]['opacity'] = new_opacity            
         
         frames.append(current_frame_dag)
+        
+    # Add static frames at the end
+    for _ in range(int(frame_count * static_portion)):
+        frames.append(copy.deepcopy(current_frame_dag))
     
     return frames
   
