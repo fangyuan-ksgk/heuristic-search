@@ -675,12 +675,26 @@ def create_gif_from_repo(repo_url: str,
 
 
 
+def hot_fix_on_method_content(node_content: str) -> str:
+    """ 
+    Address indentation issue for method content
+    """
+    lines = node_content.split('\n')
+    if len(lines) > 1:
+        # Remove any leading whitespace from the first line (method definition)
+        first_line = lines[0].lstrip()
+        # Remove one level of indentation from the rest of the lines
+        rest_lines = [line[4:] if line.startswith('    ') else line for line in lines[1:]]
+        node_content = first_line + '\n' + '\n'.join(rest_lines)
+    return node_content
+
+
 def read_node_content(node: dict) -> str:
     """ 
     Parse code-string content from a given node in a DAG object
     Work for node type: file, class, method (standalone and class-related)
     """
-    assert node['type'] in ['file', 'class', 'method'], f"Node type {node['type']} is not supported"
+    assert node['type'] in ['file', 'class', 'method', 'function'], f"Node type {node['type']} is not supported"
 
     # Extract information from the node
     file_path = node['file_path']
@@ -697,7 +711,7 @@ def read_node_content(node: dict) -> str:
     tree = ast.parse(content)
 
     for item in ast.walk(tree):
-        if isinstance(item, ast.FunctionDef) and node_type == 'method': # Caveat: Only works for standalone functions
+        if isinstance(item, ast.FunctionDef) and node_type == 'function': # Caveat: Only works for standalone functions
             if item.name == node_name:
                 node_content = ast.get_source_segment(content, item)
                 print("Found function with name: ", node_name)
@@ -719,6 +733,7 @@ def read_node_content(node: dict) -> str:
 
                     if name_str == node_name:
                         node_content = ast.get_source_segment(content, sub_item)
+                        node_content = hot_fix_on_method_content(node_content)
                         print("Found class method with name: ", node_name)
                         return node_content
                     
