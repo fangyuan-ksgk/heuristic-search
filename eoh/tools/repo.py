@@ -754,6 +754,18 @@ def create_gif_from_repo(repo_url: str,
     
     return img
 
+def create_gif_from_dag(dag: dict,
+                        output_dir: str = "d2_output",
+                        cap_node_number: int = 15,
+                        frame_count: int = 100,
+                        fps: int = 2,
+                        static_seconds: int = 4,
+                        output_name: str = "evolve_graph"):
+    
+    static_portion = static_seconds * fps / frame_count 
+    img, output_file = create_evolution_gif(dag, frame_count=frame_count, cap_node_number=cap_node_number, output_dir=output_dir, output_file=f"{output_name}.gif", fps=fps, static_portion=static_portion)
+    
+    return output_file
 
 
 def hot_fix_on_method_content(node_content: str) -> str:

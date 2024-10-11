@@ -52,6 +52,16 @@ class RepoAgent:
     
     def visualize_module(self):
         return visualize_dag(self.module_dag)
+    
+    def animate_module(self):
+        name = self.temp_repo.split("/")[-1]
+        output_file = create_gif_from_dag(self.module_dag, output_name = "anime_{name}")
+        print("GIF file saved in path: ", output_file)
+
+    def animate_file(self):
+        name = self.temp_repo.split("/")[-1]
+        output_file = create_gif_from_dag(self.file_dag, output_name = "anime_{name}")
+        print("GIF file saved in path: ", output_file)
         
     @property 
     def module_graph(self):
