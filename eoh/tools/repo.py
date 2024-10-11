@@ -786,7 +786,14 @@ def parse_summary_and_minimal_implementation(response: str):
     code_match = re.search(r"```python\s*(.*?)\s*```", response, re.DOTALL)
     code_str = code_match.group(1).strip() if code_match else ""
     return summary_str, code_str
-
+    
+def parse_python_code(response: str) -> str:
+    code_match = re.search(r"```python\s*(.*?)\s*```", response, re.DOTALL)
+    code_str = code_match.group(1).strip() if code_match else ""
+    return code_str
+    
+def parse_response(response: str) -> str:
+    return response.split("RESPONSE##")[-1]
 
 def get_summary_and_code(node: dict, get_llm_response: Callable):
     response = analyze_node_content(read_node_content(node), get_llm_response)
@@ -827,11 +834,14 @@ def bottom_up_summarization(sub_dag, get_llm_response):
     # Sort nodes by level in descending order (highest level first)
     sorted_nodes = sorted(sub_dag.keys(), key=lambda x: sub_dag[x]['level'], reverse=True)
     
-    # Summarize nodes in bottom-up order
-    for node_id in sorted_nodes:
+    # Summarize nodes in bottom-up order with progress bar
+    from tqdm import tqdm
+    for node_id in tqdm(sorted_nodes, desc="Summarizing nodes", unit="node"):
         summary, minimal_code = summarize_node(sub_dag[node_id], sub_dag, get_llm_response)
+        node_content = read_node_content(sub_dag[node_id])
         sub_dag[node_id]['summary'] = summary
         sub_dag[node_id]['minimal_code'] = minimal_code
+        sub_dag[node_id]['code'] = node_content
     
     return sub_dag
 
@@ -841,7 +851,67 @@ def save_dag_as_json(dag, repo_name, sandbox_dir="sandbox"):
     with open(file_path, 'w') as f:
         json.dump(dag, f)
     return file_path
+
+
+def load_dag(file_path):    
+    # Read the JSON file into a dictionary
+    with open(file_path, 'r') as file:
+        summarized_dag = json.load(file)
+    return summarized_dag
         
         
 def get_modules_from_file_dag(file_dag):
     return [file_dag[k]["name"] for k in file_dag.keys() if file_dag[k]["type"] == "file"]
+
+
+NAVIGATE_PROMPT = """You are presented with a repo-level dependency graph of a python file.
+The file is parsed into a module-wise dependency graph. You can use python code to access the 'dag' dictionary and get relevant information to answer user's question.
+User's question: {user_question}
+
+Use a python code snippet to navigate the DAG. Structure of the DAG dictionary is as follows: 
+{{'node_id': {{'name': 'module_name', 'type': 'function' or 'class' or 'method' ('function' is standalone function, 'class' is a class object, while 'method' is a class function), 'file': 'file_path', 'importance': int, 'file_path': 'full/path/to/file.py', 'edges': ['node_id1', 'node_id2', ...] (all the dependencies of current node), 'opacity': float, 'level': int, 'summary': 'brief description of the node', 'code': 'actual python code of a specific node'}}}}
+
+Example code snippet: 
+```python
+import json
+
+with open('{json_file_path}', 'r') as file:
+    dag = json.load(file)
+
+name_map = {k['name']: k for k in dag} # map name of node to node_id
+print(dag[name_map[xxx]]['summary']) # print summary of a node
+```
+
+If you don't see the need for further navigation don't provide code snippet and provide your response directly with ##RESPONSE: <your response>.
+"""
+
+
+NAVIGATE_PROMPT_WITH_INFO = """You are presented with a repo-level dependency graph of a python file.
+The file is parsed into a module-wise dependency graph. You can use python code to access the 'dag' dictionary and get relevant information to answer user's question.
+User's question: {user_question}
+Relevant information retrieved from the repo: {retrieved_info}
+
+Use a python code snippet to navigate the DAG. Structure of the DAG dictionary is as follows: 
+{{'node_id': {{'name': 'module_name', 'type': 'function' or 'class' or 'method' ('function' is standalone function, 'class' is a class object, while 'method' is a class function), 'file': 'file_path', 'importance': int, 'file_path': 'full/path/to/file.py', 'edges': ['node_id1', 'node_id2', ...] (all the dependencies of current node), 'opacity': float, 'level': int, 'summary': 'brief description of the node', 'code': 'actual python code of a specific node'}}}}
+
+Example code snippet: 
+```python
+import json
+
+with open('{json_file_path}', 'r') as file:
+    dag = json.load(file)
+
+name_map = {k['name']: k for k in dag} # map name of node to node_id
+print(dag[name_map[xxx]]['summary']) # print summary of a node
+```
+
+If you don't see the need for further navigation don't provide code snippet and provide your response directly with ##RESPONSE: <your response>.
+"""
+
+
+def get_navigate_prompt(json_file_path, user_question, retrieved_info):
+    if retrieved_info != "":
+        prompt = NAVIGATE_PROMPT_WITH_INFO.replace("{json_file_path}", json_file_path).replace("{user_question}", user_question).replace("{retrieved_info}", retrieved_info)
+    else:
+        prompt = NAVIGATE_PROMPT.replace("{user_question}", user_question).replace("{json_file_path}", json_file_path)
+    return prompt 
