@@ -4,10 +4,11 @@ import git
 import os
 import ast
 import re
+import json
 import base64
 import glob
 import requests
-from typing import Dict, Any, Set, Callable
+from typing import Dict, Any, Set, Callable, Optional
 from datetime import datetime, timedelta
 from IPython.display import Image, display
 import shutil
@@ -414,6 +415,12 @@ def extract_subgraph_dag(dag, center_node, depth=6, filter_nonclass=False):
     """ 
     Extract SubGraph of any 'node' from DAG into a new DAG dictionary, max_depth is set.
     """
+    name_map = {dag[k]["name"]: k for k in dag} # Map name to node-id for all nodes in the DAG
+    if center_node in name_map:
+        center_node = name_map[center_node]
+    else:
+        assert center_node in dag, f"Center node '{center_node}' not found in the DAG"
+    
     def get_neighbors(node, current_depth):
         if current_depth > depth:
             return set()
@@ -642,6 +649,18 @@ def create_evolution_gif(sub_dag, frame_count, cap_node_number: int = 15, output
     return img, output_file
 
 
+def build_file_level_dag(repo_url: Optional[str] = None, temp_repo: str = "temp_repo"):
+    if not os.path.exists(temp_repo):
+        assert repo_url is not None, "A Github Repository URL is required if temp_repo does not exist"
+        clone_repo(repo_url, temp_repo)
+    else:
+        print("Repo already cloned, skipping cloning...")
+        
+    dates, file_dags = obtain_repo_evolution(temp_repo)
+    dag = file_dags[-1]
+    return dag
+
+
 def create_gif_from_repo(repo_url: str, 
                          temp_repo: str = "temp_repo", 
                          output_dir: str = "d2_output", 
@@ -659,13 +678,7 @@ def create_gif_from_repo(repo_url: str,
         frame_count (int): The number of frames in the GIF.
     """
     
-    if not os.path.exists(temp_repo):
-        clone_repo(repo_url, temp_repo)
-    else:
-        print("Repo already cloned, skipping cloning...")
-    
-    dates, file_dags = obtain_repo_evolution(temp_repo)
-    dag = file_dags[-1]
+    dag = build_file_level_dag(repo_url, temp_repo)
 
     # Get Sub-DAG and assign level values to node 
     static_portion = static_seconds * fps / frame_count 
@@ -809,6 +822,7 @@ def summarize_node(node, sub_dag, get_llm_response):
     
     return summary, minimal_code
 
+
 def bottom_up_summarization(sub_dag, get_llm_response):
     # Sort nodes by level in descending order (highest level first)
     sorted_nodes = sorted(sub_dag.keys(), key=lambda x: sub_dag[x]['level'], reverse=True)
@@ -820,3 +834,14 @@ def bottom_up_summarization(sub_dag, get_llm_response):
         sub_dag[node_id]['minimal_code'] = minimal_code
     
     return sub_dag
+
+
+def save_dag_as_json(dag, repo_name, sandbox_dir="sandbox"):
+    file_path = os.path.join(sandbox_dir, f'{repo_name}_dag.json')
+    with open(file_path, 'w') as f:
+        json.dump(dag, f)
+    return file_path
+        
+        
+def get_modules_from_file_dag(file_dag):
+    return [file_dag[k]["name"] for k in file_dag.keys() if file_dag[k]["type"] == "file"]
