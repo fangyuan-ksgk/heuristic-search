@@ -519,6 +519,72 @@ def commit_tree_to_file_dag(repo: git.Repo, commit: git.Commit, base_path: str =
     return file_dag
 
 
+def directory_to_file_dag(dir_path: str) -> Dict[str, Dict[str, Any]]:
+    file_dag = {}
+    node_id = 1
+
+    def parse_imports(file_content: str) -> Set[str]:
+        imports = set()
+        try:
+            tree = ast.parse(file_content)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        imports.add(alias.name)
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module:
+                        imports.add(node.module)
+        except SyntaxError:
+            # If there's a syntax error, we'll just skip the imports
+            pass
+        return imports
+
+    def traverse_directory(directory):
+        nonlocal node_id
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if file.endswith('.py'):
+                    file_path = os.path.join(root, file)
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        file_content = f.read()
+                    imports = parse_imports(file_content)
+                    
+                    rel_path = os.path.relpath(file_path, dir_path)
+                    if "/" in rel_path.replace(".py", ""):
+                        module, name = rel_path.replace(".py", "").rsplit("/", 1)
+                        name = name + ".py"
+                    else:
+                        module = ""
+                        name = rel_path.replace(".py", "")
+
+                    file_dag[f"node{node_id}"] = {
+                        'name': name,
+                        'type': 'file',
+                        'file': rel_path.replace("/", "."),
+                        'file_path': file_path,
+                        'module': module,
+                        'edges': set(),
+                        'imports': imports
+                    }
+                    node_id += 1
+
+    traverse_directory(dir_path)
+
+    # Add edges based on imports
+    for node, data in file_dag.items():
+        for imp in data['imports']:
+            for other_node, other_data in file_dag.items():
+                if imp == other_data['module'] or imp == other_data['file'].replace('/', '.').replace('.py', ''):
+                    data['edges'].add(other_node)
+
+    # Convert sets to lists for JSON serialization
+    for node in file_dag.values():
+        node['edges'] = list(node['edges'])
+        node['imports'] = list(node['imports'])
+
+    return assign_importance_score_to_dag(file_dag)
+
+
 def obtain_repo_evolution(repo_path):
     # Open the repository
     repo = git.Repo(repo_path)
@@ -650,6 +716,7 @@ def create_evolution_gif(sub_dag, frame_count, cap_node_number: int = 15, output
 
 
 def build_file_level_dag(repo_url: Optional[str] = None, temp_repo: str = "temp_repo"):
+    print("Temp repo: ", temp_repo)
     if not os.path.exists(temp_repo):
         assert repo_url is not None, "A Github Repository URL is required if temp_repo does not exist"
         clone_repo(repo_url, temp_repo)
@@ -659,6 +726,7 @@ def build_file_level_dag(repo_url: Optional[str] = None, temp_repo: str = "temp_
     dates, file_dags = obtain_repo_evolution(temp_repo)
     dag = file_dags[-1]
     return dag
+
 
 
 def create_gif_from_repo(repo_url: str, 
@@ -909,9 +977,64 @@ If you don't see the need for further navigation don't provide code snippet and 
 """
 
 
-def get_navigate_prompt(json_file_path, user_question, retrieved_info):
-    if retrieved_info != "":
+NAVIGATE_PROMPT_WITHOUT_CODE = """You are presented with a repo-level dependency graph of a python file.
+The file is parsed into a module-wise dependency graph. You can use python code to access the 'dag' dictionary and get relevant information to answer user's question.
+User's question: {user_question}
+Relevant information retrieved from the repo: {retrieved_info}
+
+Provide your response directly with ##RESPONSE: <your response>.
+"""
+
+
+def get_navigate_prompt(json_file_path, user_question, retrieved_info, module_names: list, use_code: bool = True):
+
+    module_name_str = (", ").join(module_names)    
+    retrieved_info += f"Module Names: {module_name_str}"
+    
+    if retrieved_info != "" and use_code:
         prompt = NAVIGATE_PROMPT_WITH_INFO.replace("{json_file_path}", json_file_path).replace("{user_question}", user_question).replace("{retrieved_info}", retrieved_info)
-    else:
+    elif use_code:
         prompt = NAVIGATE_PROMPT.replace("{user_question}", user_question).replace("{json_file_path}", json_file_path)
+    else:
+        prompt = NAVIGATE_PROMPT_WITHOUT_CODE.replace("{user_question}", user_question).replace("{retrieved_info}", retrieved_info)
     return prompt 
+
+
+def parse_file_dag(temp_repo: str, start_file: str):
+    dag = build_cross_file_dag(temp_repo, start_file)
+    name_map = {dag[k]["name"]: k for k in dag} # Map name to node-id for all nodes in the DAG
+    pick_object = list(name_map.keys())[0] # pick the first object from 'start_file'
+    sub_dag = extract_subgraph_dag(dag, name_map[pick_object], depth=6) # Extact depedency graph starting from pick_object
+    sub_dag = decide_opacity_of_dag(sub_dag, progress=1.0, cap_node_number=30)
+    return sub_dag 
+
+
+def parse_directory_dag(dir_path: str):
+    """
+    Apply 'parse_file_dag' on python files within the directory
+    - Trick: Ensure no 'overlapping DAG' in the parsing result ...
+    """
+    import os
+    
+    # Get all Python files in the directory
+    python_files = get_python_files(dir_path)
+    
+    # Initialize an empty master DAG
+    master_dag = {}
+    
+    for file in python_files:
+        file_dag = parse_file_dag(dir_path, file)
+        
+        # Merge file_dag into master_dag, avoiding duplicates
+        for node_id, node_data in file_dag.items():
+            if node_id not in master_dag:
+                master_dag[node_id] = node_data
+            else:
+                # If node already exists, update its edges
+                master_dag[node_id]['edges'].extend(node_data.get('edges', []))
+    
+    # Ensure edges are lists
+    for node_id in master_dag:
+        master_dag[node_id]['edges'] = list(master_dag[node_id]['edges'])
+    
+    return master_dag

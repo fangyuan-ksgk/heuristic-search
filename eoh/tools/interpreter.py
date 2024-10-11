@@ -5,10 +5,11 @@ import base64
 import matplotlib.pyplot as plt
 import sqlite3
 import pandas as pd
+import subprocess
 from PIL import Image as PILImage
 from IPython.display import display, Image
 from typing import Optional
-from .repo import parse_python_code
+from .repo import parse_python_code, parse_response
 
 
 def base64_to_pil_image(base64_str):
@@ -60,7 +61,6 @@ def combine_figures(figures) -> Optional[PILImage.Image]:
     # Return the combined figure as a base64 encoded string
     return base64_to_pil_image(combined_figure)
     
-    
 
 class CodeInterpreter:
     def __init__(self):
@@ -79,7 +79,8 @@ class CodeInterpreter:
         if is_code:
             self.execute(code)
             return self.return_results(), self.figure, True
-        return response, self.figure, False
+
+        return parse_response(response), self.figure, False
         
         
     def parse_code(self, response: str):
@@ -93,36 +94,19 @@ class CodeInterpreter:
         self.output = []
         self.figures = []
 
-        # Redirect stdout to capture print statements
-        old_stdout = sys.stdout
-        sys.stdout = io.StringIO()
-
         try:
-            # Parse the code into an AST
-            tree = ast.parse(code)
-            
-            # Execute the code
-            exec(compile(tree, "<string>", "exec"), self.globals, self.locals)
-            
-            # Capture any printed output
-            self.output.append(sys.stdout.getvalue())
+            # Use subprocess to run the code
+            result = subprocess.run(['python', '-c', code], capture_output=True, text=True, check=True)
+            self.output.append(result.stdout)
 
-            # Capture any generated plots
-            for fig_num in plt.get_fignums():
-                fig = plt.figure(fig_num)
-                buf = io.BytesIO()
-                fig.savefig(buf, format='png')
-                buf.seek(0)
-                self.figures.append(base64.b64encode(buf.getvalue()).decode())
-                plt.close(fig)
+            # TODO: Handle figure generation
+            # This part needs to be adjusted as subprocess doesn't directly capture matplotlib figures
 
+        except subprocess.CalledProcessError as e:
+            pass
         except Exception as e:
-            self.output.append(f"Error: {str(e)}")
-
-        finally:
-            # Restore stdout
-            sys.stdout = old_stdout
-
+            pass
+        
     @property 
     def figure(self):
         return combine_figures(self.figures)
@@ -140,4 +124,4 @@ class CodeInterpreter:
             
     def return_results(self):
         compiled_result = self.get_output()
-        return compiled_result, self.figure
+        return compiled_result
