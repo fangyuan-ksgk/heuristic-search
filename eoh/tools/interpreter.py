@@ -7,7 +7,7 @@ import sqlite3
 import pandas as pd
 from IPython.display import display, Image
 
-class LLMCodeInterpreter:
+class CodeInterpreter:
     def __init__(self):
         self.locals = {}
         self.globals = globals().copy()

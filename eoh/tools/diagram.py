@@ -208,6 +208,8 @@ def visualize_dag(dag: dict, output_dir="d2_output"):
     """
     Visualize the DAG using d2
     """
+    if 'opacity' not in dag[list(dag.keys())[0]]:
+        dag = decide_opacity_of_dag(dag, progress=1.0, cap_node_number=30)
     d2_code = build_d2_from_dag(dag, include_overhead=True)
     png_file_path = save_png_from_d2(d2_code, "dag", output_dir=output_dir)
     if png_file_path:

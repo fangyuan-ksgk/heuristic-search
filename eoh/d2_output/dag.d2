@@ -35,39 +35,9 @@ classes: {
     }
   }
 }
-hdcnn.HDCNNClassifier.class: class
-hdcnn.HDCNNClassifier.label: "HDCNNClassifier"
-hdcnn.HDCNNClassifier: {
-  style: {
-    opacity: 0.80
-    stroke: "black"
-    stroke-width: 4
-    shadow: true
-  }
-}
-hdcnn.encode_sequence.class: function
-hdcnn.encode_sequence.label: "encode_sequence"
-hdcnn.encode_sequence: {
-  style: {
-    opacity: 0.73
-    stroke: "black"
-    stroke-width: 4
-    shadow: true
-  }
-}
-hdcnn.forward.class: function
-hdcnn.forward.label: "forward"
-hdcnn.forward: {
-  style: {
-    opacity: 0.73
-    stroke: "black"
-    stroke-width: 4
-    shadow: true
-  }
-}
-hdcnn.HDComputing.class: class
-hdcnn.HDComputing.label: "HDComputing"
-hdcnn.HDComputing: {
+entropix.kvcache.update.class: function
+entropix.kvcache.update.label: "update"
+entropix.kvcache.update: {
   style: {
     opacity: 1.00
     stroke: "black"
@@ -75,69 +45,19 @@ hdcnn.HDComputing: {
     shadow: true
   }
 }
-hdcnn.__len__.class: function
-hdcnn.__len__.label: "__len__"
-hdcnn.__len__: {
+entropix.kvcache.new.class: function
+entropix.kvcache.new.label: "new"
+entropix.kvcache.new: {
   style: {
-    opacity: 0.73
+    opacity: 0.50
     stroke: "black"
     stroke-width: 4
     shadow: true
   }
 }
-hdcnn.__getitem__.class: function
-hdcnn.__getitem__.label: "__getitem__"
-hdcnn.__getitem__: {
-  style: {
-    opacity: 0.80
-    stroke: "black"
-    stroke-width: 4
-    shadow: true
-  }
-}
-hdcnn.create_token_hvs.class: function
-hdcnn.create_token_hvs.label: "create_token_hvs"
-hdcnn.create_token_hvs: {
-  style: {
-    opacity: 0.73
-    stroke: "black"
-    stroke-width: 4
-    shadow: true
-  }
-}
-hdcnn.main.class: function
-hdcnn.main.label: "main"
-hdcnn.main: {
-  style: {
-    opacity: 0.87
-    stroke: "black"
-    stroke-width: 4
-    shadow: true
-  }
-}
-hdcnn.build_vocab.class: function
-hdcnn.build_vocab.label: "build_vocab"
-hdcnn.build_vocab: {
-  style: {
-    opacity: 0.73
-    stroke: "black"
-    stroke-width: 4
-    shadow: true
-  }
-}
-hdcnn.AGNewsDataset.class: class
-hdcnn.AGNewsDataset.label: "AGNewsDataset"
-hdcnn.AGNewsDataset: {
-  style: {
-    opacity: 0.93
-    stroke: "black"
-    stroke-width: 4
-    shadow: true
-  }
-}
-hdcnn.hdcnn.class: file
-hdcnn.hdcnn.label: "hdcnn"
-hdcnn.hdcnn: {
+entropix.kvcache.KVCache.class: class
+entropix.kvcache.KVCache.label: "KVCache"
+entropix.kvcache.KVCache: {
   style: {
     opacity: 1.00
     stroke: "black"
@@ -145,195 +65,63 @@ hdcnn.hdcnn: {
     shadow: true
   }
 }
-hdcnn.bind.class: function
-hdcnn.bind.label: "bind"
-hdcnn.bind: {
+entropix.kvcache.kvcache.class: file
+entropix.kvcache.kvcache.label: "kvcache"
+entropix.kvcache.kvcache: {
   style: {
-    opacity: 0.73
+    opacity: 1.00
     stroke: "black"
     stroke-width: 4
     shadow: true
   }
 }
-hdcnn.random_hv.class: function
-hdcnn.random_hv.label: "random_hv"
-hdcnn.random_hv: {
-  style: {
-    opacity: 0.73
-    stroke: "black"
-    stroke-width: 4
-    shadow: true
-  }
-}
-hdcnn.superpose.class: function
-hdcnn.superpose.label: "superpose"
-hdcnn.superpose: {
-  style: {
-    opacity: 0.73
-    stroke: "black"
-    stroke-width: 4
-    shadow: true
-  }
-}
-hdcnn.permute.class: function
-hdcnn.permute.label: "permute"
-hdcnn.permute: {
-  style: {
-    opacity: 0.73
-    stroke: "black"
-    stroke-width: 4
-    shadow: true
-  }
-}
-hdcnn.HDCNNClassifier -> hdcnn.forward: {
+entropix.kvcache.update -> entropix.kvcache.new: {
   style.stroke: black
-  style.opacity: 0.73
+  style.opacity: 0.50
   style.stroke-width: 2
 }
-hdcnn.HDComputing -> hdcnn.random_hv: {
+entropix.kvcache.update -> entropix.kvcache.update: {
   style.stroke: black
-  style.opacity: 0.73
+  style.opacity: 1.00
   style.stroke-width: 2
 }
-hdcnn.HDComputing -> hdcnn.superpose: {
+entropix.kvcache.update -> entropix.kvcache.KVCache: {
   style.stroke: black
-  style.opacity: 0.73
+  style.opacity: 1.00
   style.stroke-width: 2
 }
-hdcnn.HDComputing -> hdcnn.permute: {
+entropix.kvcache.KVCache -> entropix.kvcache.new: {
   style.stroke: black
-  style.opacity: 0.73
+  style.opacity: 0.50
   style.stroke-width: 2
 }
-hdcnn.HDComputing -> hdcnn.bind: {
+entropix.kvcache.KVCache -> entropix.kvcache.update: {
   style.stroke: black
-  style.opacity: 0.73
+  style.opacity: 1.00
   style.stroke-width: 2
 }
-hdcnn.__getitem__ -> hdcnn.encode_sequence: {
+entropix.kvcache.KVCache -> entropix.kvcache.KVCache: {
   style.stroke: black
-  style.opacity: 0.73
+  style.opacity: 1.00
   style.stroke-width: 2
 }
-hdcnn.main -> hdcnn.create_token_hvs: {
-  style.stroke: black
-  style.opacity: 0.73
-  style.stroke-width: 2
-}
-hdcnn.main -> hdcnn.build_vocab: {
-  style.stroke: black
-  style.opacity: 0.73
-  style.stroke-width: 2
-}
-hdcnn.AGNewsDataset -> hdcnn.__len__: {
-  style.stroke: black
-  style.opacity: 0.73
-  style.stroke-width: 2
-}
-hdcnn.AGNewsDataset -> hdcnn.__getitem__: {
-  style.stroke: black
-  style.opacity: 0.80
-  style.stroke-width: 2
-}
-hdcnn.AGNewsDataset -> hdcnn.encode_sequence: {
-  style.stroke: black
-  style.opacity: 0.73
-  style.stroke-width: 2
-}
-hdcnn.hdcnn -> hdcnn.HDCNNClassifier: {
+entropix.kvcache.kvcache -> entropix.kvcache.new: {
   style.stroke: red
-  style.opacity: 0.80
+  style.opacity: 0.50
   style.stroke-width: 2
   style.stroke-dash: 5
   style.animated: true
 }
-hdcnn.hdcnn -> hdcnn.encode_sequence: {
-  style.stroke: red
-  style.opacity: 0.73
-  style.stroke-width: 2
-  style.stroke-dash: 5
-  style.animated: true
-}
-hdcnn.hdcnn -> hdcnn.forward: {
-  style.stroke: red
-  style.opacity: 0.73
-  style.stroke-width: 2
-  style.stroke-dash: 5
-  style.animated: true
-}
-hdcnn.hdcnn -> hdcnn.HDComputing: {
+entropix.kvcache.kvcache -> entropix.kvcache.KVCache: {
   style.stroke: red
   style.opacity: 1.00
   style.stroke-width: 2
   style.stroke-dash: 5
   style.animated: true
 }
-hdcnn.hdcnn -> hdcnn.__len__: {
+entropix.kvcache.kvcache -> entropix.kvcache.update: {
   style.stroke: red
-  style.opacity: 0.73
-  style.stroke-width: 2
-  style.stroke-dash: 5
-  style.animated: true
-}
-hdcnn.hdcnn -> hdcnn.__getitem__: {
-  style.stroke: red
-  style.opacity: 0.80
-  style.stroke-width: 2
-  style.stroke-dash: 5
-  style.animated: true
-}
-hdcnn.hdcnn -> hdcnn.create_token_hvs: {
-  style.stroke: red
-  style.opacity: 0.73
-  style.stroke-width: 2
-  style.stroke-dash: 5
-  style.animated: true
-}
-hdcnn.hdcnn -> hdcnn.main: {
-  style.stroke: red
-  style.opacity: 0.87
-  style.stroke-width: 2
-  style.stroke-dash: 5
-  style.animated: true
-}
-hdcnn.hdcnn -> hdcnn.build_vocab: {
-  style.stroke: red
-  style.opacity: 0.73
-  style.stroke-width: 2
-  style.stroke-dash: 5
-  style.animated: true
-}
-hdcnn.hdcnn -> hdcnn.AGNewsDataset: {
-  style.stroke: red
-  style.opacity: 0.93
-  style.stroke-width: 2
-  style.stroke-dash: 5
-  style.animated: true
-}
-hdcnn.hdcnn -> hdcnn.bind: {
-  style.stroke: red
-  style.opacity: 0.73
-  style.stroke-width: 2
-  style.stroke-dash: 5
-  style.animated: true
-}
-hdcnn.hdcnn -> hdcnn.random_hv: {
-  style.stroke: red
-  style.opacity: 0.73
-  style.stroke-width: 2
-  style.stroke-dash: 5
-  style.animated: true
-}
-hdcnn.hdcnn -> hdcnn.superpose: {
-  style.stroke: red
-  style.opacity: 0.73
-  style.stroke-width: 2
-  style.stroke-dash: 5
-  style.animated: true
-}
-hdcnn.hdcnn -> hdcnn.permute: {
-  style.stroke: red
-  style.opacity: 0.73
+  style.opacity: 1.00
   style.stroke-width: 2
   style.stroke-dash: 5
   style.animated: true
