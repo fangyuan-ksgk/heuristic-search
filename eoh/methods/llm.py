@@ -78,24 +78,38 @@ def get_openai_response(input: Union[str, list], model_name="gpt-4o"):
     return response.choices[0].message.content
 
 
-def get_claude_response(prompt: Union[str, list], system_prompt="You are a helpful assistant"):
+def get_claude_response(prompt: Union[str, list], img = None, img_type = None, system_prompt = "You are a helpful assistant."):
+    """ 
+    Claude response with query and image input
+    """
     
     if isinstance(prompt, str):
-        messages = [{"role":"user", "content": prompt}]
+        query = prompt
     else:
         if prompt[0]["role"] == "system":
             system_prompt = prompt[0]["content"]
-        messages = prompt[1:]
+        query = prompt[1:]
         
-    response = claude_client.messages.create(
+    if img is not None:
+        text_content = [{"type": "text", "text": query}]
+        img_content = [{"type": "image", "source": {"type": "base64", "media_type": img_type, "data": img}}]
+    else:
+        text_content = query
+        img_content = ""
+        
+    message = claude_client.messages.create(
         model="claude-3-5-sonnet-20240620",
-        max_tokens=1000,
-        temperature=0,
-        messages=messages,
-        system=system_prompt
+        max_tokens=1024,
+        messages=[
+            {
+                "role": "user",
+                "content": img_content + text_content,
+            }
+        ],
+        system=system_prompt,
     )
-    response_content = response.content[0].text
-    return response_content
+    return message.content[0].text 
+
 
 try:
     from vllm import LLM, SamplingParams

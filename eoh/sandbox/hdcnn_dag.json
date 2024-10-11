@@ -1,1 +1,213 @@
-{"node15": {"name": "AGNewsDataset::__getitem__", "type": "method", "file": "hdcnn.py", "importance": 2, "file_path": "hdcnn/hdcnn.py", "edges": ["node3"], "opacity": 0.8, "level": 3, "summary": "This code defines a custom dataset item retrieval method. It processes text data by tokenizing, cleaning, and encoding it into a high-dimensional vector using Hyperdimensional Computing. It also prepares the corresponding label. The method is likely part of a custom PyTorch Dataset class used for natural language processing tasks.", "minimal_code": "import torch\nfrom nltk.tokenize import word_tokenize\nfrom nltk.corpus import stopwords\n\nclass CustomDataset:\n    def __init__(self, data, token_hvs, hd, max_seq_len=128):\n        self.data = data\n        self.token_hvs = token_hvs\n        self.hd = hd\n        self.max_seq_len = max_seq_len\n        self.stop_words = set(stopwords.words('english'))\n\n    def __getitem__(self, idx):\n        item = self.data[idx]\n        text, label = item['text'], item['label']\n        \n        tokens = word_tokenize(text.lower())\n        tokens = [t for t in tokens if t.isalpha() and t not in self.stop_words]\n        tokens = ['[CLS]'] + tokens[:self.max_seq_len] + ['[SEP]']\n        \n        seq_hv = encode_sequence(tokens, self.token_hvs, self.hd)\n        return torch.tensor(seq_hv, dtype=torch.float32), torch.tensor(label, dtype=torch.long)\n\ndef encode_sequence(tokens, token_hvs, hd):\n    # Placeholder for the encode_sequence function\n    # This should implement the Hyperdimensional Computing encoding\n    pass"}, "node3": {"name": "encode_sequence", "type": "function", "file": "hdcnn.py", "importance": 1, "file_path": "hdcnn/hdcnn.py", "edges": [], "opacity": 0.7333333333333334, "level": 4, "summary": "This function encodes a sequence of tokens into a single high-dimensional vector (HV) using Hyperdimensional Computing techniques. It iterates through the tokens, retrieves their corresponding HVs, applies position-based permutation, and combines them using element-wise addition. The final result is binarized using the sign function.", "minimal_code": "import numpy as np\n\ndef encode_sequence(tokens, token_hvs, hd):\n    sequence_hv = np.zeros(hd.dim)\n    for i, token in enumerate(tokens):\n        token_hv = token_hvs.get(token, token_hvs['[UNK]'])\n        permuted_token_hv = hd.permute(token_hv, shifts=i)\n        sequence_hv += permuted_token_hv\n    return np.sign(sequence_hv)"}, "node11": {"name": "HDComputing::permute", "type": "method", "file": "hdcnn.py", "importance": 1, "file_path": "hdcnn/hdcnn.py", "edges": [], "opacity": 0.7333333333333334, "level": 3, "summary": "The `permute` function performs a circular shift on a given high-dimensional vector (HV). It takes an HV as input and shifts its elements by a specified number of positions (default is 1). This operation is commonly used in Hyperdimensional Computing to encode positional information or create variations of existing vectors.", "minimal_code": "import numpy as np\n\ndef permute(hv, shifts=1):\n    return np.roll(hv, shifts)"}, "node10": {"name": "HDComputing::bind", "type": "method", "file": "hdcnn.py", "importance": 1, "file_path": "hdcnn/hdcnn.py", "edges": [], "opacity": 0.7333333333333334, "level": 3, "summary": "The `bind` function performs element-wise multiplication of two hypervectors (HVs). This operation is a fundamental operation in Hyperdimensional Computing, used to bind or associate two concepts represented by high-dimensional vectors.", "minimal_code": "def bind(self, hv1, hv2):\n    return hv1 * hv2"}, "node8": {"name": "HDComputing::random_hv", "type": "method", "file": "hdcnn.py", "importance": 1, "file_path": "hdcnn/hdcnn.py", "edges": [], "opacity": 0.7333333333333334, "level": 3, "summary": "This function, `random_hv`, generates a random high-dimensional vector (HV) of binary values (-1 or 1) with a specified dimension. It uses a random state object to ensure reproducibility and consistency in the generated vectors.", "minimal_code": "import numpy as np\n\nclass HDComputing:\n    def __init__(self, dim, seed=None):\n        self.dim = dim\n        self.random_state = np.random.RandomState(seed)\n\n    def random_hv(self):\n        return self.random_state.choice([-1, 1], size=self.dim)\n\n# Usage example\nhd = HDComputing(dim=10000, seed=42)\nrandom_vector = hd.random_hv()"}, "node1": {"name": "hdcnn.py", "type": "file", "file": "hdcnn.py", "importance": 15, "file_path": "hdcnn/hdcnn.py", "edges": ["node15", "node3", "node11", "node10", "node8", "node4", "node6", "node2", "node5", "node12", "node18", "node9", "node16", "node14"], "opacity": 1.0, "level": 1, "summary": "This code implements a text classification system using Hyperdimensional Computing (HDC) and a neural network for the AG News dataset. It processes text data by encoding it into high-dimensional vectors, builds a vocabulary, and trains a classifier. The system includes data preprocessing, model training with early stopping, and evaluation. It also implements a Naive Bayes baseline for comparison.", "minimal_code": ""}, "node4": {"name": "build_vocab", "type": "function", "file": "hdcnn.py", "importance": 1, "file_path": "hdcnn/hdcnn.py", "edges": [], "opacity": 0.7333333333333334, "level": 3, "summary": "This function builds a vocabulary from a dataset of text items. It tokenizes each text, removes non-alphabetic tokens and stop words, counts token frequencies, and creates a vocabulary dictionary with the most common tokens. It also includes special tokens like '[PAD]', '[UNK]', '[CLS]', and '[SEP]'.", "minimal_code": "from collections import Counter\nfrom nltk.tokenize import word_tokenize\n\ndef build_vocab(dataset, max_vocab_size, stop_words):\n    counter = Counter()\n    for item in dataset:\n        tokens = word_tokenize(item['text'].lower())\n        tokens = [t for t in tokens if t.isalpha() and t not in stop_words]\n        counter.update(tokens)\n    \n    special_tokens = ['[PAD]', '[UNK]', '[CLS]', '[SEP]']\n    vocab_tokens = special_tokens + [t for t, _ in counter.most_common(max_vocab_size)]\n    return {token: idx for idx, token in enumerate(vocab_tokens)}"}, "node6": {"name": "HDComputing", "type": "class", "file": "hdcnn.py", "importance": 5, "file_path": "hdcnn/hdcnn.py", "edges": ["node9", "node11", "node10", "node8"], "opacity": 1.0, "level": 2, "summary": "This code defines a class `HDComputing` that implements core operations for Hyperdimensional Computing. It includes methods for generating random high-dimensional vectors, superposing (combining) multiple vectors, binding (element-wise multiplication) two vectors, and permuting (circular shifting) a vector. These operations are fundamental in hyperdimensional computing for representing and manipulating information in high-dimensional spaces.", "minimal_code": "import numpy as np\n\nclass HDComputing:\n    def __init__(self, dim, seed=None):\n        self.dim = dim\n        self.random_state = np.random.RandomState(seed)\n\n    def random_hv(self):\n        return self.random_state.choice([-1, 1], size=self.dim)\n\n    def superpose(self, hvs):\n        return np.sign(np.sum(hvs, axis=0))\n\n    def bind(self, hv1, hv2):\n        return hv1 * hv2\n\n    def permute(self, hv, shifts=1):\n        return np.roll(hv, shifts)"}, "node2": {"name": "create_token_hvs", "type": "function", "file": "hdcnn.py", "importance": 1, "file_path": "hdcnn/hdcnn.py", "edges": [], "opacity": 0.7333333333333334, "level": 3, "summary": "This function creates a dictionary mapping each token in a given vocabulary to a randomly generated high-dimensional vector (HV). It uses a hyperdimensional computing (HD) object to generate these random vectors. The function is likely part of a larger system for encoding and processing text or sequences using hyperdimensional computing techniques.", "minimal_code": "import numpy as np\n\nclass HDComputing:\n    def __init__(self, dim):\n        self.dim = dim\n\n    def random_hv(self):\n        return np.random.choice([-1, 1], size=self.dim)\n\ndef create_token_hvs(vocab, dim):\n    hd = HDComputing(dim)\n    return {token: hd.random_hv() for token in vocab}\n\n# Example usage\nvocab = [\"apple\", \"banana\", \"cherry\"]\ndim = 10000\ntoken_hvs = create_token_hvs(vocab, dim)"}, "node5": {"name": "main", "type": "function", "file": "hdcnn.py", "importance": 3, "file_path": "hdcnn/hdcnn.py", "edges": ["node4", "node2"], "opacity": 0.8666666666666667, "level": 2, "summary": "This code implements a text classification system using Hyperdimensional Computing (HDC) and a neural network. It processes the AG News dataset, creates a vocabulary, encodes text into high-dimensional vectors, and trains a classifier. The system includes data preprocessing, model training with early stopping, and evaluation. It also implements a Naive Bayes baseline for comparison.", "minimal_code": ""}, "node12": {"name": "AGNewsDataset", "type": "class", "file": "hdcnn.py", "importance": 4, "file_path": "hdcnn/hdcnn.py", "edges": ["node15", "node3", "node14"], "opacity": 0.9333333333333333, "level": 2, "summary": "This code defines a custom PyTorch Dataset class called AGNewsDataset for processing text data. It initializes with various parameters and implements methods for length and item retrieval. The __getitem__ method tokenizes and preprocesses text, encodes it into a high-dimensional vector using Hyperdimensional Computing techniques, and returns the encoded vector along with its label.", "minimal_code": "from torch.utils.data import Dataset\nfrom nltk.tokenize import word_tokenize\nimport torch\n\nclass AGNewsDataset(Dataset):\n    def __init__(self, data, vocab, token_hvs, hd, max_seq_len, stop_words):\n        self.data = data\n        self.vocab = vocab\n        self.token_hvs = token_hvs\n        self.hd = hd\n        self.max_seq_len = max_seq_len\n        self.stop_words = stop_words\n\n    def __len__(self):\n        return len(self.data)\n\n    def __getitem__(self, idx):\n        item = self.data[idx]\n        text, label = item['text'], item['label']\n        tokens = word_tokenize(text.lower())\n        tokens = [t for t in tokens if t.isalpha() and t not in self.stop_words]\n        tokens = ['[CLS]'] + tokens[:self.max_seq_len] + ['[SEP]']\n        seq_hv = encode_sequence(tokens, self.token_hvs, self.hd)\n        return torch.tensor(seq_hv, dtype=torch.float32), torch.tensor(label, dtype=torch.long)\n\ndef encode_sequence(tokens, token_hvs, hd):\n    # Placeholder for encode_sequence function\n    return [0] * hd.dimension  # Return a dummy vector of correct dimension"}, "node18": {"name": "HDCNNClassifier::forward", "type": "method", "file": "hdcnn.py", "importance": 1, "file_path": "hdcnn/hdcnn.py", "edges": [], "opacity": 0.7333333333333334, "level": 3, "summary": "This code defines a forward pass of a simple neural network layer. It applies a fully connected (dense) layer, followed by an activation function, dropout for regularization, and another fully connected layer. This structure is typical for a basic feedforward neural network or a part of a more complex network.", "minimal_code": "import torch\nimport torch.nn as nn\n\nclass SimpleNetwork(nn.Module):\n    def __init__(self, input_size, hidden_size, output_size):\n        super(SimpleNetwork, self).__init__()\n        self.fc1 = nn.Linear(input_size, hidden_size)\n        self.activation = nn.ReLU()\n        self.dropout = nn.Dropout(0.5)\n        self.fc2 = nn.Linear(hidden_size, output_size)\n\n    def forward(self, x):\n        out = self.fc1(x)\n        out = self.activation(out)\n        out = self.dropout(out)\n        out = self.fc2(out)\n        return out\n\n# Example usage\nmodel = SimpleNetwork(input_size=10, hidden_size=20, output_size=5)\ninput_tensor = torch.randn(1, 10)\noutput = model(input_tensor)\nprint(output.shape)"}, "node9": {"name": "HDComputing::superpose", "type": "method", "file": "hdcnn.py", "importance": 1, "file_path": "hdcnn/hdcnn.py", "edges": [], "opacity": 0.7333333333333334, "level": 3, "summary": "The `superpose` function combines multiple high-dimensional vectors (HVs) into a single representative HV. It does this by summing the vectors element-wise and then applying the sign function to binarize the result. This method is commonly used in Hyperdimensional Computing to aggregate information from multiple vectors.", "minimal_code": "import numpy as np\n\ndef superpose(hvs):\n    return np.sign(np.sum(hvs, axis=0))"}, "node16": {"name": "HDCNNClassifier", "type": "class", "file": "hdcnn.py", "importance": 2, "file_path": "hdcnn/hdcnn.py", "edges": ["node18"], "opacity": 0.8, "level": 2, "summary": "This code defines a simple neural network classifier called HDCNNClassifier using PyTorch. It consists of two fully connected layers with ReLU activation and dropout for regularization. The network takes high-dimensional input (likely from hyperdimensional computing) and outputs class probabilities for a classification task.", "minimal_code": "import torch.nn as nn\n\nclass HDCNNClassifier(nn.Module):\n    def __init__(self, input_dim, num_classes):\n        super().__init__()\n        self.model = nn.Sequential(\n            nn.Linear(input_dim, 512),\n            nn.ReLU(),\n            nn.Dropout(0.6),\n            nn.Linear(512, num_classes)\n        )\n\n    def forward(self, x):\n        return self.model(x)"}, "node14": {"name": "AGNewsDataset::__len__", "type": "method", "file": "hdcnn.py", "importance": 1, "file_path": "hdcnn/hdcnn.py", "edges": [], "opacity": 0.7333333333333334, "level": 3, "summary": "This code defines a __len__ method for a class, which returns the length of the class's data attribute. It's a standard implementation of the len() function for custom objects in Python, allowing the object to report its size or number of elements.", "minimal_code": "class MyClass:\n    def __init__(self, data):\n        self.data = data\n\n    def __len__(self):\n        return len(self.data)"}}
+{
+    "node15": {
+        "name": "AGNewsDataset::__getitem__",
+        "type": "method",
+        "file": "hdcnn.py",
+        "importance": 2,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [
+            "node3"
+        ],
+        "opacity": 0.8,
+        "level": 3,
+        "summary": "This code defines a custom dataset item retrieval method. It processes text data by tokenizing, cleaning, and encoding it into a high-dimensional vector using Hyperdimensional Computing. It also prepares the corresponding label. The method is likely part of a custom PyTorch Dataset class used for natural language processing tasks.",
+        "minimal_code": "import torch\nfrom nltk.tokenize import word_tokenize\nfrom nltk.corpus import stopwords\n\nclass CustomDataset:\n    def __init__(self, data, token_hvs, hd, max_seq_len=128):\n        self.data = data\n        self.token_hvs = token_hvs\n        self.hd = hd\n        self.max_seq_len = max_seq_len\n        self.stop_words = set(stopwords.words('english'))\n\n    def __getitem__(self, idx):\n        item = self.data[idx]\n        text, label = item['text'], item['label']\n        \n        tokens = word_tokenize(text.lower())\n        tokens = [t for t in tokens if t.isalpha() and t not in self.stop_words]\n        tokens = ['[CLS]'] + tokens[:self.max_seq_len] + ['[SEP]']\n        \n        seq_hv = encode_sequence(tokens, self.token_hvs, self.hd)\n        return torch.tensor(seq_hv, dtype=torch.float32), torch.tensor(label, dtype=torch.long)\n\ndef encode_sequence(tokens, token_hvs, hd):\n    # Placeholder for the encode_sequence function\n    # This should implement the Hyperdimensional Computing encoding\n    pass"
+    },
+    "node3": {
+        "name": "encode_sequence",
+        "type": "function",
+        "file": "hdcnn.py",
+        "importance": 1,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [],
+        "opacity": 0.7333333333333334,
+        "level": 4,
+        "summary": "This function encodes a sequence of tokens into a single high-dimensional vector (HV) using Hyperdimensional Computing techniques. It iterates through the tokens, retrieves their corresponding HVs, applies position-based permutation, and combines them using element-wise addition. The final result is binarized using the sign function.",
+        "minimal_code": "import numpy as np\n\ndef encode_sequence(tokens, token_hvs, hd):\n    sequence_hv = np.zeros(hd.dim)\n    for i, token in enumerate(tokens):\n        token_hv = token_hvs.get(token, token_hvs['[UNK]'])\n        permuted_token_hv = hd.permute(token_hv, shifts=i)\n        sequence_hv += permuted_token_hv\n    return np.sign(sequence_hv)"
+    },
+    "node11": {
+        "name": "HDComputing::permute",
+        "type": "method",
+        "file": "hdcnn.py",
+        "importance": 1,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [],
+        "opacity": 0.7333333333333334,
+        "level": 3,
+        "summary": "The `permute` function performs a circular shift on a given high-dimensional vector (HV). It takes an HV as input and shifts its elements by a specified number of positions (default is 1). This operation is commonly used in Hyperdimensional Computing to encode positional information or create variations of existing vectors.",
+        "minimal_code": "import numpy as np\n\ndef permute(hv, shifts=1):\n    return np.roll(hv, shifts)"
+    },
+    "node10": {
+        "name": "HDComputing::bind",
+        "type": "method",
+        "file": "hdcnn.py",
+        "importance": 1,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [],
+        "opacity": 0.7333333333333334,
+        "level": 3,
+        "summary": "The `bind` function performs element-wise multiplication of two hypervectors (HVs). This operation is a fundamental operation in Hyperdimensional Computing, used to bind or associate two concepts represented by high-dimensional vectors.",
+        "minimal_code": "def bind(self, hv1, hv2):\n    return hv1 * hv2"
+    },
+    "node8": {
+        "name": "HDComputing::random_hv",
+        "type": "method",
+        "file": "hdcnn.py",
+        "importance": 1,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [],
+        "opacity": 0.7333333333333334,
+        "level": 3,
+        "summary": "This function, `random_hv`, generates a random high-dimensional vector (HV) of binary values (-1 or 1) with a specified dimension. It uses a random state object to ensure reproducibility and consistency in the generated vectors.",
+        "minimal_code": "import numpy as np\n\nclass HDComputing:\n    def __init__(self, dim, seed=None):\n        self.dim = dim\n        self.random_state = np.random.RandomState(seed)\n\n    def random_hv(self):\n        return self.random_state.choice([-1, 1], size=self.dim)\n\n# Usage example\nhd = HDComputing(dim=10000, seed=42)\nrandom_vector = hd.random_hv()"
+    },
+    "node1": {
+        "name": "hdcnn.py",
+        "type": "file",
+        "file": "hdcnn.py",
+        "importance": 15,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [
+            "node15",
+            "node3",
+            "node11",
+            "node10",
+            "node8",
+            "node4",
+            "node6",
+            "node2",
+            "node5",
+            "node12",
+            "node18",
+            "node9",
+            "node16",
+            "node14"
+        ],
+        "opacity": 1,
+        "level": 1,
+        "summary": "This code implements a text classification system using Hyperdimensional Computing (HDC) and a neural network for the AG News dataset. It processes text data by encoding it into high-dimensional vectors, builds a vocabulary, and trains a classifier. The system includes data preprocessing, model training with early stopping, and evaluation. It also implements a Naive Bayes baseline for comparison.",
+        "minimal_code": ""
+    },
+    "node4": {
+        "name": "build_vocab",
+        "type": "function",
+        "file": "hdcnn.py",
+        "importance": 1,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [],
+        "opacity": 0.7333333333333334,
+        "level": 3,
+        "summary": "This function builds a vocabulary from a dataset of text items. It tokenizes each text, removes non-alphabetic tokens and stop words, counts token frequencies, and creates a vocabulary dictionary with the most common tokens. It also includes special tokens like '[PAD]', '[UNK]', '[CLS]', and '[SEP]'.",
+        "minimal_code": "from collections import Counter\nfrom nltk.tokenize import word_tokenize\n\ndef build_vocab(dataset, max_vocab_size, stop_words):\n    counter = Counter()\n    for item in dataset:\n        tokens = word_tokenize(item['text'].lower())\n        tokens = [t for t in tokens if t.isalpha() and t not in stop_words]\n        counter.update(tokens)\n    \n    special_tokens = ['[PAD]', '[UNK]', '[CLS]', '[SEP]']\n    vocab_tokens = special_tokens + [t for t, _ in counter.most_common(max_vocab_size)]\n    return {token: idx for idx, token in enumerate(vocab_tokens)}"
+    },
+    "node6": {
+        "name": "HDComputing",
+        "type": "class",
+        "file": "hdcnn.py",
+        "importance": 5,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [
+            "node9",
+            "node11",
+            "node10",
+            "node8"
+        ],
+        "opacity": 1,
+        "level": 2,
+        "summary": "This code defines a class `HDComputing` that implements core operations for Hyperdimensional Computing. It includes methods for generating random high-dimensional vectors, superposing (combining) multiple vectors, binding (element-wise multiplication) two vectors, and permuting (circular shifting) a vector. These operations are fundamental in hyperdimensional computing for representing and manipulating information in high-dimensional spaces.",
+        "minimal_code": "import numpy as np\n\nclass HDComputing:\n    def __init__(self, dim, seed=None):\n        self.dim = dim\n        self.random_state = np.random.RandomState(seed)\n\n    def random_hv(self):\n        return self.random_state.choice([-1, 1], size=self.dim)\n\n    def superpose(self, hvs):\n        return np.sign(np.sum(hvs, axis=0))\n\n    def bind(self, hv1, hv2):\n        return hv1 * hv2\n\n    def permute(self, hv, shifts=1):\n        return np.roll(hv, shifts)"
+    },
+    "node2": {
+        "name": "create_token_hvs",
+        "type": "function",
+        "file": "hdcnn.py",
+        "importance": 1,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [],
+        "opacity": 0.7333333333333334,
+        "level": 3,
+        "summary": "This function creates a dictionary mapping each token in a given vocabulary to a randomly generated high-dimensional vector (HV). It uses a hyperdimensional computing (HD) object to generate these random vectors. The function is likely part of a larger system for encoding and processing text or sequences using hyperdimensional computing techniques.",
+        "minimal_code": "import numpy as np\n\nclass HDComputing:\n    def __init__(self, dim):\n        self.dim = dim\n\n    def random_hv(self):\n        return np.random.choice([-1, 1], size=self.dim)\n\ndef create_token_hvs(vocab, dim):\n    hd = HDComputing(dim)\n    return {token: hd.random_hv() for token in vocab}\n\n# Example usage\nvocab = [\"apple\", \"banana\", \"cherry\"]\ndim = 10000\ntoken_hvs = create_token_hvs(vocab, dim)"
+    },
+    "node5": {
+        "name": "main",
+        "type": "function",
+        "file": "hdcnn.py",
+        "importance": 3,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [
+            "node4",
+            "node2"
+        ],
+        "opacity": 0.8666666666666667,
+        "level": 2,
+        "summary": "This code implements a text classification system using Hyperdimensional Computing (HDC) and a neural network. It processes the AG News dataset, creates a vocabulary, encodes text into high-dimensional vectors, and trains a classifier. The system includes data preprocessing, model training with early stopping, and evaluation. It also implements a Naive Bayes baseline for comparison.",
+        "minimal_code": ""
+    },
+    "node12": {
+        "name": "AGNewsDataset",
+        "type": "class",
+        "file": "hdcnn.py",
+        "importance": 4,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [
+            "node15",
+            "node3",
+            "node14"
+        ],
+        "opacity": 0.9333333333333333,
+        "level": 2,
+        "summary": "This code defines a custom PyTorch Dataset class called AGNewsDataset for processing text data. It initializes with various parameters and implements methods for length and item retrieval. The __getitem__ method tokenizes and preprocesses text, encodes it into a high-dimensional vector using Hyperdimensional Computing techniques, and returns the encoded vector along with its label.",
+        "minimal_code": "from torch.utils.data import Dataset\nfrom nltk.tokenize import word_tokenize\nimport torch\n\nclass AGNewsDataset(Dataset):\n    def __init__(self, data, vocab, token_hvs, hd, max_seq_len, stop_words):\n        self.data = data\n        self.vocab = vocab\n        self.token_hvs = token_hvs\n        self.hd = hd\n        self.max_seq_len = max_seq_len\n        self.stop_words = stop_words\n\n    def __len__(self):\n        return len(self.data)\n\n    def __getitem__(self, idx):\n        item = self.data[idx]\n        text, label = item['text'], item['label']\n        tokens = word_tokenize(text.lower())\n        tokens = [t for t in tokens if t.isalpha() and t not in self.stop_words]\n        tokens = ['[CLS]'] + tokens[:self.max_seq_len] + ['[SEP]']\n        seq_hv = encode_sequence(tokens, self.token_hvs, self.hd)\n        return torch.tensor(seq_hv, dtype=torch.float32), torch.tensor(label, dtype=torch.long)\n\ndef encode_sequence(tokens, token_hvs, hd):\n    # Placeholder for encode_sequence function\n    return [0] * hd.dimension  # Return a dummy vector of correct dimension"
+    },
+    "node18": {
+        "name": "HDCNNClassifier::forward",
+        "type": "method",
+        "file": "hdcnn.py",
+        "importance": 1,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [],
+        "opacity": 0.7333333333333334,
+        "level": 3,
+        "summary": "This code defines a forward pass of a simple neural network layer. It applies a fully connected (dense) layer, followed by an activation function, dropout for regularization, and another fully connected layer. This structure is typical for a basic feedforward neural network or a part of a more complex network.",
+        "minimal_code": "import torch\nimport torch.nn as nn\n\nclass SimpleNetwork(nn.Module):\n    def __init__(self, input_size, hidden_size, output_size):\n        super(SimpleNetwork, self).__init__()\n        self.fc1 = nn.Linear(input_size, hidden_size)\n        self.activation = nn.ReLU()\n        self.dropout = nn.Dropout(0.5)\n        self.fc2 = nn.Linear(hidden_size, output_size)\n\n    def forward(self, x):\n        out = self.fc1(x)\n        out = self.activation(out)\n        out = self.dropout(out)\n        out = self.fc2(out)\n        return out\n\n# Example usage\nmodel = SimpleNetwork(input_size=10, hidden_size=20, output_size=5)\ninput_tensor = torch.randn(1, 10)\noutput = model(input_tensor)\nprint(output.shape)"
+    },
+    "node9": {
+        "name": "HDComputing::superpose",
+        "type": "method",
+        "file": "hdcnn.py",
+        "importance": 1,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [],
+        "opacity": 0.7333333333333334,
+        "level": 3,
+        "summary": "The `superpose` function combines multiple high-dimensional vectors (HVs) into a single representative HV. It does this by summing the vectors element-wise and then applying the sign function to binarize the result. This method is commonly used in Hyperdimensional Computing to aggregate information from multiple vectors.",
+        "minimal_code": "import numpy as np\n\ndef superpose(hvs):\n    return np.sign(np.sum(hvs, axis=0))"
+    },
+    "node16": {
+        "name": "HDCNNClassifier",
+        "type": "class",
+        "file": "hdcnn.py",
+        "importance": 2,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [
+            "node18"
+        ],
+        "opacity": 0.8,
+        "level": 2,
+        "summary": "This code defines a simple neural network classifier called HDCNNClassifier using PyTorch. It consists of two fully connected layers with ReLU activation and dropout for regularization. The network takes high-dimensional input (likely from hyperdimensional computing) and outputs class probabilities for a classification task.",
+        "minimal_code": "import torch.nn as nn\n\nclass HDCNNClassifier(nn.Module):\n    def __init__(self, input_dim, num_classes):\n        super().__init__()\n        self.model = nn.Sequential(\n            nn.Linear(input_dim, 512),\n            nn.ReLU(),\n            nn.Dropout(0.6),\n            nn.Linear(512, num_classes)\n        )\n\n    def forward(self, x):\n        return self.model(x)"
+    },
+    "node14": {
+        "name": "AGNewsDataset::__len__",
+        "type": "method",
+        "file": "hdcnn.py",
+        "importance": 1,
+        "file_path": "hdcnn/hdcnn.py",
+        "edges": [],
+        "opacity": 0.7333333333333334,
+        "level": 3,
+        "summary": "This code defines a __len__ method for a class, which returns the length of the class's data attribute. It's a standard implementation of the len() function for custom objects in Python, allowing the object to report its size or number of elements.",
+        "minimal_code": "class MyClass:\n    def __init__(self, data):\n        self.data = data\n\n    def __len__(self):\n        return len(self.data)"
+    }
+}

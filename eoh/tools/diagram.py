@@ -4,6 +4,8 @@ import numpy as np
 from PIL import Image
 import time
 import copy
+import base64
+import io
 from tqdm import tqdm
 
 d2_prefix = """vars: {
@@ -204,7 +206,7 @@ def save_png_from_d2(d2_code, file_name, output_dir="d2_output"):
     return png_file_path
 
 
-def visualize_dag(dag: dict, output_dir="d2_output"):
+def visualize_dag(dag: dict, output_dir="d2_output", show: bool = True):
     """
     Visualize the DAG using d2
     """
@@ -213,11 +215,13 @@ def visualize_dag(dag: dict, output_dir="d2_output"):
     d2_code = build_d2_from_dag(dag, include_overhead=True)
     png_file_path = save_png_from_d2(d2_code, "dag", output_dir=output_dir)
     if png_file_path:
-        dag_graph = Image.open(png_file_path)
-        dag_graph.show()
+        if show:    
+            dag_graph = Image.open(png_file_path)
+            dag_graph.show()
     else:
         print("Error: PNG file could not be generated.")
-    # return dag_graph
+    
+    return png_file_path
     
     
     
@@ -486,3 +490,19 @@ def write_dependency_dags(dags, output_dir="d2_output", n_frames=10):
             pbar.update(1)  # Update progress bar
 
     pbar.close()  # Close the progress bar when done
+    
+    
+def file_to_preprocessed_img(file_path):
+    
+    if file_path.endswith((".png", ".jpg", ".jpeg")):
+        img = Image.open(file_path)
+    else:
+        raise ValueError("Unknown file format")
+
+    # Convert image to PNG
+    buffered = io.BytesIO()
+    img.save(buffered, format="PNG")
+    
+    # Convert PNG to base64
+    image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    return image_base64
