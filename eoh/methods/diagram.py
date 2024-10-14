@@ -7,6 +7,7 @@ import copy
 import base64
 import io
 from tqdm import tqdm
+from .meta_prompt import parse_plan_graph
 
 d2_prefix = """vars: {
   d2-config: {
@@ -73,7 +74,10 @@ get_object_name = lambda node: node['name'].replace(".","_")
 def build_d2_code_node(node: dict) -> str:
     object_name = get_object_name(node)
     code_str = node["code_str"]
-    return code_template.format(object_name=object_name, code_str=code_str)
+    opacity = node["opacity"]
+    opacity = min(1.0, max(0.0, opacity))
+    opacity_str = f"{opacity:.2f}"
+    return code_template.format(object_name=object_name, code_str=code_str, opacity=opacity_str)
 
 def build_d2_node(node: dict) -> str:
    
@@ -93,12 +97,19 @@ link_template = """{start_object_name} -> {end_object_name}: {{
   style.stroke-width: 2
 }}"""
 
+
 link_code_template = """{start_object_name} -> {start_object_name}_code: {{
   style.stroke: black
   style.opacity: {opacity}
   style.stroke-width: 2
 }}"""
 
+
+def build_d2_code_edge(str_node: dict) -> str:
+    opacity = min(1.0, max(0.0, str_node["opacity"]))
+    opacity_str = f"{opacity:.2f}"
+    start_object_name = get_object_name(str_node)
+    return link_code_template.format(start_object_name=start_object_name,  opacity=opacity_str)
 
 
 def build_d2_edge(str_node: dict, end_node: dict) -> str:
@@ -108,19 +119,7 @@ def build_d2_edge(str_node: dict, end_node: dict) -> str:
     start_object_name = get_object_name(str_node)
     end_object_name = get_object_name(end_node)
     
-    return link_template.format(start_object_id=start_object_name, end_object_id=end_object_name, opacity=opacity_str)
-
-
-
-def plot_plan_graph(dag, output_dir="d2_output", show=True, name="plan_graph"):
-    d2_code = build_d2_from_dag(dag)
-    png_file_path = save_png_from_d2(d2_code, name, output_dir=output_dir)
-    
-    if png_file_path and show:
-        visualize_dag(dag, output_dir=output_dir, show=show, name=name)
-    
-    return png_file_path
-
+    return link_template.format(start_object_name=start_object_name, end_object_name=end_object_name, opacity=opacity_str)
 
 
 def build_d2_from_dag(dag: dict) -> str:
@@ -132,6 +131,12 @@ def build_d2_from_dag(dag: dict) -> str:
     for node_id, node in dag.items():
         object_str = build_d2_node(node)
         d2_code += "\n" + object_str
+        if node["code_str"]:
+            code_str = build_d2_code_node(node)
+            d2_code += "\n" + code_str
+            link_str = build_d2_code_edge(node)
+            if link_str:
+                d2_code += f"\n{link_str}"
 
     for node_id, node in dag.items():
         edge_pairs = [(node_id, end_node) for end_node in node['edges']]    
@@ -141,6 +146,21 @@ def build_d2_from_dag(dag: dict) -> str:
                 d2_code += f"\n{link_str}"
             
     return d2_code
+
+
+def visualize_plan_dict(plan_dict: dict):
+    parsed_dag = parse_plan_graph(plan_dict)
+    plot_plan_graph(parsed_dag)
+
+
+def plot_plan_graph(dag, output_dir="d2_output", show=True, name="plan_graph"):
+    d2_code = build_d2_from_dag(dag)
+    png_file_path = save_png_from_d2(d2_code, name, output_dir=output_dir)
+    
+    if png_file_path and show:
+        visualize_dag(dag, output_dir=output_dir, show=show, name=name)
+    
+    return png_file_path
 
 
 def save_png_from_d2(d2_code, file_name, output_dir="d2_output"):
