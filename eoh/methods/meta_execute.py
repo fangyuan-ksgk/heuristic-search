@@ -110,7 +110,7 @@ def call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callab
     
     try:
         output_dict = extract_json_from_text(response)
-    except:
-        print("Error in parsing LLM response: \n",response)
+    except Exception as e:
+        print("Error in parsing LLM response: \n", e, "\nResponse: \n", response)
         output_dict = {}
     return output_dict

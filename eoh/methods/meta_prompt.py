@@ -207,7 +207,8 @@ class MetaPrompt:
             mode=PromptMode(data["mode"])
         )
 
-        
+def clean_reasoning_str(reasoning: str):
+    return reasoning.split("\n")[0].split("}")[0].strip()
         
 def parse_evol_response(response: str):
     reasoning = re.findall(r"\{(.*)\}", response, re.DOTALL)
@@ -222,7 +223,7 @@ def parse_evol_response(response: str):
     # Updated code extraction
     code = re.findall(r"((?:import|def).*?(?:^return.*?$|^    return.*?$))", response, re.DOTALL | re.MULTILINE)
     
-    return reasoning[0].strip() if reasoning else "", code[0].strip() if code else ""
+    return clean_reasoning_str(reasoning[0]) if reasoning else "", code[0].strip() if code else ""
 
 
 # Plan as a Graph (Ideally, current version fall-back to a chain of plan ....)
@@ -382,3 +383,29 @@ def extract_json_from_text(text):
     return json_data
 
 
+def parse_plan_graph(response):
+    plan_dict = extract_json_from_text(response)
+    
+    # Create a DAG structure compatible with the existing visualization function
+    dag = {}
+    for node in plan_dict["nodes"]:
+        node_id = node["name"]
+        task_str = f"Task: {node['name']}\nInput: {node['input']}\nOutput: {node['output']}\nMode: {node['mode']}"
+        dag[node_id] = {
+            "name": node["name"],
+            "type": "code" if node["mode"] == "CODE" else "llm",
+            "opacity": 1.0,
+            "importance": 1.0,
+            "edges": [],
+            "task_str": task_str,
+            "code_str": ""  # Add the code_str field, initially empty
+        }
+    
+    # Add edges to the DAG
+    for edge in plan_dict["edges"]:
+        source = edge["source"]
+        target = edge["target"]
+        if source in dag and target in dag:
+            dag[source]["edges"].append(target)
+    
+    return dag
