@@ -1,0 +1,150 @@
+{
+  "nodes": [
+    {
+      "task": "Research and understand Dilireba's interests and public persona.",
+      "name": "research_dilireba",
+      "inputs": [
+        "dilireba_information_sources"
+      ],
+      "input_types": [
+        "list"
+      ],
+      "outputs": [
+        "dilireba_profile"
+      ],
+      "output_types": [
+        "dict"
+      ],
+      "target": "Gain insights into her preferences and values.",
+      "mode": "CODE"
+    },
+    {
+      "task": "Improve personal skills and attributes based on research (e.g., language, hobbies).",
+      "name": "self_improvement",
+      "inputs": [
+        "dilireba_profile"
+      ],
+      "input_types": [
+        "dict"
+      ],
+      "outputs": [
+        "improved_skills"
+      ],
+      "output_types": [
+        "dict"
+      ],
+      "target": "Become more relatable and increase attractiveness.",
+      "mode": "CODE"
+    },
+    {
+      "task": "Network to find connections in common with Dilireba.",
+      "name": "network_with_her_circle",
+      "inputs": [
+        "professional_contacts",
+        "dilireba_profile"
+      ],
+      "input_types": [
+        "list",
+        "dict"
+      ],
+      "outputs": [
+        "potential_common_connections"
+      ],
+      "output_types": [
+        "list"
+      ],
+      "target": "Build avenues for introduction.",
+      "mode": "PROMPT"
+    },
+    {
+      "task": "Engage on social media positively and naturally.",
+      "name": "social_media_engagement",
+      "inputs": [
+        "dilireba_profile"
+      ],
+      "input_types": [
+        "dict"
+      ],
+      "outputs": [
+        "engagement_feedback"
+      ],
+      "output_types": [
+        "dict"
+      ],
+      "target": "Increase visibility in a non-intrusive manner.",
+      "mode": "CODE"
+    },
+    {
+      "task": "Leverage mutual connections for a credible introduction.",
+      "name": "seek_introduction",
+      "inputs": [
+        "potential_common_connections",
+        "improved_skills"
+      ],
+      "input_types": [
+        "list",
+        "dict"
+      ],
+      "outputs": [
+        "introduction_opportunity"
+      ],
+      "output_types": [
+        "bool"
+      ],
+      "target": "Secure a meeting or interaction.",
+      "mode": "PROMPT"
+    },
+    {
+      "task": "Prepare for and execute a successful meeting or interaction.",
+      "name": "execute_meeting",
+      "inputs": [
+        "introduction_opportunity",
+        "improved_skills",
+        "dilireba_profile"
+      ],
+      "input_types": [
+        "bool",
+        "dict",
+        "dict"
+      ],
+      "outputs": [
+        "meeting_results"
+      ],
+      "output_types": [
+        "dict"
+      ],
+      "target": "Lay groundwork for ongoing association.",
+      "mode": "PROMPT"
+    }
+  ],
+  "edges": [
+    {
+      "source": "research_dilireba",
+      "target": "self_improvement"
+    },
+    {
+      "source": "research_dilireba",
+      "target": "network_with_her_circle"
+    },
+    {
+      "source": "research_dilireba",
+      "target": "social_media_engagement"
+    },
+    {
+      "source": "self_improvement",
+      "target": "seek_introduction"
+    },
+    {
+      "source": "network_with_her_circle",
+      "target": "seek_introduction"
+    },
+    {
+      "source": "social_media_engagement",
+      "target": "seek_introduction"
+    },
+    {
+      "source": "seek_introduction",
+      "target": "execute_meeting"
+    }
+  ]
+}
