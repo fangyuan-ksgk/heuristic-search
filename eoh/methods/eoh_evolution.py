@@ -101,7 +101,7 @@ class EvolNode:
             elif self.meta_prompt.mode == PromptMode.PROMPT:
                 try:
                     output_dict = call_func_prompt(test_case, code, get_response)
-                    output_name = self.meta_prompt.output[0]
+                    output_name = self.meta_prompt.outputs[0]
                     output_dict.get(output_name)
                     passed_tests += 1
                 except Exception as e:
@@ -138,10 +138,10 @@ class EvolNode:
         """
         if self.meta_prompt.mode == PromptMode.CODE:
             output_value = call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None)
-            output_name = self.meta_prompt.output[0]
+            output_name = self.meta_prompt.outputs[0]
             return {output_name: output_value}
         elif self.meta_prompt.mode == PromptMode.PROMPT:
-            output_name = self.meta_prompt.output[0]
+            output_name = self.meta_prompt.outputs[0]
             output_dict = call_func_prompt(inputs, self.code, get_response)
             output_value = output_dict.get(output_name, None) # We don't like surprises
             if output_value is None:
@@ -194,8 +194,10 @@ class EvolGraph:
             node_prompt = MetaPrompt(
                 task=node.get("task"),
                 func_name=node.get("name"),
-                input=node.get("input"),
-                output=node.get("output"),
+                inputs=node.get("inputs"),
+                outputs=node.get("outputs"),
+                input_types=node.get("input_types"),
+                output_types=node.get("output_types"),
                 mode=node.get("mode").lower()
             )
             nodes[node.get("name")] = EvolNode(meta_prompt=node_prompt)
@@ -235,6 +237,7 @@ class EvolGraph:
         return None
     
     def save(self, graph_path: str) -> None:
+        raise NotImplementedError # if you are not tested, you are not implemented
         graph_data = {
             "nodes": {name: node.save(os.path.join(graph_path, f"node_{name}.json")) 
                       for name, node in self.nodes.items()},
@@ -247,6 +250,7 @@ class EvolGraph:
 
     @classmethod
     def load(cls, graph_path: str) -> 'EvolGraph':
+        raise NotImplementedError
         with open(os.path.join(graph_path, "graph_structure.json"), 'r') as f:
             graph_data = json.load(f)
         
@@ -255,4 +259,32 @@ class EvolGraph:
         edges = graph_data["edges"]
         eval_node = EvolNode.load(os.path.join(graph_path, "eval_node.json")) if graph_data["eval_node"] else None
         
+        return cls(nodes=nodes, edges=edges, eval_node=eval_node)
+    
+    @classmethod
+    def read_from_dict(cls, plan_dict: Dict):
+        """
+        Create an EvolGraph instance from a dictionary representation.
+        
+        :param plan_dict: A dictionary containing 'nodes' and 'edges' keys.
+        :return: An EvolGraph instance.
+        """
+        nodes = {}
+        for node_data in plan_dict.get("nodes", []):
+            node_prompt = MetaPrompt(
+                task=node_data.get("task"),
+                func_name=node_data.get("name"),
+                inputs=[node_data.get("input")],  # Wrap in list as MetaPrompt expects a list
+                outputs=[node_data.get("output")],  # Wrap in list as MetaPrompt expects a list
+                input_types=node_data.get("input_types", []),  # Assuming string input type, adjust if needed
+                output_types=node_data.get("output_types", []),  # Assuming string output type, adjust if needed
+                mode=PromptMode.PROMPT if node_data.get("mode", "").lower() == "prompt" else PromptMode.CODE
+            )
+            nodes[node_data.get("name")] = EvolNode(meta_prompt=node_prompt)
+        
+        edges = plan_dict.get("edges", [])
+        
+        # For now, we'll set eval_node to None. You may want to add logic to create it if needed.
+        eval_node = None
+
         return cls(nodes=nodes, edges=edges, eval_node=eval_node)

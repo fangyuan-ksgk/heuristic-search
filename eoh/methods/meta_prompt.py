@@ -22,33 +22,33 @@ class PromptMode(Enum):
 class MetaPrompt:
     task: str
     func_name: str
-    input: str
-    output: str
+    inputs: list
+    outputs: list
     input_types: list 
     output_types: list
     mode: PromptMode
     
     @property
     def joined_inputs(self):
-        if len(self.input) > 1:
-            return ", ".join("'" + s + "'" for s in self.input)
+        if len(self.inputs) > 1:
+            return ", ".join("'" + s + "'" for s in self.inputs)
         else:
-            return "'" + self.input[0] + "'"
+            return "'" + self.inputs[0] + "'"
         
     @property
     def joined_outputs(self):
-        if len(self.output) > 1:
-            return ", ".join("'" + s + "'" for s in self.output)
+        if len(self.outputs) > 1:
+            return ", ".join("'" + s + "'" for s in self.outputs)
         else:
-            return "'" + self.output[0] + "'"
+            return "'" + self.outputs[0] + "'"
         
     def _base_prompt(self):
         if self.mode == PromptMode.CODE:
             prompt_content = f"First, describe your new algorithm and main steps in one sentence. "\
                 "The description must be inside a brace. Next, implement it in Python as a function named "\
-                f"{self.func_name}. This function should accept {len(self.input)} input(s): "\
+                f"{self.func_name}. This function should accept {len(self.inputs)} input(s): "\
                 f"{self.joined_inputs} with types {', '.join(self.input_types)}. "\
-                f"The function should return {len(self.output)} output(s): "\
+                f"The function should return {len(self.outputs)} output(s): "\
                 f"{self.joined_outputs} with types {', '.join(self.output_types)}."\
                 "Make sure to include type hints in your function signature."
             return prompt_content
@@ -71,13 +71,13 @@ class MetaPrompt:
                          f"For the Python function '{self.func_name}', generate 5 diverse (input, output) pairs for evaluation. "\
                          "These pairs should cover different scenarios, including edge cases.\n\n"\
                          "Function signature:\n"\
-                         f"def {self.func_name}({', '.join(f'{inp}: {type_hint}' for inp, type_hint in zip(self.input, self.input_types))}) -> {self.output_type}:\n\n"\
+                         f"def {self.func_name}({', '.join(f'{inp}: {type_hint}' for inp, type_hint in zip(self.inputs, self.input_types))}) -> {self.output_type}:\n\n"\
                          "Provide your response as a Python list of dictionaries. Each dictionary should have 'input' and 'expected_output' keys. "\
                          "Ensure that the types match the function signature.\n\n"\
                          "Example format:\n"\
                          "[\n"\
                          "    {\n"\
-                         "        'input': {" + ', '.join(f"'{inp}': {type_hint}(...)" for inp, type_hint in zip(self.input, self.input_types)) + "},\n"\
+                         "        'input': {" + ', '.join(f"'{inp}': {type_hint}(...)" for inp, type_hint in zip(self.inputs, self.input_types)) + "},\n"\
                          "        'expected_output': {self.output_type}(...)\n"\
                          "    },\n"\
                          "    ...\n"\
@@ -125,7 +125,7 @@ class MetaPrompt:
                 "Please help me create a new algorithm that has a totally different form from the given ones but can be motivated from them.\n"\
                 "Firstly, identify the common backbone idea in the provided algorithms. Secondly, based on the backbone idea describe your new algorithm in one sentence. "\
                 "The description must be inside a brace. Thirdly, implement it in Python as a function named "\
-                f"{self.func_name}. This function should accept {len(self.input)} input(s): "\
+                f"{self.func_name}. This function should accept {len(self.inputs)} input(s): "\
                 f"{self.joined_inputs}. The function should return {len(self.output)} output(s): "\
                 f"{self.joined_outputs}. {self.inout_inf} "\
                 f"{self.other_inf}\n"\
@@ -192,8 +192,8 @@ class MetaPrompt:
         return {
             "task": self.task,
             "func_name": self.func_name,
-            "input": self.input,
-            "output": self.output,
+            "input": self.inputs,
+            "output": self.outputs,
             "mode": self.mode.value
         }
     
@@ -235,8 +235,10 @@ The plan should include:
 - **Nodes**: Each node represents a key action or step and must contain the following attributes:
   - `task`: Description of the task.
   - `name`: Concise name used for the task function.
-  - `input`: The resources, information, or prerequisites needed to perform the action.
-  - `output`: The immediate result or outcome of the action.
+  - `inputs`: List of input parameters needed to perform the action.
+  - `input_types`: List of corresponding types for each input parameter.
+  - `outputs`: List of output parameters produced by the action.
+  - `output_types`: List of corresponding types for each output parameter.
   - `target`: The purpose or goal that the action contributes to.
   - `mode`: The execution mode for this task ("CODE" or "PROMPT").
 
@@ -254,16 +256,20 @@ Provide the output in the following JSON structure:
     {
       "task": "Task 1",
       "name": "task_1"
-      "input": "Inputs required for Action 1",
-      "output": "Outputs/result of Action 1",
+      "inputs": ["input_11", "input_12", "input_13"],
+      "input_types": ["str", "str", "str"],
+      "outputs": ["output_11", "output_12", "output_13"],
+      "output_types": ["str", "str", "str"],
       "target": "Purpose of Action 1"
       "mode": "CODE"
     },
     {
       "task": "Task 2",
       "name": "task_2",
-      "input": "Inputs required for Action 2",
-      "output": "Outputs/result of Action 2",
+      "inputs": ["input_21", "input_22", "input_23"],
+      "input_types": ["str", "str", "str"],
+      "outputs": ["output_21", "output_22", "output_23"],
+      "output_types": ["str", "str", "str"],
       "target": "Purpose of Action 2",
       "mode": "PROMPT"
     }
@@ -388,7 +394,7 @@ def parse_plan_graph(plan_dict: dict) -> dict:
     dag = {}
     for node in plan_dict["nodes"]:
         node_id = node["name"]
-        task_str = f"Task: {node['task']}\nInput: {node['input']}\nOutput: {node['output']}\nTarget: {node['target']}\nMode: {node['mode']}"
+        task_str = f"Task: {node['task']}\nInput: {node['inputs']}\nOutput: {node['outputs']}\nTarget: {node['target']}\nMode: {node['mode']}"
         dag[node_id] = {
             "name": node["name"],
             "type": "code" if node["mode"] == "CODE" else "llm",
