@@ -383,14 +383,12 @@ def extract_json_from_text(text):
     return json_data
 
 
-def parse_plan_graph(response):
-    plan_dict = extract_json_from_text(response)
-    
+def parse_plan_graph(plan_dict: dict) -> dict:
     # Create a DAG structure compatible with the existing visualization function
     dag = {}
     for node in plan_dict["nodes"]:
         node_id = node["name"]
-        task_str = f"Task: {node['name']}\nInput: {node['input']}\nOutput: {node['output']}\nMode: {node['mode']}"
+        task_str = f"Task: {node['task']}\nInput: {node['input']}\nOutput: {node['output']}\nTarget: {node['target']}\nMode: {node['mode']}"
         dag[node_id] = {
             "name": node["name"],
             "type": "code" if node["mode"] == "CODE" else "llm",
