@@ -165,6 +165,7 @@ class EvolNode:
         meta_prompt = MetaPrompt.from_dict(node_data['meta_prompt'])  # Assuming MetaPrompt has a from_dict method
         return cls(meta_prompt=meta_prompt, code=node_data['code'], reasoning=node_data['reasoning'])
      
+
      
 class EvalNode(EvolNode): # TBD: --- Need to check on this one (!)
     def __init__(self, test_cases: List[Dict[str, any]], meta_prompt: MetaPrompt):
