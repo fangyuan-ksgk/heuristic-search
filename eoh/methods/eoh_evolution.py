@@ -179,19 +179,18 @@ class EvolNode:
      
     
 
-
 class EvolGraph:
     
-    def __init__(self, nodes: Optional[List[EvolNode]], edges: Optional[List], eval_node: Optional[EvolNode]):
+    def __init__(self, nodes: Optional[List[EvolNode]], edges: Optional[List], get_response: Optional[Callable] = get_openai_response):
         """ 
         EvolGraph: Topology of Node functions -- Plan. 
         """
         self.nodes: Dict[str, EvolNode] = nodes
         self.edges = edges
-        self.eval_node = eval_node
+        self.get_response = get_response
     
     @classmethod
-    def generate(cls, goal: str):
+    def generate(cls, goal: str, get_response: Optional[Callable] = get_openai_response):
         """ 
         DNA -> RNA -> Protein ....
         - Goal -> MetaPlan -> PlanGraph
@@ -229,7 +228,7 @@ class EvolGraph:
         )
         eval_node = EvolNode(meta_prompt=eval_prompt)
         
-        graph = cls(nodes=list(nodes.values()), edges=edges, eval_node=eval_node)
+        graph = cls(nodes=list(nodes.values()), edges=edges, get_response=get_response)
 
         return graph
     
