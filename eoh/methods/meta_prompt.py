@@ -64,7 +64,7 @@ class MetaPrompt:
         elif self.mode == PromptMode.TOOL:
             raise NotImplementedError
         
-    def _get_eval_prompt(self):
+    def _get_eval_prompt(self, num_cases: int = 5):
         """ 
         Asking for (input, output) pairs for evaluation
         """
@@ -85,7 +85,7 @@ class MetaPrompt:
                          "    ...\n"\
                          "]\n"\
                          "```\n"\
-                         "Provide 5 such pairs, ensuring type correctness and diversity in the inputs and outputs."        
+                         f"Provide {num_cases} such pairs, ensuring type correctness and diversity in the inputs and outputs."        
         return prompt_content
         
     def _get_prompt_i1(self):
