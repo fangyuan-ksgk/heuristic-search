@@ -3,6 +3,7 @@ from enum import Enum
 import re
 import json
 import re
+import ast
 import networkx as nx
 from dataclasses import dataclass
 
@@ -53,12 +54,12 @@ class MetaPrompt:
                 "Make sure to include type hints in your function signature."
             return prompt_content
         elif self.mode == PromptMode.PROMPT:
-            prompt_content = f"First, describe your new reasoning and main thoughts in one sentence."\
-                "The description must be inside a brace. Implement a Python function that generates a prompt to guide an AI in completing the task. "\
-                f"Follow these specifications: - Function name: generate_prompt - Input parameters: {self.joined_inputs} - Return value: A string containing the final prompt for the AI."\
-                "Ask for JSON-style response with Output values: {self.joined_outputs}"\
-                "Your function should incorporate the reasoning from step 1 and use the input parameters to create a tailored prompt for the task."\
-                "Specify types for input and output."
+            prompt_content = (
+                f"First, describe your new reasoning and main thoughts in one sentence. "
+                "The description must be inside a brace. Implement a Python function that generates a prompt to guide an AI in completing the task. "
+                f"Follow these specifications: - Function name: generate_prompt - Input parameters: {self.joined_inputs} - Return value: A string containing the final prompt for the AI. "
+                f"Ask for JSON-style response with output dictionary: {{" + ', '.join(f"'{out}': {type_hint}(...)" for out, type_hint in zip(self.outputs, self.output_types)) + "}}\n"
+                "Your function should incorporate the reasoning from step 1 and use the input parameters to create a tailored prompt for the task. ")
             return prompt_content
         elif self.mode == PromptMode.TOOL:
             raise NotImplementedError
@@ -71,17 +72,19 @@ class MetaPrompt:
                          f"For the Python function '{self.func_name}', generate 5 diverse (input, output) pairs for evaluation. "\
                          "These pairs should cover different scenarios, including edge cases.\n\n"\
                          "Function signature:\n"\
-                         f"def {self.func_name}({', '.join(f'{inp}: {type_hint}' for inp, type_hint in zip(self.inputs, self.input_types))}) -> {self.output_type}:\n\n"\
+                         f"def {self.func_name}({', '.join(f'{inp}: {type_hint}' for inp, type_hint in zip(self.inputs, self.input_types))}) -> {self.output_types}:\n\n"\
                          "Provide your response as a Python list of dictionaries. Each dictionary should have 'input' and 'expected_output' keys. "\
                          "Ensure that the types match the function signature.\n\n"\
                          "Example format:\n"\
+                         "```json\n"\
                          "[\n"\
                          "    {\n"\
                          "        'input': {" + ', '.join(f"'{inp}': {type_hint}(...)" for inp, type_hint in zip(self.inputs, self.input_types)) + "},\n"\
-                         "        'expected_output': {self.output_type}(...)\n"\
+                         "        'expected_output': {" + ', '.join(f"'{out}': {type_hint}(...)" for out, type_hint in zip(self.outputs, self.output_types)) + "}\n"\
                          "    },\n"\
                          "    ...\n"\
-                         "]\n\n"\
+                         "]\n"\
+                         "```\n"\
                          "Provide 5 such pairs, ensuring type correctness and diversity in the inputs and outputs."        
         return prompt_content
         
@@ -355,38 +358,53 @@ def build_graph_from_json(parsed_json):
 
     return G 
 
-
 def extract_json_from_text(text):
     """
-    Extracts a JSON object from a text containing a JSON code block.
+    Extracts a JSON object from a text containing either a JSON code block or a JSON-like structure.
     
     Parameters:
-        text (str): The input text containing the JSON code block.
+        text (str): The input text containing the JSON code block or JSON-like structure.
         
     Returns:
         dict: The parsed JSON object.
         
     Raises:
-        ValueError: If no JSON code block is found or JSON is invalid.
+        ValueError: If no JSON structure is found or JSON is invalid.
     """
-    # Regular expression to find JSON code block enclosed in ```json ... ```
-    json_block_pattern = r'```json\s*(\{.*?\})\s*```'
+    # Available Patterns
+    code_block_pattern = r'```json\s*(\{.*?\})\s*```'
+    json_list_pattern = r'```json\s*(.*?)\s*```'
+    json_dict_pattern = r'\{[^}]+\}'
     
-    # Use re.DOTALL to allow '.' to match newline characters
-    match = re.search(json_block_pattern, text, re.DOTALL)
+    code_match = re.search(code_block_pattern, text, re.DOTALL)
+    list_match = re.search(json_list_pattern, text, re.DOTALL)
+    dict_match = re.search(json_dict_pattern, text, re.DOTALL)
     
-    if not match:
-        raise ValueError("No JSON code block found in the provided text.")
-    
-    json_str = match.group(1)
-    
+    if code_match:
+        json_str = code_match.group(1)
+    elif list_match:
+        json_str = list_match.group(1)
+    elif dict_match:
+        json_str = dict_match.group(0)
+    else:
+        raise ValueError("No JSON structure found in the provided text.")
+          
+    # return json_str
+    # json_str = json_str.replace("'", '"')
+    error_msg = ""
     try:
-        # Parse the JSON string into a Python dictionary
         json_data = json.loads(json_str)
+        return json_data 
     except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON content: {e}")
-    
-    return json_data
+        error_msg += f"JsonDecodeError : \n{e}"
+    try:
+        json_data = ast.literal_eval(json_str)
+        return json_data
+    except Exception as e:
+        error_msg += f"AstLiteralError : \n{e}"
+        
+    raise ValueError(error_msg)
+
 
 
 def parse_plan_graph(plan_dict: dict) -> dict:
