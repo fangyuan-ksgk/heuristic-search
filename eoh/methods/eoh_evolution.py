@@ -43,15 +43,22 @@ class EvolNode:
         self.test_cases = []
         self.get_response = get_response
         
-    def _extend_test_cases(self, num_cases: int = 5):
-        eval_prompt = self.meta_prompt._get_eval_prompt(num_cases)
-        response = self.get_response(eval_prompt)
+    def _extend_test_cases(self, num_cases: int = 5, feedback: str = ""):
+        if feedback != "":
+            eval_prompt = self.meta_prompt._get_eval_prompt_with_feedback(num_cases, feedback)
+        else:
+            eval_prompt = self.meta_prompt._get_eval_prompt(num_cases)
         
+        response = self.get_response(eval_prompt)
         self.temp_response = response # added info for debugging
         response = clean_str(response) # extra cleaning to enhance robustness
-        test_case_list = extract_json_from_text(response)
-        self.test_cases.extend(map(get_input_output_from_dict, test_case_list))
-        self._filter_test_cases()
+        
+        try:
+            test_case_list = extract_json_from_text(response)
+            self.test_cases.extend(map(get_input_output_from_dict, test_case_list))
+            self._filter_test_cases()
+        except:
+            pass # alas, response parsing failed
         
     def _filter_test_cases(self):
         seen_values = defaultdict(set)
@@ -68,12 +75,12 @@ class EvolNode:
                 filtered_cases.append(case_tuple)
         self.test_cases = filtered_cases
         
-    def get_test_cases(self, num_cases: int = 100):
-        batch_case_amount = 10        
+    def get_test_cases(self, num_cases: int = 100, feedback: str = ""):
+        batch_case_amount = 100        
         with tqdm(total=num_cases, desc="Generating test cases", unit="case") as pbar:
             while num_cases > len(self.test_cases):
                 generate_amount = min(batch_case_amount, num_cases - len(self.test_cases))
-                self._extend_test_cases(generate_amount)
+                self._extend_test_cases(generate_amount, feedback)
                 pbar.update(generate_amount)
         return self.test_cases
 

@@ -87,6 +87,12 @@ class MetaPrompt:
                          "```\n"\
                          f"Provide {num_cases} such pairs, ensuring type correctness and diversity in the inputs and outputs."        
         return prompt_content
+    
+    def _get_eval_prompt_with_feedback(self, num_cases: int = 5, feedback: str = ""):
+        prompt_content = self._get_eval_prompt(num_cases)
+        if feedback != "":
+            prompt_content += f"\nCreate evaluation pairs focus on incorporating previous feedback: {feedback}"
+        return prompt_content
         
     def _get_prompt_i1(self):
         prompt_content = f"{self.task}\n{self._base_prompt()}"
