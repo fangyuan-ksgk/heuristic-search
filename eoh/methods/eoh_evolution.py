@@ -23,8 +23,7 @@ def get_input_output_from_dict(test_case_dict: dict) -> Tuple[dict, dict]:
 # - (get_prompt_xx) Evolution tactic specific prompt templating, used for generating node
 # - (_get_node) Get prompt response from LLM, parse node content (code, tool, prompt) 
 # - (xx) i1/e1/m1/m2/e2 Evolution search on node
-#
-# Missing: Topology search of our graph
+
 
 class EvolNode:
     
@@ -42,8 +41,12 @@ class EvolNode:
     def _extend_test_cases(self, num_cases: int = 5):
         eval_prompt = self.meta_prompt._get_eval_prompt(num_cases)
         response = self.get_response(eval_prompt)
-        test_case_list = extract_json_from_text(response)     
+        
+        self.temp_response = response # added info for debugging
+        
+        test_case_list = extract_json_from_text(response)
         self.test_cases.extend(map(get_input_output_from_dict, test_case_list))
+        self._filter_test_cases()
         
     def _filter_test_cases(self):
         seen_values = defaultdict(set)
@@ -59,13 +62,14 @@ class EvolNode:
             if is_unique:
                 filtered_cases.append(case_tuple)
         self.test_cases = filtered_cases
-    
+        
     def get_test_cases(self, num_cases: int = 100):
-        short_amount = num_cases - len(self.test_cases)
-        batch_case_amount = 10
-        for _ in tqdm(range(short_amount // batch_case_amount), f"Generating {short_amount} test cases for EvolNode"):
-            self._extend_test_cases(batch_case_amount)
-        self._filter_test_cases()
+        batch_case_amount = 10        
+        with tqdm(total=num_cases, desc="Generating test cases", unit="case") as pbar:
+            while num_cases > len(self.test_cases):
+                generate_amount = min(batch_case_amount, num_cases - len(self.test_cases))
+                self._extend_test_cases(generate_amount)
+                pbar.update(generate_amount)
         return self.test_cases
 
 

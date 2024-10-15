@@ -372,16 +372,20 @@ def extract_json_from_text(text):
         ValueError: If no JSON structure is found or JSON is invalid.
     """
     # Available Patterns
-    code_block_pattern = r'```json\s*(\{.*?\})\s*```'
+    code_json_pattern = r'```json\s*(\{.*?\})\s*```'
+    code_python_pattern = r'```python\s*(.*?)\s*```'
     json_list_pattern = r'```json\s*(.*?)\s*```'
     json_dict_pattern = r'\{[^}]+\}'
     
-    code_match = re.search(code_block_pattern, text, re.DOTALL)
+    code_json_match = re.search(code_json_pattern, text, re.DOTALL)
+    code_python_match = re.search(code_python_pattern, text, re.DOTALL)
     list_match = re.search(json_list_pattern, text, re.DOTALL)
     dict_match = re.search(json_dict_pattern, text, re.DOTALL)
     
-    if code_match:
-        json_str = code_match.group(1)
+    if code_json_match:
+        json_str = code_json_match.group(1)
+    elif code_python_match:
+        json_str = code_python_match.group(1)
     elif list_match:
         json_str = list_match.group(1)
     elif dict_match:
