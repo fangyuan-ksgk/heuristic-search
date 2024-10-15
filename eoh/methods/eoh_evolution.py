@@ -4,6 +4,8 @@ from .meta_prompt import MetaPlan, extract_json_from_text
 from .meta_execute import call_func_code, call_func_prompt
 from .llm import get_openai_response
 import re, os, json
+from tqdm import tqdm 
+from collections import defaultdict
 from typing import Optional, Dict, List, Callable, Tuple
 
 def get_input_output_from_dict(test_case_dict: dict) -> Tuple[dict, dict]:
@@ -37,12 +39,34 @@ class EvolNode:
         self.test_cases = []
         self.get_response = get_response
         
-        
-    def _extend_test_cases(self):
-        eval_prompt = self.meta_prompt._get_eval_prompt()
+    def _extend_test_cases(self, num_cases: int = 5):
+        eval_prompt = self.meta_prompt._get_eval_prompt(num_cases)
         response = self.get_response(eval_prompt)
         test_case_list = extract_json_from_text(response)     
         self.test_cases.extend(map(get_input_output_from_dict, test_case_list))
+        
+    def _filter_test_cases(self):
+        seen_values = defaultdict(set)
+        filtered_cases = []
+        for case_tuple in self.test_cases:
+            case_input = case_tuple[0]
+            is_unique = True
+            for key, value in case_input.items():
+                if value in seen_values[key]:
+                    is_unique = False
+                    break
+                seen_values[key].add(value)
+            if is_unique:
+                filtered_cases.append(case_tuple)
+        self.test_cases = filtered_cases
+    
+    def get_test_cases(self, num_cases: int = 100):
+        short_amount = num_cases - len(self.test_cases)
+        batch_case_amount = 10
+        for _ in tqdm(range(short_amount // batch_case_amount), f"Generating {short_amount} test cases for EvolNode"):
+            self._extend_test_cases(batch_case_amount)
+        self._filter_test_cases()
+        return self.test_cases
 
 
     def _evolve(self, method: str, parents: list = None, replace=False, error_msg: str = ""):
