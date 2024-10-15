@@ -69,12 +69,10 @@ class MetaPrompt:
         Asking for (input, output) pairs for evaluation
         """
         prompt_content = f"Task: {self.task}\n\n"\
-                         f"For the Python function '{self.func_name}', generate 5 diverse (input, output) pairs for evaluation. "\
-                         "These pairs should cover different scenarios, including edge cases.\n\n"\
-                         "Function signature:\n"\
-                         f"def {self.func_name}({', '.join(f'{inp}: {type_hint}' for inp, type_hint in zip(self.inputs, self.input_types))}) -> {self.output_types}:\n\n"\
-                         "Provide your response as a Python list of dictionaries. Each dictionary should have 'input' and 'expected_output' keys. "\
-                         "Ensure that the types match the function signature.\n\n"\
+                         f"Create 5 diverse test cases for the Python function '{self.func_name}'. Each test case should be an (input, output) pair. "\
+                         "Include a variety of scenarios, especially edge cases, to thoroughly test the function.\n\n"\
+                         "Format your response as a list of dictionaries in JSON format. Each dictionary should contain 'input' and 'expected_output' keys. "\
+                         "Make sure the data types in your test cases match the function's input and output types.\n\n"\
                          "Example format:\n"\
                          "```json\n"\
                          "[\n"\

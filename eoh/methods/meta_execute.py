@@ -105,7 +105,7 @@ def call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callab
     exec(code, mod.__dict__)
     func_name = "generate_prompt"
     prompt_func = mod.__dict__[func_name]
-    prompt = prompt_func(input_data)
+    prompt = prompt_func(**input_data)
     response = get_response(prompt)
     
     try:
