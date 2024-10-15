@@ -11,6 +11,11 @@ from typing import Optional, Dict, List, Callable, Tuple
 def get_input_output_from_dict(test_case_dict: dict) -> Tuple[dict, dict]:
     return test_case_dict['input'], test_case_dict['expected_output']
 
+def clean_str(s: str) -> str:
+    def clean_line(line: str) -> str:
+        return line.split("//")[0].split("#")[0] # Remove comments 
+    return ('\n').join(map(clean_line, s.split('\n')))
+
 #################################
 #   Evolution on Graph          #
 #   - Node: Code, Prompt, Tool  #
@@ -43,7 +48,7 @@ class EvolNode:
         response = self.get_response(eval_prompt)
         
         self.temp_response = response # added info for debugging
-        
+        response = clean_str(response) # extra cleaning to enhance robustness
         test_case_list = extract_json_from_text(response)
         self.test_cases.extend(map(get_input_output_from_dict, test_case_list))
         self._filter_test_cases()
