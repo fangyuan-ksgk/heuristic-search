@@ -2,10 +2,12 @@ from abc import ABC, abstractmethod
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
 from .meta_prompt import MetaPlan, extract_json_from_text
 from .meta_execute import call_func_code, call_func_prompt
-from .llm import get_openai_response as get_response
+from .llm import get_openai_response
 import re, os, json
 from typing import Optional, Dict, List, Callable, Tuple
 
+def get_input_output_from_dict(test_case_dict: dict) -> Tuple[dict, dict]:
+    return test_case_dict['input'], test_case_dict['expected_output']
 
 #################################
 #   Evolution on Graph          #
@@ -21,16 +23,26 @@ from typing import Optional, Dict, List, Callable, Tuple
 # - (xx) i1/e1/m1/m2/e2 Evolution search on node
 #
 # Missing: Topology search of our graph
-        
+
 class EvolNode:
     
-    def __init__(self, meta_prompt: MetaPrompt, code: Optional[str] = None, reasoning: Optional[str] = None):
+    def __init__(self, meta_prompt: MetaPrompt, code: Optional[str] = None, reasoning: Optional[str] = None,
+                 get_response: Optional[Callable] = get_openai_response):
         """ 
         Executable Task
         """
         self.code = code
         self.reasoning = reasoning
         self.meta_prompt = meta_prompt
+        self.test_cases = []
+        self.get_response = get_response
+        
+        
+    def _extend_test_cases(self):
+        eval_prompt = self.meta_prompt._get_eval_prompt()
+        response = self.get_response(eval_prompt)
+        test_case_list = extract_json_from_text(response)     
+        self.test_cases.extend(map(get_input_output_from_dict, test_case_list))
 
 
     def _evolve(self, method: str, parents: list = None, replace=False, error_msg: str = ""):
@@ -41,7 +53,7 @@ class EvolNode:
         prompt_content = prompt_method()
         prompt_content += error_msg # Append error message to the prompt
      
-        response = get_response(prompt_content)
+        response = self.get_response(prompt_content)
         reasoning, code = parse_evol_response(response)
         
         if replace:
@@ -100,7 +112,7 @@ class EvolNode:
                     error_msg += str(e)
             elif self.meta_prompt.mode == PromptMode.PROMPT:
                 try:
-                    output_dict = call_func_prompt(test_case, code, get_response)
+                    output_dict = call_func_prompt(test_case, code, self.get_response)
                     output_name = self.meta_prompt.outputs[0]
                     output_dict.get(output_name)
                     passed_tests += 1
@@ -142,7 +154,7 @@ class EvolNode:
             return {output_name: output_value}
         elif self.meta_prompt.mode == PromptMode.PROMPT:
             output_name = self.meta_prompt.outputs[0]
-            output_dict = call_func_prompt(inputs, self.code, get_response)
+            output_dict = call_func_prompt(inputs, self.code, self.get_response)
             output_value = output_dict.get(output_name, None) # We don't like surprises
             if output_value is None:
                 raise ValueError(f"Output value for {output_name} is None")
@@ -165,70 +177,6 @@ class EvolNode:
         meta_prompt = MetaPrompt.from_dict(node_data['meta_prompt'])  # Assuming MetaPrompt has a from_dict method
         return cls(meta_prompt=meta_prompt, code=node_data['code'], reasoning=node_data['reasoning'])
      
-
-     
-class EvalNode(EvolNode): # TBD: --- Need to check on this one (!)
-    def __init__(self, test_cases: List[Dict[str, any]], meta_prompt: MetaPrompt):
-        super().__init__(meta_prompt)
-        self.test_cases = test_cases
-
-    def __call__(self, func: Callable) -> Tuple[float, List[str]]:
-        score = 0
-        feedbacks = []
-        
-        for test_case in self.test_cases:
-            inputs = test_case['input']
-            expected_output = test_case['output']
-            
-            try:
-                pred_output = func(inputs)
-                similarity_score, feedback = self._evaluate_similarity(pred_output, expected_output)
-                score += similarity_score
-                feedbacks.append(feedback)
-            except Exception as e:
-                feedbacks.append(f"Error: {str(e)}")
-        
-        avg_score = score / len(self.test_cases)
-        return avg_score, feedbacks
-
-    def _evaluate_similarity(self, pred_output: any, expected_output: any) -> Tuple[float, str]:
-        prompt = f"""
-        Compare the following predicted output with the expected output:
-        
-        Predicted: {pred_output}
-        Expected: {expected_output}
-        
-        On a scale of 0 to 1, how similar are these outputs? Provide a brief explanation for your score.
-        Return your response in the following format:
-        Score: [similarity score between 0 and 1]
-        Explanation: [your explanation]
-        """
-        
-        response = get_response(prompt)
-        
-        # Extract score and explanation from the response
-        score_match = re.search(r'Score:\s*([\d.]+)', response)
-        explanation_match = re.search(r'Explanation:\s*(.+)', response, re.DOTALL)
-        
-        if score_match and explanation_match:
-            score = float(score_match.group(1))
-            explanation = explanation_match.group(1).strip()
-            return score, explanation
-        else:
-            return 0, "Failed to parse LLM response"
-
-    @classmethod
-    def from_meta_prompt(cls, meta_prompt: MetaPrompt) -> 'EvalNode':
-        # Generate test cases based on the meta_prompt
-        test_cases = cls._generate_test_cases(meta_prompt)
-        return cls(test_cases, meta_prompt)
-
-    @staticmethod
-    def _generate_test_cases(meta_prompt: MetaPrompt) -> List[Dict[str, any]]:
-        # Implement logic to generate test cases based on the meta_prompt
-        # This could involve using the LLM to generate diverse test cases
-        # For now, we'll return a placeholder
-        return [{'input': 'sample_input', 'output': 'sample_output'}]
     
 
 
