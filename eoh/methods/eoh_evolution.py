@@ -8,8 +8,16 @@ from tqdm import tqdm
 from collections import defaultdict
 from typing import Optional, Dict, List, Callable, Tuple
 
-def get_input_output_from_dict(test_case_dict: dict) -> Tuple[dict, dict]:
-    return test_case_dict['input'], test_case_dict['expected_output']
+def map_input_output(test_case_list: List[dict], input_names: List[str], output_names: List[str]) -> List[Tuple[dict, dict]]:
+    inputs = []
+    outputs = []
+    for test_case in test_case_list:
+        input = {key: test_case['input'][key] for key in input_names}
+        output = {key: test_case['expected_output'][key] for key in output_names}
+        inputs.append(input)
+        outputs.append(output)
+    return list(zip(inputs, outputs))
+    
 
 def clean_str(s: str) -> str:
     def clean_line(line: str) -> str:
@@ -43,7 +51,8 @@ class EvolNode:
         self.test_cases = []
         self.get_response = get_response
         
-    def _extend_test_cases(self, num_cases: int = 5, feedback: str = ""):
+        
+    def _get_extend_test_cases_response(self, num_cases: int = 5, feedback: str = ""):
         if feedback != "":
             eval_prompt = self.meta_prompt._get_eval_prompt_with_feedback(num_cases, feedback)
         else:
@@ -52,10 +61,14 @@ class EvolNode:
         response = self.get_response(eval_prompt)
         self.temp_response = response # added info for debugging
         response = clean_str(response) # extra cleaning to enhance robustness
+        return response
+        
+    def _extend_test_cases(self, num_cases: int = 5, feedback: str = ""):
+        response = self._get_extend_test_cases_response(num_cases, feedback)
         
         try:
             test_case_list = extract_json_from_text(response)
-            self.test_cases.extend(map(get_input_output_from_dict, test_case_list))
+            self.test_cases.extend(map_input_output(test_case_list, self.meta_prompt.inputs, self.meta_prompt.outputs))
             self._filter_test_cases()
         except:
             pass # alas, response parsing failed
@@ -76,12 +89,18 @@ class EvolNode:
         self.test_cases = filtered_cases
         
     def get_test_cases(self, num_cases: int = 100, feedback: str = ""):
-        batch_case_amount = 100        
+        batch_case_amount = 20
+        max_attemp = 3 + int(num_cases / batch_case_amount)     
+        curr_attemp = 1
         with tqdm(total=num_cases, desc="Generating test cases", unit="case") as pbar:
-            while num_cases > len(self.test_cases):
+            curr_progress = 0
+            while num_cases > len(self.test_cases) and curr_attemp <= max_attemp:
                 generate_amount = min(batch_case_amount, num_cases - len(self.test_cases))
                 self._extend_test_cases(generate_amount, feedback)
-                pbar.update(generate_amount)
+                new_progress = len(self.test_cases)
+                pbar.update(new_progress - curr_progress)  # Update progress bar with new test cases
+                curr_progress = new_progress
+                curr_attemp += 1
         return self.test_cases
 
 
@@ -100,7 +119,7 @@ class EvolNode:
             self.reasoning, self.code = reasoning, code
         return reasoning, code
     
-    def evolve(self, test_cases: List[Dict], method: str, parents: list = None, replace=False, max_attempts: int = 3, fitness_threshold: float = 0.8):
+    def evolve(self, test_cases: List[Dict], method: str, parents: list = None, replace=False, max_attempts: int = 5, fitness_threshold: float = 0.8):
         """
         Evolve node and only accept structurally fit solutions
         Attempts multiple evolutions before returning the final output

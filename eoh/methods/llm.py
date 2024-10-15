@@ -192,3 +192,19 @@ except ImportError:
     
     # Just write a dummy VLLM class for Mac instance here 
     print("Could not load vllm class, check CUDA support and GPU RAM size")
+    
+    
+try:
+    import groq
+    groq_client = groq.Groq()
+    
+    def get_groq_response(prompt: str):
+        response = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.choices[0].message.content
+    
+except:
+    pass
+    
