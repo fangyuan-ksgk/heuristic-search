@@ -123,6 +123,7 @@ try:
             gpu_memory_utilization: float = 0.85,
             max_model_len: int = 4096,
             merge: bool = False,
+            max_new_tokens: int = 2048,
             **kwargs,
         ) -> None:
             self.name: str = name
