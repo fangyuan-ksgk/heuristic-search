@@ -144,17 +144,16 @@ class EvolNode:
             self.reasoning, self.code = reasoning, code
         return reasoning, code
     
-    def evolve(self, method: str, test_inputs: Optional[List[Dict]] = None, parents: list = None, replace=False, max_attempts: int = 5, fitness_threshold: float = 0.8):
+    def evolve(self, method: str, parents: list = None, replace=False, max_attempts: int = 5, fitness_threshold: float = 0.8, num_runs: int = 5):
         """
         Evolve node and only accept structurally fit solutions
         Attempts multiple evolutions before returning the final output
         """
-        if test_inputs is None:
-            test_inputs = self.test_inputs
+        
         
         for attempt in range(max_attempts):
-            reasoning, code = self._evolve(method, parents, replace=False)
-            fitness, error_msg = self._evaluate_structure_fitness(test_inputs, code)
+            reasoning, code = self._evolve(method, parents, replace=False)    
+            _, fitness, error_msg = self._evaluate_fitness(code=code, max_tries=1, num_runs=num_runs)            
             
             if fitness >= fitness_threshold:
                 if replace:
@@ -167,16 +166,6 @@ class EvolNode:
         # If all attempts fail, return None
         print(f"Evolution failed after {max_attempts} attempts.")
         return None, None
-    
-    def _evaluate_fitness(self, test_inputs: List[Dict], code: Optional[str] = None) -> float:
-        """ 
-        Fitness evaluation: 
-        - Structure: 
-        - Functionality: 
-        """
-        structure_fitness, _ = self._evaluate_structure_fitness(test_inputs, code)
-        functionality_fitness = self._evaluate_functionality_fitness(test_inputs, code)
-        return structure_fitness + functionality_fitness
     
     def _evaluate_structure_fitness(self, test_inputs: List[Dict], code: Optional[str] = None) -> Tuple[float, str]:
         """ 
@@ -209,41 +198,88 @@ class EvolNode:
 
         return passed_tests / total_tests, error_msg
     
-    def _evaluate_functionality_fitness(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, code: Optional[str] = None) -> float:
+    def call_prompt_func(self, test_input: Dict, code: Optional[str] = None, max_tries: int = 3):
+        if code is None:
+            code = self.code
+        for i in range(max_tries):
+            try:
+                output_dict = call_func_prompt(test_input, code, self.get_response)
+                return output_dict
+            except Exception as e:
+                continue 
+        raise ValueError(f"Failed to get dictionary output after {max_tries} attempts")
+    
+    def call_code_func(self, test_input: Dict, code: Optional[str] = None, file_path: Optional[str] = None):
+        if code is None:
+            code = self.code
+        try:
+            output_value = call_func_code(test_input, code, self.meta_prompt.func_name, file_path=file_path)
+            output_name = self.meta_prompt.outputs[0]
+            output_dict = {output_name: output_value}
+            return output_dict
+        except Exception as e:
+            raise ValueError(f"Failed to get output value: {e}")
+        
+    
+    def _evaluate_fitness(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, code: Optional[str] = None, 
+                                        max_tries: int = 3, num_runs: int = 1) -> float:
         """ 
         Alignment checking with expected outputs with LLM
         """
         if test_cases is None:
             test_cases = self.test_cases
+            
+        test_cases = test_cases * num_runs # repeat
         
         total_tests = len(test_cases)
+        compiled_tests = 0
         passed_tests = 0
 
         if code is None:
             code = self.code
 
         error_msg = ""
-        for test_input, test_output in test_cases:
+        issue_summary = ""
+        for test_input, test_output in tqdm(test_cases, desc="Evaluating fitness"):
         
             if self.meta_prompt.mode == PromptMode.CODE:
                 try:
-                    output_value = call_func_code(test_input, code, self.meta_prompt.func_name, file_path=None)
-                    output_name = self.meta_prompt.outputs[0]
-                    output_dict = {output_name: output_value}
-                    passed_tests += check_alignment(output_dict, test_output, self.get_response)
+                    output_dict = self.call_code_func(test_input, code, file_path=None)
+                    compiled_tests += 1
+                    is_aligned = check_alignment(output_dict, test_output, self.get_response)
+                    if is_aligned:
+                        passed_tests += 1
+                    if not is_aligned:
+                        issue_summary += f"Input: {test_input}, Pred: {output_dict}, Expected: {test_output}\n"
                 except Exception as e:
+                    issue_summary += f"Given Input: {test_input}. Can't parse output dictionary from LLM's response.\n"
                     error_msg += str(e)
+                    
             elif self.meta_prompt.mode == PromptMode.PROMPT:
                 try:
-                    output_dict = call_func_prompt(test_input, code, self.get_response)
+                    output_dict = self.call_prompt_func(test_input, code, max_tries)
                     [output_dict.get(output_name) for output_name in self.meta_prompt.outputs] # check for all outputs
-                    passed_tests += check_alignment(output_dict, test_output, self.get_response)
+                    compiled_tests += 1
+                    is_aligned = check_alignment(output_dict, test_output, self.get_response)
+                    if is_aligned:
+                        passed_tests += 1
+                    if not is_aligned:
+                        issue_summary += f"Input: {test_input}, Pred: {output_dict}, Expected: {test_output}\n"
                 except Exception as e:
+                    issue_summary += f"Given Input: {test_input}. Can't parse output dictionary from LLM's response.\n"
                     error_msg += str(e)
             else:
                 raise ValueError(f"Unknown mode: {self.meta_prompt.mode}")
+            
+        # add overal information
+        global_summary = f"--- Compiled {compiled_tests} out of {total_tests} test cases\n"
+        global_summary += f"--- Passed {passed_tests} out of {total_tests} test cases\n"
+        issue_summary = global_summary + issue_summary
 
-        return passed_tests / total_tests, error_msg
+        structural_fitness = compiled_tests / total_tests
+        functional_fitness = passed_tests / total_tests
+        
+        return structural_fitness, functional_fitness, issue_summary
 
 
     def i1(self):
