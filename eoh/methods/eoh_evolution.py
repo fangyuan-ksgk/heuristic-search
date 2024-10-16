@@ -67,6 +67,7 @@ class EvolNode:
         """
         self.code = code
         self.reasoning = reasoning
+        self.fitness = 0.0
         self.meta_prompt = meta_prompt
         self.test_cases = []
         self.get_response = get_response
@@ -155,9 +156,10 @@ class EvolNode:
             reasoning, code = self._evolve(method, parents, replace=False)    
             _, fitness, error_msg = self._evaluate_fitness(code=code, max_tries=1, num_runs=num_runs)            
             
-            if fitness >= fitness_threshold:
+            if fitness >= self.fitness:
                 if replace:
                     self.reasoning, self.code = reasoning, code
+            if fitness >= fitness_threshold:
                 return reasoning, code
             
             # If not successful, log the attempt
