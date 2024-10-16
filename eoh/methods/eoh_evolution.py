@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
-from .meta_prompt import MetaPlan, extract_json_from_text
+from .meta_prompt import MetaPlan, extract_json_from_text, ALIGNMENT_CHECK_PROMPT
 from .meta_execute import call_func_code, call_func_prompt
 from .llm import get_openai_response
 import re, os, json
@@ -24,6 +24,26 @@ def clean_str(s: str) -> str:
         return line.split("//")[0].split("#")[0] # Remove comments 
     return ('\n').join(map(clean_line, s.split('\n')))
 
+
+def check_alignment(pred_output: dict, target_output: dict, get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
+    """ 
+    Alignment checking with expected outputs with LLM
+    - we have two dictionary, need to make sure they are aligned
+    - 1. they have same keys 
+    - 2. their values are 'basically the same'
+    """
+    
+    prompt = ALIGNMENT_CHECK_PROMPT.format(pred_output=pred_output, target_output=target_output)
+    for i in range(max_tries):
+        try:
+            response = get_response(prompt)
+            check_dict = extract_json_from_text(response)
+            if check_dict['aligned']:
+                return True
+        except Exception as e:
+            print(f"Alignment check failed on try {i+1}, retrying...")
+    return False
+
 #################################
 #   Evolution on Graph          #
 #   - Node: Code, Prompt, Tool  #
@@ -36,16 +56,6 @@ def clean_str(s: str) -> str:
 # - (get_prompt_xx) Evolution tactic specific prompt templating, used for generating node
 # - (_get_node) Get prompt response from LLM, parse node content (code, tool, prompt) 
 # - (xx) i1/e1/m1/m2/e2 Evolution search on node
-
-def check_alignment(output_value: dict, test_output: dict, get_response: Optional[Callable] = get_openai_response):
-    """ 
-    Alignment checking with expected outputs with LLM
-    - we have two dictionary, need to make sure they are aligned
-    - 1. they have same keys 
-    - 2. their values are 'basically the same'
-    """
-    
-    raise NotImplementedError
 
 
 class EvolNode:
@@ -190,8 +200,7 @@ class EvolNode:
             elif self.meta_prompt.mode == PromptMode.PROMPT:
                 try:
                     output_dict = call_func_prompt(test_input, code, self.get_response)
-                    output_name = self.meta_prompt.outputs[0]
-                    output_dict.get(output_name)
+                    [output_dict.get(output_name) for output_name in self.meta_prompt.outputs] # check for all outputs
                     passed_tests += 1
                 except Exception as e:
                     error_msg += str(e)
@@ -227,6 +236,7 @@ class EvolNode:
             elif self.meta_prompt.mode == PromptMode.PROMPT:
                 try:
                     output_dict = call_func_prompt(test_input, code, self.get_response)
+                    [output_dict.get(output_name) for output_name in self.meta_prompt.outputs] # check for all outputs
                     passed_tests += check_alignment(output_dict, test_output, self.get_response)
                 except Exception as e:
                     error_msg += str(e)
