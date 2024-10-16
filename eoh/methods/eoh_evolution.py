@@ -37,6 +37,16 @@ def clean_str(s: str) -> str:
 # - (_get_node) Get prompt response from LLM, parse node content (code, tool, prompt) 
 # - (xx) i1/e1/m1/m2/e2 Evolution search on node
 
+def check_alignment(output_value: dict, test_output: dict, get_response: Optional[Callable] = get_openai_response):
+    """ 
+    Alignment checking with expected outputs with LLM
+    - we have two dictionary, need to make sure they are aligned
+    - 1. they have same keys 
+    - 2. their values are 'basically the same'
+    """
+    
+    raise NotImplementedError
+
 
 class EvolNode:
     
@@ -89,7 +99,7 @@ class EvolNode:
         self.test_cases = filtered_cases
         
     def get_test_cases(self, num_cases: int = 100, feedback: str = ""):
-        batch_case_amount = 20
+        batch_case_amount = min(20, num_cases)
         max_attemp = 3 + int(num_cases / batch_case_amount)     
         curr_attemp = 1
         with tqdm(total=num_cases, desc="Generating test cases", unit="case") as pbar:
@@ -101,7 +111,12 @@ class EvolNode:
                 pbar.update(new_progress - curr_progress)  # Update progress bar with new test cases
                 curr_progress = new_progress
                 curr_attemp += 1
+        print(f"--- Generated {len(self.test_cases)} test cases")
         return self.test_cases
+    
+    @property 
+    def test_inputs(self):
+        return [case[0] for case in self.test_cases]
 
 
     def _evolve(self, method: str, parents: list = None, replace=False, error_msg: str = ""):
@@ -119,14 +134,17 @@ class EvolNode:
             self.reasoning, self.code = reasoning, code
         return reasoning, code
     
-    def evolve(self, test_cases: List[Dict], method: str, parents: list = None, replace=False, max_attempts: int = 5, fitness_threshold: float = 0.8):
+    def evolve(self, method: str, test_inputs: Optional[List[Dict]] = None, parents: list = None, replace=False, max_attempts: int = 5, fitness_threshold: float = 0.8):
         """
         Evolve node and only accept structurally fit solutions
         Attempts multiple evolutions before returning the final output
         """
+        if test_inputs is None:
+            test_inputs = self.test_inputs
+        
         for attempt in range(max_attempts):
             reasoning, code = self._evolve(method, parents, replace=False)
-            fitness, error_msg = self._evaluate_structure_fitness(test_cases, code)
+            fitness, error_msg = self._evaluate_structure_fitness(test_inputs, code)
             
             if fitness >= fitness_threshold:
                 if replace:
@@ -140,38 +158,38 @@ class EvolNode:
         print(f"Evolution failed after {max_attempts} attempts.")
         return None, None
     
-    def _evaluate_fitness(self, test_cases: List[Dict], code: Optional[str] = None) -> float:
+    def _evaluate_fitness(self, test_inputs: List[Dict], code: Optional[str] = None) -> float:
         """ 
         Fitness evaluation: 
         - Structure: 
         - Functionality: 
         """
-        structure_fitness, _ = self._evaluate_structure_fitness(test_cases, code)
-        functionality_fitness = self._evaluate_functionality_fitness(test_cases, code)
+        structure_fitness, _ = self._evaluate_structure_fitness(test_inputs, code)
+        functionality_fitness = self._evaluate_functionality_fitness(test_inputs, code)
         return structure_fitness + functionality_fitness
     
-    def _evaluate_structure_fitness(self, test_cases: List[Dict], code: Optional[str] = None) -> float:
+    def _evaluate_structure_fitness(self, test_inputs: List[Dict], code: Optional[str] = None) -> Tuple[float, str]:
         """ 
         Check for compilation sucess, type consistency
         """
-        total_tests = len(test_cases)
+        total_tests = len(test_inputs)
         passed_tests = 0
 
         if code is None:
             code = self.code
 
         error_msg = ""
-        for test_case in test_cases:
+        for test_input in test_inputs:
         
             if self.meta_prompt.mode == PromptMode.CODE:
                 try:
-                    output_value = call_func_code(test_case, code, self.meta_prompt.func_name, file_path=None)
+                    output_value = call_func_code(test_input, code, self.meta_prompt.func_name, file_path=None)
                     passed_tests += 1
                 except Exception as e:
                     error_msg += str(e)
             elif self.meta_prompt.mode == PromptMode.PROMPT:
                 try:
-                    output_dict = call_func_prompt(test_case, code, self.get_response)
+                    output_dict = call_func_prompt(test_input, code, self.get_response)
                     output_name = self.meta_prompt.outputs[0]
                     output_dict.get(output_name)
                     passed_tests += 1
@@ -182,9 +200,40 @@ class EvolNode:
 
         return passed_tests / total_tests, error_msg
     
-    def _evaluate_functionality_fitness(self, test_cases: List[Dict], code: Optional[str] = None) -> float:
-        # raise NotImplementedError
-        return 0.0
+    def _evaluate_functionality_fitness(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, code: Optional[str] = None) -> float:
+        """ 
+        Alignment checking with expected outputs with LLM
+        """
+        if test_cases is None:
+            test_cases = self.test_cases
+        
+        total_tests = len(test_cases)
+        passed_tests = 0
+
+        if code is None:
+            code = self.code
+
+        error_msg = ""
+        for test_input, test_output in test_cases:
+        
+            if self.meta_prompt.mode == PromptMode.CODE:
+                try:
+                    output_value = call_func_code(test_input, code, self.meta_prompt.func_name, file_path=None)
+                    output_name = self.meta_prompt.outputs[0]
+                    output_dict = {output_name: output_value}
+                    passed_tests += check_alignment(output_dict, test_output, self.get_response)
+                except Exception as e:
+                    error_msg += str(e)
+            elif self.meta_prompt.mode == PromptMode.PROMPT:
+                try:
+                    output_dict = call_func_prompt(test_input, code, self.get_response)
+                    passed_tests += check_alignment(output_dict, test_output, self.get_response)
+                except Exception as e:
+                    error_msg += str(e)
+            else:
+                raise ValueError(f"Unknown mode: {self.meta_prompt.mode}")
+
+        return passed_tests / total_tests, error_msg
 
 
     def i1(self):
@@ -202,40 +251,54 @@ class EvolNode:
     def m2(self, parents: list):
         return self._evolve('m2', parents)
     
-    def __call__(self, inputs):
+    def __call__(self, inputs, max_attempts: int = 3):
         """ 
         TBD: Inheritance to accumulated codebase with 'file_path' | Graph Topology naturally enables inheritance
         TBD: Stricter input / output type checking to ensure composibility
         """
         if self.meta_prompt.mode == PromptMode.CODE:
-            output_value = call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None)
+            output_value = call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None) # TODO: extend to multiple outputs ...
             output_name = self.meta_prompt.outputs[0]
             return {output_name: output_value}
         elif self.meta_prompt.mode == PromptMode.PROMPT:
             output_name = self.meta_prompt.outputs[0]
-            output_dict = call_func_prompt(inputs, self.code, self.get_response)
-            output_value = output_dict.get(output_name, None) # We don't like surprises
-            if output_value is None:
-                raise ValueError(f"Output value for {output_name} is None")
-            return {output_name: output_value}
+            
+            errors = []
+            for attempt in range(max_attempts):
+                try:
+                    output_dict = call_func_prompt(inputs, self.code, self.get_response)
+                    output_value = output_dict.get(output_name, None)  # We don't like surprises
+                    if output_value is None:
+                        raise ValueError(f"Output value for {output_name} is None")
+                    return {output_name: output_value}
+                except Exception as e:
+                    errors.append(str(e))
+                    if attempt == max_attempts - 1:
+                        error_msg = "; ".join(errors)
+                        raise ValueError(f"Failed to get output after {max_attempts} attempts: {error_msg}")
         
-    def save(self, node_path: str) -> None:
+    def save(self, library_dir: str = "methods/nodes/") -> None:
         node_data = {
             "code": self.code,
             "reasoning": self.reasoning,
-            "meta_prompt": self.meta_prompt.to_dict()  # Assuming MetaPrompt has a to_dict method
+            "meta_prompt": self.meta_prompt.to_dict(),  # Assuming MetaPrompt has a to_dict method
+            "test_cases": [{"input": test_case[0], "expected_output": test_case[1]} for test_case in self.test_cases]
         }
+        node_path = os.path.join(library_dir, f"{self.meta_prompt.func_name}_node.json")
         os.makedirs(os.path.dirname(node_path), exist_ok=True)
         with open(node_path, 'w') as f:
             json.dump(node_data, f, indent=2)
 
     @classmethod 
-    def load(cls, node_path: str) -> 'EvolNode':
+    def load(cls, node_name: str, library_dir: str = "methods/nodes/") -> 'EvolNode':
+        node_path = os.path.join(library_dir, f"{node_name}_node.json")
         with open(node_path, 'r') as f:
             node_data = json.load(f)
         meta_prompt = MetaPrompt.from_dict(node_data['meta_prompt'])  # Assuming MetaPrompt has a from_dict method
-        return cls(meta_prompt=meta_prompt, code=node_data['code'], reasoning=node_data['reasoning'])
-     
+        node = cls(meta_prompt=meta_prompt, code=node_data['code'], reasoning=node_data['reasoning'])
+        node.test_cases = [tuple([test_case['input'], test_case['expected_output']]) for test_case in node_data['test_cases']]
+        return node
+
     
 
 class EvolGraph:

@@ -199,8 +199,10 @@ class MetaPrompt:
         return {
             "task": self.task,
             "func_name": self.func_name,
-            "input": self.inputs,
-            "output": self.outputs,
+            "inputs": self.inputs,
+            "outputs": self.outputs,
+            "input_types": self.input_types,
+            "output_types": self.output_types,
             "mode": self.mode.value
         }
     
@@ -209,8 +211,10 @@ class MetaPrompt:
         return cls(
             task=data["task"],
             func_name=data["func_name"],
-            input=data["input"],
-            output=data["output"],
+            inputs=data["inputs"],
+            outputs=data["outputs"],
+            input_types=data["input_types"],
+            output_types=data["output_types"],
             mode=PromptMode(data["mode"])
         )
 
