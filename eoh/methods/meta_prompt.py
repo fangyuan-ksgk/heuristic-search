@@ -217,6 +217,8 @@ class MetaPrompt:
             output_types=data["output_types"],
             mode=PromptMode(data["mode"])
         )
+        
+
 
 def clean_reasoning_str(reasoning: str):
     return reasoning.split("\n")[0].split("}")[0].strip()
@@ -443,3 +445,25 @@ def parse_plan_graph(plan_dict: dict) -> dict:
             dag[source]["edges"].append(target)
     
     return dag
+
+
+ALIGNMENT_CHECK_PROMPT = """
+Compare the following two dictionary outputs and determine if they are essentially aligned:
+
+Predicted output: {pred_output}
+Target output: {target_output}
+
+Consider them aligned if:
+1. They have the same keys.
+2. The values for each key are 'basically the same':
+   - For numbers: exactly the same
+   - For text: convey the same meaning, even if worded differently
+   - For booleans: exactly the same
+   - For lists/dicts: contents are similar
+
+Respond in this format:
+{{
+  "aligned": true/false,
+  "comment": "Whatever you want to say on the prediction, be concise."
+}}
+"""
