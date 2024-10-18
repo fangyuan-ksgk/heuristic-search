@@ -228,6 +228,11 @@ class MetaPrompt:
             mode=PromptMode(data["mode"])
         )
         
+    @classmethod
+    def from_json(cls, file_path: str) -> 'MetaPrompt':
+        with open(file_path, 'r') as file:
+            data = json.load(file)
+        return cls.from_dict(data)
 
 
 def clean_reasoning_str(reasoning: str):
