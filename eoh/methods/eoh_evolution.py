@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
-from .meta_prompt import MetaPlan, extract_json_from_text, ALIGNMENT_CHECK_PROMPT
+from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT
 from .meta_execute import call_func_code, call_func_prompt
 from .llm import get_openai_response
 import re, os, json
@@ -347,6 +347,50 @@ class EvolNode:
         node.test_cases = [tuple([test_case['input'], test_case['expected_output']]) for test_case in node_data['test_cases']]
         return node
 
+
+class PlanNode: 
+    def __init__(self, meta_prompt: MetaPlan, 
+                 get_response: Optional[Callable] = get_openai_response,
+                 nodes: Optional[List[EvolNode]] = None):
+        """ 
+        Planning Node for subtask decomposition
+        - Spawn helper nodes for better task performance
+        """
+        self.meta_prompt = meta_prompt 
+        self.get_response = get_response 
+        self.nodes = nodes
+        
+    def _evolve_plan_dict(self):
+        # Step 1: Generate Pseudo-Code for SubTask Decomposition
+        prompt = self.meta_prompt._get_pseudo_code_prompt() # Pseudo-Code Prompt (Non-implemented functional)
+        response = self.get_response(prompt) # Use Strong LLM to build up pseudo-code
+        code = extract_python_code(response) # Extract Python Code from response 
+
+        # Step 2: Generate Planning DAG: Multiple Nodes 
+        graph_prompt = self.meta_prompt._get_plan_graph_prompt(code) 
+        plan_response = self.get_response(graph_prompt)
+        plan_dict = extract_json_from_text(plan_response)
+        return plan_dict
+    
+    def _spawn_nodes(self, plan_dict: Dict):
+        """ 
+        Spawn new nodes based on plan_dict
+        - Each node is evolved as CODE and PROMPT, we let evaluation result decides which one to keep
+        """
+        for node in plan_dict["nodes"]:
+            node_prompt_candidate = MetaPrompt(
+                task=node.get("task"),
+                func_name=node.get("name"),
+                inputs=node.get("inputs"),
+                outputs=node.get("outputs"),
+                input_types=node.get("input_types"),
+                mode = PromptMode.PROMPT
+            )
+            
+            
+        
+    
+    
     
 
 class EvolGraph:
