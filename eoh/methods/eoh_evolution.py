@@ -349,6 +349,7 @@ class EvolNode:
 
 
 class PlanNode: 
+    
     def __init__(self, meta_prompt: MetaPlan, 
                  get_response: Optional[Callable] = get_openai_response,
                  nodes: Optional[List[EvolNode]] = None):
@@ -377,8 +378,10 @@ class PlanNode:
         Spawn new nodes based on plan_dict
         - Each node is evolved as CODE and PROMPT, we let evaluation result decides which one to keep
         """
+        prompt_nodes = {}
+        code_nodes = {}
         for node in plan_dict["nodes"]:
-            node_prompt_candidate = MetaPrompt(
+            meta_prompt_node = MetaPrompt(
                 task=node.get("task"),
                 func_name=node.get("name"),
                 inputs=node.get("inputs"),
@@ -386,7 +389,23 @@ class PlanNode:
                 input_types=node.get("input_types"),
                 mode = PromptMode.PROMPT
             )
-            
+            prompt_nodes[node.get("name")] = EvolNode(meta_prompt=meta_prompt_node)
+                
+            meta_code_node = MetaPrompt(
+                task=node.get("task"),
+                func_name=node.get("name"),
+                inputs=node.get("inputs"),
+                outputs=node.get("outputs"),
+                input_types=node.get("input_types"),
+                mode = PromptMode.CODE
+            )
+            code_nodes[node.get("name")] = EvolNode(meta_prompt=meta_code_node)
+
+        return prompt_nodes, code_nodes
+    
+    def evolve_node(self, node_id: str, method: str):
+        
+       raise NotImplementedError
             
         
     
