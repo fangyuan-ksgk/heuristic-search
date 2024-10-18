@@ -1,0 +1,63 @@
+{
+  "code": "\nimport http.client\nimport json\nimport os\nfrom typing import Dict, Any\n\ndef _search_google(query: str) -> Dict[str, Any]:\n    \"\"\"\n    Use Serper API to search Google for information\n    \n    Args:\n        query (str): The search query\n    \n    Returns:\n        Dict[str, Any]: Parsed JSON response from the API\n    \"\"\"\n    conn = http.client.HTTPSConnection(\"google.serper.dev\")\n    payload = json.dumps({\"q\": query})\n    headers = {\n        'X-API-KEY': os.environ[\"SERPER_API_KEY\"],\n        'Content-Type': 'application/json'\n    }\n    \n    try:\n        conn.request(\"POST\", \"/search\", payload, headers)\n        res = conn.getresponse()\n        data = res.read()\n        return json.loads(data.decode(\"utf-8\"))\n    except Exception as e:\n        print(f\"Error occurred during API request: {str(e)}\")\n        return {}\n    finally:\n        conn.close()\n        \ndef search_google(query: str) -> str: \n    \"\"\" \n    Input query, return search result string from Google\n    \"\"\"\n    result = _search_google(query)\n    result_dict = {k.replace(\"organic\", \"Search Result\"): v for k, v in result.items() if k in [\"answerBox\", \"organic\"]}\n    result_str = json.dumps(result_dict, indent=2)\n    return result_str \n",
+  "reasoning": "Search google for top search results",
+  "meta_prompt": {
+    "task": "Search Google for result",
+    "func_name": "search_google",
+    "inputs": [
+      "query"
+    ],
+    "outputs": [
+      "result"
+    ],
+    "input_types": [
+      "str"
+    ],
+    "output_types": [
+      "str"
+    ],
+    "mode": "code"
+  },
+  "test_cases": [
+    {
+      "input": {
+        "query": "Python programming"
+      },
+      "expected_output": {
+        "result": "...example search results for Python programming..."
+      }
+    },
+    {
+      "input": {
+        "query": ""
+      },
+      "expected_output": {
+        "result": "Error: Query cannot be empty"
+      }
+    },
+    {
+      "input": {
+        "query": null
+      },
+      "expected_output": {
+        "result": "Error: Query cannot be null"
+      }
+    },
+    {
+      "input": {
+        "query": " abc def"
+      },
+      "expected_output": {
+        "result": "...resultados de b\u00fasqueda para abc def..."
+      }
+    },
+    {
+      "input": {
+        "query": "  Multiple  Space  Query  "
+      },
+      "expected_output": {
+        "result": "...example search results for Multiple Space Query..."
+      }
+    }
+  ]
+}
