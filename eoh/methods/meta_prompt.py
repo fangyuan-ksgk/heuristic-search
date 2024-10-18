@@ -43,6 +43,16 @@ class MetaPrompt:
         else:
             return "'" + self.outputs[0] + "'"
         
+    def _desc_prompt(self):
+        if self.mode == PromptMode.CODE:
+            prompt_content = f"Function name: {self.func_name}, this fuction accept {len(self.inputs)} input(s): {self.joined_inputs} with types {', '.join(self.input_types)}. "\
+                f"The function return {len(self.outputs)} output(s): {self.joined_outputs} with types {', '.join(self.output_types)}. This function is used for {self.task}"
+            return prompt_content
+        elif self.mode == PromptMode.PROMPT:
+            prompt_content = f"Function name: {self.func_name}, this fuction accept {len(self.inputs)} input(s): {self.joined_inputs}. "\
+                f"The function uses a LLM to complete the task: {self.task}."
+            return prompt_content
+        
     def _base_prompt(self):
         if self.mode == PromptMode.CODE:
             prompt_content = f"First, describe your new algorithm and main steps in one sentence. "\
