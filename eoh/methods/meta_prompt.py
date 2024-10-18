@@ -241,29 +241,24 @@ def parse_evol_response(response: str):
 
 # Plan as a Graph (Ideally, current version fall-back to a chain of plan ....)
 pseudo_code_prompt = """ 
-Generate a python function with sub-functions to complete the goal. 
+Generate a python function with sub-functions to complete the task. 
 Can use pseudo code for sub-functions with explicit input, input types, output types, and comments, but no implementations.
 """
 
-
-plan_graph_prompt = """
-Generate a JSON-style plan represented as a Directed Acyclic Graph (DAG) to achieve the goal. Use creative topology in the DAG, include parallel tasks if required.
-
-The plan should include:
-
+PLAN_GRAPH_PROMPT = """Generate a JSON-style plan represented as a Directed Acyclic Graph (DAG) for the task. The plan should include:
 - **Nodes**: Each node represents a key action or step and must contain the following attributes:
-  - `task`: Description of the task.
-  - `name`: Concise name used for the task function.
-  - `inputs`: List of input parameters needed to perform the action.
-  - `input_types`: List of corresponding types for each input parameter.
-  - `outputs`: List of output parameters produced by the action.
-  - `output_types`: List of corresponding types for each output parameter.
-  - `target`: The purpose or goal that the action contributes to.
-  - `mode`: The execution mode for this task ("CODE" or "PROMPT").
+- `task`: Description of the task.
+- `name`: Concise name used for the task function.
+- `inputs`: List of input parameters needed to perform the action.
+- `input_types`: List of corresponding types for each input parameter.
+- `outputs`: List of output parameters produced by the action.
+- `output_types`: List of corresponding types for each output parameter.
+- `target`: The purpose or goal that the action contributes to.
+- `mode`: The execution mode for this task ("CODE" or "PROMPT").
 
 - **Edges**: Each edge represents a dependency or relationship between nodes, indicating that one step supports or leads to another.
-  - `source`: The `id` of the source node (the preceding action).
-  - `target`: The `id` of the target node (the subsequent action).
+- `source`: The `id` of the source node (the preceding action).
+- `target`: The `id` of the target node (the subsequent action).
 
 **Output Format:**
 
@@ -271,38 +266,40 @@ Provide the output in the following JSON structure:
 
 ```json
 {
-  "nodes": [
+"nodes": [
     {
-      "task": "Task 1",
-      "name": "task_1"
-      "inputs": ["input_11", "input_12", "input_13"],
-      "input_types": ["str", "str", "str"],
-      "outputs": ["output_11", "output_12", "output_13"],
-      "output_types": ["str", "str", "str"],
-      "target": "Purpose of Action 1"
-      "mode": "CODE"
+    "task": "Task 1",
+    "name": "task_1"
+    "inputs": inputs_str,
+    "input_types": input_types_str,
+    "outputs": ["output_11", "output_12"],
+    "output_types": ["str", "str"],
+    "target": "Purpose of Action 1"
+    "mode": "CODE"
     },
     {
-      "task": "Task 2",
-      "name": "task_2",
-      "inputs": ["input_21", "input_22", "input_23"],
-      "input_types": ["str", "str", "str"],
-      "outputs": ["output_21", "output_22", "output_23"],
-      "output_types": ["str", "str", "str"],
-      "target": "Purpose of Action 2",
-      "mode": "PROMPT"
+    "task": "Task 2",
+    "name": "task_2",
+    "inputs": ["input_21", "input_22"],
+    "input_types": input_types_str,
+    "outputs": outputs_str,
+    "output_types": output_types_str,
+    "target": "Purpose of Action 2",
+    "mode": "PROMPT"
     }
     // Add more nodes as needed
-  ],
-  "edges": [
+],
+"edges": [
     {
-      "source": "task_1",
-      "target": "task_2"
+    "source": "task_1",
+    "target": "task_2"
     }
     // Add more edges as needed
-  ]
+]
 }
+```
 """
+  
 
 # For evaluation node, external memory is important (it could access local files through its code-interpreter, a skill which it should learn in the process)
 # How do we improve on the evaluation? Can we evaluate on the evaluation result? 
@@ -324,46 +321,46 @@ Provide the output in the following JSON structure:
 }
 """
 
+# MetaPlan decompose a task into chained sub-tasks (output-intput chained)
 @dataclass
 class MetaPlan:
-    goal: str
+    task: str
+    func_name: str
+    inputs: list
+    outputs: list
+    input_types: list 
+    output_types: list
     
     @property 
-    def _pseudo_code_prompt(self):
-        prompt_content = pseudo_code_prompt
+    def _base_pseudo_code_prompt(self):
+        prompt_content = f"First, describe your new algorithm and main steps in one sentence."\
+            f"The description must be inside a brace. Next implement it in Python as a pseudo function named {self.func_name}."\
+            f"This function should accept {len(self.inputs)} input(s): {self.joined_inputs} with types {', '.join(self.input_types)}. "\
+            f"The function should return {len(self.outputs)} output(s): {self.joined_outputs} with types {', '.join(self.output_types)}. "\
+            "Include sub-functions with explicit input, input types, output types, and comments."\
+            "Can use pseudo code for sub-functions with explicit input, input types, output types, and comments, but no implementations."
         return prompt_content
     
     @property
-    def _base_prompt(self):
-        prompt_content = f"First, describe the intuition for your tactics and main steps in one sentence. "\
-                "The description must be inside a brace."\
-                f"{plan_graph_prompt}"
+    def _base_plan_graph_prompt(self):
+        input_str = f"[{', '.join(self.inputs)}]"
+        input_types_str = f"[{', '.join(self.input_types)}]"
+        output_str = f"[{', '.join(self.outputs)}]"
+        output_types_str = f"[{', '.join(self.output_types)}]"
+        prompt_content = PLAN_GRAPH_PROMPT.replace("inputs_str", input_str).replace("input_types_str", input_types_str).replace("outputs_str", output_str).replace("output_types_str", output_types_str)
         return prompt_content
     
-    @property
-    def _eval_prompt(self):
-        prompt_content = f"First, describe the intuition for your tactics and main steps in one sentence. "\
-                "The description must be inside a brace."\
-                f"{eval_goal_prompt}"
+    def _get_pseudo_code_prompt(self):
+        prompt_content = f"Task: {self.task}\n{self._base_pseudo_code_prompt}"
         return prompt_content
     
-    def _get_prompt_i1_pseudo_code(self):
-        prompt_content = f"Goal: {self.goal}\n{self._pseudo_code_prompt}"
-        return prompt_content
-    
-    def _get_prompt_i1(self):
-        prompt_content = f"Goal: {self.goal}\n{self._base_prompt}"
-        return prompt_content
-    
-    def _get_prompt_i1_with_pseudo_code(self, code: str):
-        prompt_content = f"Goal: {self.goal}\n\n"
+    def _get_plan_graph_prompt(self, code: str):
+        prompt_content = f"Task: {self.task}\n\n"
         prompt_content += f"Pseudo Code:\n{code}\n\n"
-        prompt_content += self._base_prompt
+        prompt_content += self._base_plan_graph_prompt
         return prompt_content
-    
-    def _get_eval_prompt_i1(self):
-        prompt_content = f"Goal: Evaluating wether the goal {self.goal} has been achieved.\n{self._eval_prompt}"
-        return prompt_content
+
+
     
     # e1/e2/m1/m2 to be implemented
 
