@@ -1,0 +1,134 @@
+{
+  "meta_prompt": {
+    "task": "Get the age of celebrity.",
+    "func_name": "get_celeb_age",
+    "inputs": [
+      "name"
+    ],
+    "outputs": [
+      "age"
+    ],
+    "input_types": [
+      "str"
+    ],
+    "output_types": [
+      "int"
+    ]
+  },
+  "plan_dict": {
+    "nodes": [
+      {
+        "task": "Check if input is empty",
+        "name": "is_empty",
+        "inputs": [
+          "in_str"
+        ],
+        "input_types": [
+          "str"
+        ],
+        "outputs": [
+          "result"
+        ],
+        "output_types": [
+          "bool"
+        ],
+        "target": "Provide a basic validation of the input",
+        "mode": "CODE"
+      },
+      {
+        "task": "Validate celebrity name",
+        "name": "validate_name",
+        "inputs": [
+          "name"
+        ],
+        "input_types": [
+          "str"
+        ],
+        "outputs": [
+          "result"
+        ],
+        "output_types": [
+          "bool"
+        ],
+        "target": "Ensure the celebrity name meets the predefined rules",
+        "mode": "CODE"
+      },
+      {
+        "task": "Use web scraping techniques to extract age from the web",
+        "name": "get_age_from_web",
+        "inputs": [
+          "name"
+        ],
+        "input_types": [
+          "str"
+        ],
+        "outputs": [
+          "age"
+        ],
+        "output_types": [
+          "int"
+        ],
+        "target": "Retrieve the celebrity's age from the web data",
+        "mode": "PROMPT"
+      },
+      {
+        "task": "Extract the celebrity's age from web data",
+        "name": "scrape_celeb_data",
+        "inputs": [
+          "name"
+        ],
+        "input_types": [
+          "str"
+        ],
+        "outputs": [
+          "data"
+        ],
+        "output_types": [
+          "str"
+        ],
+        "target": "Extract the celebrity's information from web data",
+        "mode": "PROMPT"
+      },
+      {
+        "task": "Main function logic",
+        "name": "get_celeb_age",
+        "inputs": [
+          "name"
+        ],
+        "input_types": [
+          "str"
+        ],
+        "outputs": [
+          "age"
+        ],
+        "output_types": [
+          "int"
+        ],
+        "target": "Calculate the celebrity's age based on input validation and age extraction",
+        "mode": "CODE"
+      }
+    ],
+    "edges": [
+      {
+        "source": "is_empty",
+        "target": "get_celeb_age"
+      },
+      {
+        "source": "validate_name",
+        "target": "get_celeb_age"
+      },
+      {
+        "source": "get_celeb_age",
+        "target": "validate_name"
+      },
+      {
+        "source": "get_age_from_web",
+        "target": "get_celeb_age"
+      },
+      {
+        "source": "scrape_celeb_data",
+        "target": "get_age_from_web"
+      }
+    ]
+  }
+}

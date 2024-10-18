@@ -60,18 +60,25 @@ def check_alignment(pred_output: dict, target_output: dict, get_response: Option
 
 class EvolNode:
     
-    def __init__(self, meta_prompt: MetaPrompt, code: Optional[str] = None, reasoning: Optional[str] = None,
-                 get_response: Optional[Callable] = get_openai_response):
+    def __init__(self, meta_prompt: MetaPrompt, 
+                 code: Optional[str] = None, 
+                 reasoning: Optional[str] = None,
+                 get_response: Optional[Callable] = get_openai_response, 
+                 test_cases: Optional[List[Tuple[Dict, Dict]]] = None,
+                 fitness: float = 0.0):
         """ 
         Executable Task
         """
         self.code = code
         self.reasoning = reasoning
-        self.fitness = 0.0
+        self.fitness = fitness
         self.meta_prompt = meta_prompt
         self.test_cases = []
         self.get_response = get_response
-        
+        if test_cases is not None:
+            self.test_cases = test_cases
+        else:
+            self.get_test_cases(3) # generate 3 test cases for new node
         
     def _get_extend_test_cases_response(self, num_cases: int = 5, feedback: str = ""):
         if feedback != "":
@@ -110,6 +117,9 @@ class EvolNode:
         self.test_cases = filtered_cases
         
     def get_test_cases(self, num_cases: int = 100, feedback: str = ""):
+        """ 
+        Generate test cases for current node
+        """
         batch_case_amount = min(20, num_cases)
         max_attemp = 3 + int(num_cases / batch_case_amount)     
         curr_attemp = 1
@@ -338,22 +348,23 @@ class EvolNode:
             json.dump(node_data, f, indent=2)
 
     @classmethod 
-    def load(cls, node_name: str, library_dir: str = "methods/nodes/") -> 'EvolNode':
+    def load(cls, node_name: str, library_dir: str = "methods/nodes/", get_response: Optional[Callable] = get_openai_response) -> 'EvolNode':
         node_path = os.path.join(library_dir, f"{node_name}_node.json")
         with open(node_path, 'r') as f:
             node_data = json.load(f)
         meta_prompt = MetaPrompt.from_dict(node_data['meta_prompt'])  # Assuming MetaPrompt has a from_dict method
-        node = cls(meta_prompt=meta_prompt, code=node_data['code'], reasoning=node_data['reasoning'])
-        node.test_cases = [tuple([test_case['input'], test_case['expected_output']]) for test_case in node_data['test_cases']]
+        test_cases = [tuple([test_case['input'], test_case['expected_output']]) for test_case in node_data['test_cases']]
+        node = cls(meta_prompt=meta_prompt, code=node_data['code'], reasoning=node_data['reasoning'], test_cases=test_cases,
+                   get_response=get_response)
         return node
     
-    def context_str(self, sub_nodes: Optional[list] = None):
+    def context_str(self, sub_nodes: Optional[List['EvolNode']] = None):
         """ 
+        Add sub-node description in context for parent node re-write
         - Use sub-nodes to add sub-functions for current node
         - Format context for parent node re-write
         """
         raise NotImplementedError
-            
             
 
 
@@ -398,6 +409,7 @@ class PlanNode:
                 inputs=node.get("inputs"),
                 outputs=node.get("outputs"),
                 input_types=node.get("input_types"),
+                output_types=node.get("output_types"),
                 mode = PromptMode.PROMPT
             )
             prompt_nodes[node.get("name")] = EvolNode(meta_prompt=meta_prompt_node)
@@ -408,6 +420,7 @@ class PlanNode:
                 inputs=node.get("inputs"),
                 outputs=node.get("outputs"),
                 input_types=node.get("input_types"),
+                output_types=node.get("output_types"),
                 mode = PromptMode.CODE
             )
             code_nodes[node.get("name")] = EvolNode(meta_prompt=meta_code_node)
@@ -420,5 +433,48 @@ class PlanNode:
         """
         raise NotImplementedError
     
-    def save(self, library_dir: str = "methods/nodes/") -> None:
-        raise NotImplementedError
+    def save(self, library_dir: str = "methods/plans/") -> None:
+        """ 
+        Save plan_dict, as well as sub-nodes (if there is any ...)
+        """
+        # Create the directory if it doesn't exist
+        os.makedirs(library_dir, exist_ok=True)
+
+        # Save the plan details
+        plan_data = {
+            "meta_prompt": self.meta_prompt.to_dict(),  # Assuming MetaPlan has a to_dict method
+            "plan_dict": self._evolve_plan_dict()
+        }
+
+        plan_path = os.path.join(library_dir, f"{self.meta_prompt.func_name}_plan.json")
+        with open(plan_path, 'w') as f:
+            json.dump(plan_data, f, indent=2)
+
+        # Save sub-nodes if they exist
+        if self.nodes:
+            nodes_dir = os.path.join(library_dir, self.meta_prompt.func_name)
+            os.makedirs(nodes_dir, exist_ok=True)
+            for node in self.nodes:
+                node.save(nodes_dir)
+
+    @classmethod 
+    def load(cls, plan_name: str, plan_dir: str = "methods/plans/", get_response: Optional[Callable] = get_openai_response) -> 'PlanNode':
+        plan_path = os.path.join(plan_dir, f"{plan_name}_plan.json")
+        with open(plan_path, 'r') as f:
+            plan_data = json.load(f)
+
+        meta_plan = MetaPlan.from_dict(plan_data['meta_prompt'])  # Assuming MetaPlan has a from_dict method
+        plan_node = cls(meta_prompt=meta_plan)
+        plan_node.plan_dict = plan_data['plan_dict']
+
+        # Load sub-nodes if they exist
+        nodes_dir = os.path.join(plan_dir, plan_name)
+        if os.path.exists(nodes_dir):
+            plan_node.nodes = []
+            for node_file in os.listdir(nodes_dir):
+                if node_file.endswith('_node.json'):
+                    node_name = node_file[:-10]  # Remove '_node.json'
+                    node = EvolNode.load(node_name, nodes_dir, get_response)
+                    plan_node.nodes.append(node)
+
+        return plan_node

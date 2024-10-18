@@ -360,8 +360,27 @@ class MetaPlan:
         prompt_content += f"Pseudo Code:\n{code}\n\n"
         prompt_content += self._base_plan_graph_prompt
         return prompt_content
-
-
+    
+    def to_dict(self):
+        return {
+            "task": self.task,
+            "func_name": self.func_name,
+            "inputs": self.inputs,
+            "outputs": self.outputs,
+            "input_types": self.input_types,
+            "output_types": self.output_types
+        }
+        
+    @classmethod 
+    def from_dict(cls, data: dict):
+        return cls(
+            task=data["task"],
+            func_name=data["func_name"],
+            inputs=data["inputs"],
+            outputs=data["outputs"],
+            input_types=data["input_types"],
+            output_types=data["output_types"]
+        )
     
     # e1/e2/m1/m2 to be implemented
 
