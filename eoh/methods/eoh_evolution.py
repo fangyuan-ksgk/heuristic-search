@@ -295,6 +295,7 @@ class EvolNode:
                         issue_summary += f"Input: {test_input}, Wrong Prediction: {output_dict}, Expected: {test_output}\n"
                 else:
                     error_msg += error_msg_delta
+                    issue_summary += f"Input: {test_input}, Output is missing or of wrong type, Expected: {test_output}\n"
 
 
             elif self.meta_prompt.mode == PromptMode.PROMPT:
@@ -309,7 +310,8 @@ class EvolNode:
                         issue_summary += f"Input: {test_input}, Wrong Prediction: {output_dict}, Expected: {test_output}\n"
                 else:
                     error_msg += error_msg_delta
-                    
+                    issue_summary += f"Input: {test_input}, Output is missing or of wrong type, Expected: {test_output}\n"
+
             else:
                 raise ValueError(f"Unknown mode: {self.meta_prompt.mode}")
             
@@ -388,7 +390,15 @@ class EvolNode:
                    get_response=get_response)
         return node
     
-    def context_str(self, sub_nodes: Optional[List['EvolNode']] = None):
+    def query_nodes(self, task: str, top_k: int = 5) -> List['EvolNode']:
+        """ 
+        Query nodes from library
+        """
+        query_engine = QueryEngine()
+        nodes = query_engine.query_node(task, top_k)
+        return nodes
+    
+    def context_str(self, relevant_nodes: Optional[List['EvolNode']] = None):
         """ 
         Add sub-node description in context for parent node re-write
         - Use sub-nodes to add sub-functions for current node
@@ -416,9 +426,12 @@ class QueryEngine:
     def load_meta_prompts(self):
         meta_prompts = []
         for node_file in os.listdir(self.library_dir):
-            file_path = os.path.join(self.library_dir, node_file)
-            meta_prompt = MetaPrompt.from_json(file_path)
-            meta_prompts.append(meta_prompt)
+            if node_file.endswith("_node.json"):
+                file_path = os.path.join(self.library_dir, node_file)
+                with open(file_path, 'r') as f:
+                    node_data = json.load(f)
+                meta_prompt = MetaPrompt.from_dict(node_data['meta_prompt'])
+                meta_prompts.append(meta_prompt)
         return meta_prompts
 
     def _query_meta_prompt(self, task: str, top_k: int = 5) -> List[MetaPrompt]:
@@ -443,8 +456,7 @@ class QueryEngine:
     
     def query_node(self, task: str, top_k: int = 5) -> List['EvolNode']:
         meta_prompts = self._query_meta_prompt(task, top_k)
-        return [EvolNode(meta_prompt.task, meta_prompt.code) for meta_prompt in meta_prompts]
-    
+        return [EvolNode.load(meta_prompt.func_name) for meta_prompt in meta_prompts]
     
 
 
