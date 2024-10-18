@@ -240,6 +240,12 @@ def parse_evol_response(response: str):
 
 
 # Plan as a Graph (Ideally, current version fall-back to a chain of plan ....)
+pseudo_code_prompt = """ 
+Generate a python function with sub-functions to complete the goal. 
+Can use pseudo code for sub-functions with explicit input, input types, output types, and comments, but no implementations.
+"""
+
+
 plan_graph_prompt = """
 Generate a JSON-style plan represented as a Directed Acyclic Graph (DAG) to achieve the goal. Use creative topology in the DAG, include parallel tasks if required.
 
@@ -322,6 +328,11 @@ Provide the output in the following JSON structure:
 class MetaPlan:
     goal: str
     
+    @property 
+    def _pseudo_code_prompt(self):
+        prompt_content = pseudo_code_prompt
+        return prompt_content
+    
     @property
     def _base_prompt(self):
         prompt_content = f"First, describe the intuition for your tactics and main steps in one sentence. "\
@@ -336,8 +347,18 @@ class MetaPlan:
                 f"{eval_goal_prompt}"
         return prompt_content
     
+    def _get_prompt_i1_pseudo_code(self):
+        prompt_content = f"Goal: {self.goal}\n{self._pseudo_code_prompt}"
+        return prompt_content
+    
     def _get_prompt_i1(self):
         prompt_content = f"Goal: {self.goal}\n{self._base_prompt}"
+        return prompt_content
+    
+    def _get_prompt_i1_with_pseudo_code(self, code: str):
+        prompt_content = f"Goal: {self.goal}\n\n"
+        prompt_content += f"Pseudo Code:\n{code}\n\n"
+        prompt_content += self._base_prompt
         return prompt_content
     
     def _get_eval_prompt_i1(self):
@@ -419,6 +440,16 @@ def extract_json_from_text(text):
         
     raise ValueError(error_msg)
 
+
+def extract_python_code(response):
+    code_python_pattern = r'```python\s*(.*?)\s*```'
+    code_match = re.search(code_python_pattern, response, re.DOTALL)
+    if code_match:
+        code = code_match.group(1)
+        return code 
+    else:
+        print("No code block found in the response.")
+        return ""
 
 
 def parse_plan_graph(plan_dict: dict) -> dict:
