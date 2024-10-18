@@ -56,6 +56,7 @@ def check_alignment(pred_output: dict, target_output: dict, get_response: Option
 # - (get_prompt_xx) Evolution tactic specific prompt templating, used for generating node
 # - (_get_node) Get prompt response from LLM, parse node content (code, tool, prompt) 
 # - (xx) i1/e1/m1/m2/e2 Evolution search on node
+            
 
 
 class EvolNode:
@@ -381,6 +382,7 @@ class EvolNode:
         - Format context for parent node re-write
         """
         raise NotImplementedError
+    
             
 
 
