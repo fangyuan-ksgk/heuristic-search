@@ -335,10 +335,11 @@ class MetaPlan:
     def _base_pseudo_code_prompt(self):
         prompt_content = f"First, describe your new algorithm and main steps in one sentence."\
             f"The description must be inside a brace. Next implement it in Python as a pseudo function named {self.func_name}."\
-            f"This function should accept {len(self.inputs)} input(s): {self.joined_inputs} with types {', '.join(self.input_types)}. "\
-            f"The function should return {len(self.outputs)} output(s): {self.joined_outputs} with types {', '.join(self.output_types)}. "\
+            f"This function should accept {len(self.inputs)} input(s): {', '.join(self.inputs)} with types {', '.join(self.input_types)}. "\
+            f"The function should return {len(self.outputs)} output(s): {', '.join(self.outputs)} with types {', '.join(self.output_types)}. "\
             "Include sub-functions with explicit input, input types, output types, and comments."\
-            "Can use pseudo code for sub-functions with explicit input, input types, output types, and comments, but no implementations."
+            "Can use pseudo code for sub-functions with explicit input, input types, output types, and comments, but no implementations."\
+            "Example: \n```python\n#Your implementation\n```\n"
         return prompt_content
     
     @property
