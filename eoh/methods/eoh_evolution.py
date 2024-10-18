@@ -29,7 +29,7 @@ def clean_str(s: str) -> str:
     return ('\n').join(map(clean_line, s.split('\n')))
 
 
-def check_alignment(pred_output: dict, target_output: dict, get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
+def _check_alignment(pred_output: dict, target_output: dict, get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
     """ 
     Alignment checking with expected outputs with LLM
     - we have two dictionary, need to make sure they are aligned
@@ -45,8 +45,14 @@ def check_alignment(pred_output: dict, target_output: dict, get_response: Option
             if check_dict['aligned']:
                 return True
         except Exception as e:
-            print(f"Alignment check failed on try {i+1}, retrying...")
+            continue
     return False
+
+def check_alignment(pred_output: dict, target_output: dict, get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
+    try:
+        return _check_alignment(pred_output, target_output, get_response, max_tries), ""
+    except Exception as e:
+        return False, str(e)
 
 #####################################
 #        Evolution on Graph         #
@@ -207,43 +213,46 @@ class EvolNode:
         error_msg = ""
         for test_input in test_inputs:
         
-            if self.meta_prompt.mode == PromptMode.CODE:
-                try:
-                    output_value = call_func_code(test_input, code, self.meta_prompt.func_name, file_path=None)
+            if self.meta_prompt.mode == PromptMode.CODE:   
+                _, error_msg_delta = self.call_code_function(test_input, code, file_path=None)
+                if error_msg_delta == "":
                     passed_tests += 1
-                except Exception as e:
-                    error_msg += str(e)
+                else:
+                    error_msg += error_msg_delta
+                    
             elif self.meta_prompt.mode == PromptMode.PROMPT:
-                try:
-                    output_dict = call_func_prompt(test_input, code, self.get_response)
-                    [output_dict.get(output_name) for output_name in self.meta_prompt.outputs] # check for all outputs
+                _, error_msg_delta = self.call_prompt_function(test_input, code, self.get_response)
+                if error_msg_delta == "":
                     passed_tests += 1
-                except Exception as e:
-                    error_msg += str(e)
+                else:
+                    error_msg += error_msg_delta
             else:
                 raise ValueError(f"Unknown mode: {self.meta_prompt.mode}")
 
         return passed_tests / total_tests, error_msg
     
-    def call_prompt_func(self, test_input: Dict, code: Optional[str] = None, max_tries: int = 3):
-        if code is None:
-            code = self.code
-        for i in range(max_tries):
-            try:
-                output_dict = call_func_prompt(test_input, code, self.get_response)
-                return output_dict
-            except Exception as e:
-                continue 
-        raise ValueError(f"Failed to get dictionary output after {max_tries} attempts")
-    
-    def call_code_func(self, test_input: Dict, code: Optional[str] = None, file_path: Optional[str] = None):
+    def call_prompt_function(self, test_input: Dict, code: Optional[str] = None, max_tries: int = 3):
         if code is None:
             code = self.code
         
-        output_value = call_func_code(test_input, code, self.meta_prompt.func_name, file_path=file_path)
+        error_msg = set()
+        for i in range(max_tries):
+            output_dict, error_msg_delta = call_func_prompt(test_input, code, self.get_response)
+            if error_msg_delta == "":
+                return output_dict, ""
+            else:
+                error_msg.add(error_msg_delta)
+        error_msg = "--- Calling Prompt Function Error:\n" + "\n".join(list(error_msg))
+        return None, error_msg
+    
+    def call_code_function(self, test_input: Dict, code: Optional[str] = None, file_path: Optional[str] = None):
+        if code is None:
+            code = self.code
+        
+        output_value, error_msg = call_func_code(test_input, code, self.meta_prompt.func_name, file_path=file_path)
         output_name = self.meta_prompt.outputs[0]
         output_dict = {output_name: output_value}
-        return output_dict
+        return output_dict, error_msg
         
     
     def _evaluate_fitness(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, code: Optional[str] = None, 
@@ -269,38 +278,38 @@ class EvolNode:
         error_msg = ""
         issue_summary = ""
         for test_input, test_output in tqdm(test_cases, desc="Evaluating fitness"):
-        
+            
             if self.meta_prompt.mode == PromptMode.CODE:
-                try:
-                    output_dict = self.call_code_func(test_input, code, file_path=None)
+                
+                output_dict, error_msg_delta = self.call_code_function(test_input, code, file_path=None)
+                
+                if error_msg_delta == "":
                     compiled_tests += 1
+                    is_aligned, error_msg_delta2 = check_alignment(output_dict, test_output, self.get_response)
                     
-                    try: 
-                        is_aligned = check_alignment(output_dict, test_output, self.get_response)
-                        if is_aligned:
-                            passed_tests += 1
-                        if not is_aligned:
-                            issue_summary += f"Input: {test_input}, Pred: {output_dict}, Expected: {test_output}\n"
-                    except Exception as e:
-                        print("Alignment Check Mal-Functioning...")
-                    
-                except Exception as e:
-                    issue_summary += f"Given Input: {test_input}. Can't compile the code, error message is: {str(e)}\n"
-                    error_msg += str(e)
-                    
+                    if error_msg_delta2 != "":
+                        error_msg += error_msg_delta2
+                    elif is_aligned:
+                        passed_tests += 1
+                    else:
+                        issue_summary += f"Input: {test_input}, Wrong Prediction: {output_dict}, Expected: {test_output}\n"
+                else:
+                    error_msg += error_msg_delta
+
+
             elif self.meta_prompt.mode == PromptMode.PROMPT:
-                try:
-                    output_dict = self.call_prompt_func(test_input, code, max_tries)
-                    [output_dict.get(output_name) for output_name in self.meta_prompt.outputs] # check for all outputs
+                
+                output_dict, error_msg_delta = self.call_prompt_function(test_input, code, max_tries)
+                if error_msg_delta == "":
                     compiled_tests += 1
                     is_aligned = check_alignment(output_dict, test_output, self.get_response)
                     if is_aligned:
                         passed_tests += 1
                     if not is_aligned:
-                        issue_summary += f"Input: {test_input}, Pred: {output_dict}, Expected: {test_output}\n"
-                except Exception as e:
-                    issue_summary += f"Given Input: {test_input}. Can't parse output dictionary from LLM's response.\n"
-                    error_msg += str(e)
+                        issue_summary += f"Input: {test_input}, Wrong Prediction: {output_dict}, Expected: {test_output}\n"
+                else:
+                    error_msg += error_msg_delta
+                    
             else:
                 raise ValueError(f"Unknown mode: {self.meta_prompt.mode}")
             
@@ -312,7 +321,7 @@ class EvolNode:
         structural_fitness = compiled_tests / total_tests
         functional_fitness = passed_tests / total_tests
         
-        return structural_fitness, functional_fitness, issue_summary
+        return structural_fitness, functional_fitness, issue_summary + "\nError Message:\n" + error_msg
 
 
     def i1(self):
