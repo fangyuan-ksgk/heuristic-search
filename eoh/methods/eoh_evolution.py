@@ -75,6 +75,7 @@ class EvolNode:
         self.meta_prompt = meta_prompt
         self.test_cases = []
         self.get_response = get_response
+        
         if test_cases is not None:
             self.test_cases = test_cases
         else:
