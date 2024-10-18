@@ -34,7 +34,7 @@ def check_type(value, expected_type):
             return True
     
 
-def call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_path: str = None) -> Any:
+def _call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_path: str = None) -> Any:
     """ 
     Dynamic calling function defined in 'code' snippet
     - with support of external python file from 'file_name'
@@ -95,8 +95,17 @@ def call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_p
 
     return result
 
+def call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_path: str = None) -> Any:
+    """ 
+    With Error Message Output
+    """
+    try:
+        return _call_func_code(input_data, code, func_name, file_path), ""
+    except Exception as e:
+        return None, str(e)
 
-def call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callable):
+
+def _call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callable):
     """ 
     Prompt EvolNode forward propagation
     - Compile prompt with LLM and return the response
@@ -115,3 +124,13 @@ def call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callab
     except Exception as e:
         # print(f"Error in parsing LLM response: {e}\nResponse:\n{response}")
         raise ValueError(f"Failed to parse LLM response: {e}")
+    
+    
+def call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callable):
+    """ 
+    With Error Message Output
+    """
+    try:
+        return _call_func_prompt(input_data, code, get_response), ""
+    except Exception as e:
+        return None, str(e)
