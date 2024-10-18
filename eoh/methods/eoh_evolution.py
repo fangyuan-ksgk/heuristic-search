@@ -346,6 +346,16 @@ class EvolNode:
         node = cls(meta_prompt=meta_prompt, code=node_data['code'], reasoning=node_data['reasoning'])
         node.test_cases = [tuple([test_case['input'], test_case['expected_output']]) for test_case in node_data['test_cases']]
         return node
+    
+    def context_str(self, sub_nodes: Optional[list] = None):
+        """ 
+        - Use sub-nodes to add sub-functions for current node
+        - Format context for parent node re-write
+        """
+        raise NotImplementedError
+            
+            
+
 
 
 class PlanNode: 
@@ -362,6 +372,7 @@ class PlanNode:
         self.nodes = nodes
         
     def _evolve_plan_dict(self):
+        
         # Step 1: Generate Pseudo-Code for SubTask Decomposition
         prompt = self.meta_prompt._get_pseudo_code_prompt() # Pseudo-Code Prompt (Non-implemented functional)
         response = self.get_response(prompt) # Use Strong LLM to build up pseudo-code
@@ -404,4 +415,10 @@ class PlanNode:
         return prompt_nodes, code_nodes
     
     def evolve_node(self, node_id: str, method: str):
-       raise NotImplementedError
+        """ 
+        Evolve each node (pick the best between prompt and code ver.)
+        """
+        raise NotImplementedError
+    
+    def save(self, library_dir: str = "methods/nodes/") -> None:
+        raise NotImplementedError
