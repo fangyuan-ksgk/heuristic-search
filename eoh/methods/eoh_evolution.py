@@ -80,7 +80,7 @@ class EvolNode:
         else:
             self.get_test_cases(3) # generate 3 test cases for new node
         
-    def _get_extend_test_cases_response(self, num_cases: int = 5, feedback: str = ""):
+    def _get_extend_test_cases_response(self, num_cases: int = 1, feedback: str = ""):
         if feedback != "":
             eval_prompt = self.meta_prompt._get_eval_prompt_with_feedback(num_cases, feedback)
         else:
@@ -138,18 +138,27 @@ class EvolNode:
     @property 
     def test_inputs(self):
         return [case[0] for case in self.test_cases]
-
-
-    def _evolve(self, method: str, parents: list = None, replace=False, error_msg: str = ""):
-        """
-        Note: Evolution process will be decoupled with the fitness assignment process
-        """
+    
+    
+    def _get_evolve_response(self, method: str, error_msg: str = ""):
         prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
         prompt_content = prompt_method()
         prompt_content += error_msg # Append error message to the prompt
      
         response = self.get_response(prompt_content)
-        reasoning, code = parse_evol_response(response)
+        return response 
+
+    def _evolve(self, method: str, parents: list = None, replace=False, error_msg: str = ""):
+        """
+        Note: Evolution process will be decoupled with the fitness assignment process
+        """
+        response = self._get_evolve_response(method, error_msg)
+        
+        try:
+            reasoning, code = parse_evol_response(response)
+        except Exception as e:
+            print("Parse Response Failed...")
+            return None, None 
         
         if replace:
             self.reasoning, self.code = reasoning, code
@@ -224,13 +233,11 @@ class EvolNode:
     def call_code_func(self, test_input: Dict, code: Optional[str] = None, file_path: Optional[str] = None):
         if code is None:
             code = self.code
-        try:
-            output_value = call_func_code(test_input, code, self.meta_prompt.func_name, file_path=file_path)
-            output_name = self.meta_prompt.outputs[0]
-            output_dict = {output_name: output_value}
-            return output_dict
-        except Exception as e:
-            raise ValueError(f"Failed to get output value: {e}")
+        
+        output_value = call_func_code(test_input, code, self.meta_prompt.func_name, file_path=file_path)
+        output_name = self.meta_prompt.outputs[0]
+        output_dict = {output_name: output_value}
+        return output_dict
         
     
     def _evaluate_fitness(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, code: Optional[str] = None, 
@@ -238,6 +245,9 @@ class EvolNode:
         """ 
         Alignment checking with expected outputs with LLM
         """
+        if code is None:
+            return 0.0, 0.0, ""
+        
         if test_cases is None:
             test_cases = self.test_cases
             
@@ -258,13 +268,18 @@ class EvolNode:
                 try:
                     output_dict = self.call_code_func(test_input, code, file_path=None)
                     compiled_tests += 1
-                    is_aligned = check_alignment(output_dict, test_output, self.get_response)
-                    if is_aligned:
-                        passed_tests += 1
-                    if not is_aligned:
-                        issue_summary += f"Input: {test_input}, Pred: {output_dict}, Expected: {test_output}\n"
+                    
+                    try: 
+                        is_aligned = check_alignment(output_dict, test_output, self.get_response)
+                        if is_aligned:
+                            passed_tests += 1
+                        if not is_aligned:
+                            issue_summary += f"Input: {test_input}, Pred: {output_dict}, Expected: {test_output}\n"
+                    except Exception as e:
+                        print("Alignment Check Mal-Functioning...")
+                    
                 except Exception as e:
-                    issue_summary += f"Given Input: {test_input}. Can't parse output dictionary from LLM's response.\n"
+                    issue_summary += f"Given Input: {test_input}. Can't compile the code, error message is: {str(e)}\n"
                     error_msg += str(e)
                     
             elif self.meta_prompt.mode == PromptMode.PROMPT:

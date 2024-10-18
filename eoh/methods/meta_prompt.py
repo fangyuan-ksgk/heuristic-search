@@ -233,10 +233,9 @@ def parse_evol_response(response: str):
         else:
             reasoning = re.findall(r'^.*?(?=def)', response, re.DOTALL)
             
-    # Updated code extraction
-    code = re.findall(r"((?:import|def).*?(?:^return.*?$|^    return.*?$))", response, re.DOTALL | re.MULTILINE)
+    code = extract_python_funcions(response)
     
-    return clean_reasoning_str(reasoning[0]) if reasoning else "", code[0].strip() if code else ""
+    return clean_reasoning_str(reasoning[0]) if reasoning else "", code if code else ""
 
 
 # Plan as a Graph (Ideally, current version fall-back to a chain of plan ....)
@@ -467,6 +466,34 @@ def extract_python_code(response):
     else:
         print("No code block found in the response.")
         return ""
+    
+    
+def extract_imports_and_functions(code_str):
+    tree = ast.parse(code_str)
+    imports = []
+    functions = []
+    
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.append(f"import {alias.name}")
+        elif isinstance(node, ast.ImportFrom):
+            names = ", ".join(alias.name for alias in node.names)
+            imports.append(f"from {node.module} import {names}")
+        elif isinstance(node, ast.FunctionDef):
+            functions.append(ast.unparse(node))
+    
+    return imports, functions
+
+
+def extract_python_funcions(response: str) -> str:
+    """ 
+    Extract python snippet, use ast to extract functions and imports
+    """
+    code_str = extract_python_code(response)
+    imports, functions = extract_imports_and_functions(code_str)
+    code = "\n".join(imports + functions)
+    return code
 
 
 def parse_plan_graph(plan_dict: dict) -> dict:
