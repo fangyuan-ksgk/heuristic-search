@@ -2,11 +2,15 @@ from abc import ABC, abstractmethod
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
 from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT
 from .meta_execute import call_func_code, call_func_prompt
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+from typing import List, Dict
 from .llm import get_openai_response
 import re, os, json
 from tqdm import tqdm 
 from collections import defaultdict
 from typing import Optional, Dict, List, Callable, Tuple
+
 
 def map_input_output(test_case_list: List[dict], input_names: List[str], output_names: List[str]) -> List[Tuple[dict, dict]]:
     inputs = []
@@ -44,20 +48,20 @@ def check_alignment(pred_output: dict, target_output: dict, get_response: Option
             print(f"Alignment check failed on try {i+1}, retrying...")
     return False
 
-#################################
-#   Evolution on Graph          #
-#   - Node: Code, Prompt, Tool  #
-#   - Edge: Not Decided Yet     #
-#################################
+#####################################
+#        Evolution on Graph         #
+#-----------------------------------#
+# - Node: Code+Compiler, Prompt+LLM #
+# - Node tries to complete task     #
+# - PlanNode breaks down tasks      #
+#####################################
 
-
-# Evolution: 
-# - (Hyper-parameter) Meta-Heuristic: Task, FuncName, Input, Output
-# - (get_prompt_xx) Evolution tactic specific prompt templating, used for generating node
-# - (_get_node) Get prompt response from LLM, parse node content (code, tool, prompt) 
-# - (xx) i1/e1/m1/m2/e2 Evolution search on node
-            
-
+# Focus: 
+# - Node retrieve relevant node from Node database 
+# - Node tries to complete, if failed, a PlanNode helps breaking down the task 
+# - Nodes are then created for each sub-task. 
+# - Game on ....
+# - No gradient info available, genetic search is adopted here. 
 
 class EvolNode:
     
@@ -383,8 +387,56 @@ class EvolNode:
         """
         raise NotImplementedError
     
+    
+    def __repr__(self):
+        return self.meta_prompt._desc_prompt()
+    
             
 
+
+
+class QueryEngine:
+    """
+    QueryEngine is used to query the meta prompts from the library
+    """
+    def __init__(self, library_dir: str = "methods/nodes/"):
+        self.library_dir = library_dir
+        self.sentence_transformer = SentenceTransformer('all-MiniLM-L6-v2')
+        self.meta_prompts = self.load_meta_prompts()
+
+    def load_meta_prompts(self):
+        meta_prompts = []
+        for node_file in os.listdir(self.library_dir):
+            file_path = os.path.join(self.library_dir, node_file)
+            meta_prompt = MetaPrompt.from_json(file_path)
+            meta_prompts.append(meta_prompt)
+        return meta_prompts
+
+    def _query_meta_prompt(self, task: str, top_k: int = 5) -> List[MetaPrompt]:
+        """
+        Query node json from library path and return top-k nodes
+        """
+        # Encode the task query
+        query_embedding = self.sentence_transformer.encode(task)
+
+        # Compute similarities between the query and all meta prompts
+        similarities = []
+        for meta_prompt in self.meta_prompts:
+            prompt_embedding = self.sentence_transformer.encode(meta_prompt.task)
+            similarity = cosine_similarity([query_embedding], [prompt_embedding])[0][0]
+            similarities.append((meta_prompt, similarity))
+
+        # Sort by similarity and get top-k results
+        top_k_results = sorted(similarities, key=lambda x: x[1], reverse=True)[:top_k]
+
+        # Return the top-k meta prompts as dictionaries
+        return [meta_prompt for meta_prompt, _ in top_k_results]
+    
+    def query_node(self, task: str, top_k: int = 5) -> List['EvolNode']:
+        meta_prompts = self._query_meta_prompt(task, top_k)
+        return [EvolNode(meta_prompt.task, meta_prompt.code) for meta_prompt in meta_prompts]
+    
+    
 
 
 class PlanNode: 
