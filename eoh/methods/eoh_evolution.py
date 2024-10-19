@@ -1,14 +1,12 @@
 from abc import ABC, abstractmethod
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
 from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT
-from .meta_execute import call_func_code, call_func_prompt
+from .meta_execute import call_func_code, call_func_prompt, compile_code_with_references
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import List, Dict
 from .llm import get_openai_response
 import re, os, json
-import ast
-import astor
 from tqdm import tqdm 
 from collections import defaultdict
 from typing import Optional, Dict, List, Callable, Tuple
@@ -31,86 +29,114 @@ def clean_str(s: str) -> str:
     return ('\n').join(map(clean_line, s.split('\n')))
 
 
-def _check_alignment(pred_output: dict, target_output: dict, get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
+def require_llm_metric(value) -> bool:
+    if isinstance(value, int): 
+        return False
+    elif isinstance(value, float):
+        return False
+    else:
+        return True
+
+def type_to_metric(value) -> Callable:
+    if isinstance(value, int): 
+        return lambda x, y: abs(x - y) <= 1
+    elif isinstance(value, float):
+        return lambda x, y: abs(x - y) <= 0.001
+    else:
+        return lambda x, y: True
+
+
+def _check_alignment_with_metric(pred_output: dict, target_output: dict):
+    """ 
+    Input prediction & target dictionary, design algorithm for specific output value types' matching
+    """
+    error_msg = ""
+    for key, target_value in target_output.items():
+        if key not in pred_output:
+            error_msg += f"Key {key} not found in prediction output\n"
+        pred_value = pred_output[key]
+        metric = type_to_metric(target_value)
+        if not metric(pred_value, target_value):
+            error_msg += f"Value mismatch for key {key}: {pred_value} != {target_value}\n"
+            
+    if error_msg == "":
+        return True, ""
+    else:
+        return False, error_msg
+
+
+def _check_alignment_with_llm(pred_output: dict, target_output: dict, get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
     """ 
     Alignment checking with expected outputs with LLM
-    - we have two dictionary, need to make sure they are aligned
-    - 1. they have same keys 
-    - 2. their values are 'basically the same'
     """
-    
+    error_msg = ""
     prompt = ALIGNMENT_CHECK_PROMPT.format(pred_output=pred_output, target_output=target_output)
+
+    trimmed_pred_output = {k: v for k, v in pred_output.items() if require_llm_metric(v)}
+    trimmed_target_output = {k: v for k, v in target_output.items() if require_llm_metric(v)}
+    
+    if len(trimmed_pred_output) == 0 and len(trimmed_target_output) == 0:
+        return True, ""
+    
+    # Update the prompt with trimmed outputs
+    prompt = ALIGNMENT_CHECK_PROMPT.format(pred_output=trimmed_pred_output, target_output=trimmed_target_output)
     for i in range(max_tries):
         try:
             response = get_response(prompt)
             check_dict = extract_json_from_text(response)
             if check_dict['aligned']:
-                return True
+                return True, ""
+            else:
+                return False, "--- LLM-Evaluation concludes prediction is not aligned with target output"
         except Exception as e:
-            continue
-    return False
+            error_msg = "--- Parsing LLM Evaluation Failed: " + str(e)
+            
+    return False, error_msg
 
 def check_alignment(pred_output: dict, target_output: dict, get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
-    try:
-        return _check_alignment(pred_output, target_output, get_response, max_tries), ""
-    except Exception as e:
-        return False, str(e)
+    """ 
+    Alignment checking with expected outputs with LLM
+    - we have two dictionary, need to make sure they are aligned
+    - 1. they have same keys 
+    - 2. their values are 'basically the same'
+    
+    Fix: For integer output, use exact match metric instead for alignment check
+    """
+    error_msg = ""
+    
+    # 1. Metric-based alignment check 
+    _, error_msg_delta = _check_alignment_with_metric(pred_output, target_output)
+    error_msg += error_msg_delta
     
     
-def clean_up_ast_tree(new_tree):
-    # Sort imports and remove duplicates
-    import_nodes = []
-    other_nodes = []
+    # 2. LLM-based alignment check 
+    _, error_msg_delta = _check_alignment_with_llm(pred_output, target_output, get_response, max_tries)
+    error_msg += error_msg_delta
     
-    for node in new_tree.body:
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            if not any(astor.to_source(node) == astor.to_source(existing) for existing in import_nodes):
-                import_nodes.append(node)
-        else:
-            other_nodes.append(node)
+    if error_msg == "":
+        return True, ""
+    else:
+        return False, error_msg
     
-    # Sort import nodes
-    import_nodes.sort(key=lambda x: x.names[0].name if isinstance(x, ast.Import) else x.module)
     
-    # Reconstruct the AST with sorted imports at the top
-    new_tree.body = import_nodes + other_nodes
+class Fitness: 
     
-    return new_tree
-
-def compile_code_with_references(node_code, referrable_function_dict):
-    tree = ast.parse(node_code)
-    
-    added_functions = set()
-    
-    class ReferenceReplacer(ast.NodeTransformer):
-        def visit_Import(self, node):
-            return None if any(alias.name in referrable_function_dict for alias in node.names) else node
+    def __init__(self, structural_fitness: float, functional_fitness: float):
+        self.structural_fitness = structural_fitness
+        self.functional_fitness = functional_fitness
         
-        def visit_ImportFrom(self, node):
-            return None if node.module in referrable_function_dict else node
-        
-        def visit_FunctionDef(self, node):
-            if node.name in referrable_function_dict and node.name not in added_functions:
-                new_func = ast.parse(referrable_function_dict[node.name]).body[0]
-                added_functions.add(node.name)
-                return new_func
-            return node
-        
-        def visit_Call(self, node):
-            if isinstance(node.func, ast.Name):
-                if node.func.id in referrable_function_dict and node.func.id not in added_functions:
-                    added_functions.add(node.func.id)
-            return node
-
-    new_tree = ReferenceReplacer().visit(tree)
+    def __call__(self):
+        return (self.structural_fitness + self.functional_fitness) / 2
     
-    for func_name in added_functions:
-        new_func_tree = ast.parse(referrable_function_dict[func_name])
-        new_tree.body = new_func_tree.body + new_tree.body
-        new_tree = clean_up_ast_tree(new_tree)
-
-    new_code = astor.to_source(new_tree)
-    return new_code
+    def __str__(self):
+        if self.structural_fitness <= 0.2:
+            return "This node has no idea of what's going on"
+        if self.structural_fitness >= 0.8 and self.functional_fitness <= 0.2:
+            return "This function runs, but never correctly"
+        return f"Function runs with success rate: {self.structural_fitness*100:.1f}%, runs correctly with rate: {self.functional_fitness*100:.1f}%"
+            
+        
+    
 
 #####################################
 #        Evolution on Graph         #
@@ -248,14 +274,19 @@ class EvolNode:
         
         # Evolve many times
         for attempt in range(max_attempts):
-            reasoning, code = self._evolve(method, parents, replace=False)    
+            reasoning, code = self._evolve(method, parents, replace=False) 
+            self.tmp_code = code   
             fitness, error_msg = self._evaluate_fitness(code=code, max_tries=1, num_runs=num_runs)            
             
+            print(f"--- Fitness: {fitness:.2f}")
             if fitness >= self.fitness:
                 if replace:
                     print("--- Replacing with new node")
                     self.reasoning, self.code = reasoning, code
+                    self.fitness = fitness # update fitness since you update the code and reasoing
+                    
             if fitness >= fitness_threshold:
+                print("--- Fitness threshold reached")
                 return reasoning, code
             
             # If not successful, log the attempt
@@ -350,6 +381,7 @@ class EvolNode:
                 
                 if error_msg_delta == "":
                     compiled_tests += 1
+                    # Issue seems to be empty output_dict obtained in here. It might be that the code function deliberately returns None
                     is_aligned, error_msg_delta2 = check_alignment(output_dict, test_output, self.get_response)
                     
                     if error_msg_delta2 != "":
@@ -387,8 +419,9 @@ class EvolNode:
 
         structural_fitness = compiled_tests / total_tests
         functional_fitness = passed_tests / total_tests
+        fitness = Fitness(structural_fitness, functional_fitness)
         
-        return functional_fitness + structural_fitness, issue_summary + "\nError Message:\n" + error_msg
+        return fitness(), f" {str(fitness)}\n" + issue_summary + "\nError Message:\n" + error_msg
 
 
     def i1(self):

@@ -5,6 +5,9 @@ from .meta_prompt import extract_json_from_text
 from typing import Any, get_type_hints, Dict
 import inspect
 from typing import get_origin, get_args
+import ast 
+import astor 
+import re 
 
 
 def check_type(value, expected_type):
@@ -134,3 +137,88 @@ def call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callab
         return _call_func_prompt(input_data, code, get_response), ""
     except Exception as e:
         return None, str(e)
+    
+    
+
+def clean_up_ast_tree(new_tree):
+    # Sort imports and remove duplicates
+    import_nodes = []
+    other_nodes = []
+    
+    for node in new_tree.body:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            if not any(astor.to_source(node) == astor.to_source(existing) for existing in import_nodes):
+                import_nodes.append(node)
+        else:
+            other_nodes.append(node)
+    
+    # Sort import nodes
+    import_nodes.sort(key=lambda x: x.names[0].name if isinstance(x, ast.Import) else x.module)
+    
+    # Reconstruct the AST with sorted imports at the top
+    new_tree.body = import_nodes + other_nodes
+    
+    return new_tree
+
+
+def include_func_check(original_code, referrable_function_dict):
+    """ 
+    The AST parsing somehow misses out function call, this is to patch that issue with regex
+    """
+    need_include_func = []
+    for (func_name, func_code) in referrable_function_dict.items():
+        func_call_pattern = rf"(?<!def\s){re.escape(func_name)}\s*\("
+        if re.search(func_call_pattern, original_code):
+            # Function is called in the code, so we need to include its definition
+            need_include_func.append(func_name)
+    return need_include_func
+
+
+def compile_code_with_references(node_code, referrable_function_dict):
+    """ 
+    Compile code with references to other functions
+    """
+    tree = ast.parse(node_code)
+    
+    added_functions = set()
+    
+    class ReferenceReplacer(ast.NodeTransformer):
+        def visit_Import(self, node):
+            return None if any(alias.name in referrable_function_dict for alias in node.names) else node
+        
+        def visit_ImportFrom(self, node):
+            return None if node.module in referrable_function_dict else node
+        
+        def visit_FunctionDef(self, node):
+            if node.name in referrable_function_dict and node.name not in added_functions:
+                new_func = ast.parse(referrable_function_dict[node.name]).body[0]
+                added_functions.add(node.name)
+                return new_func
+            return node            
+        
+        def visit_Call(self, node):
+            if isinstance(node.func, ast.Name):
+                func_name = node.func.id
+                if func_name in referrable_function_dict and func_name not in added_functions:
+                    added_functions.add(func_name)
+            return node
+
+    new_tree = ReferenceReplacer().visit(tree)
+    
+    # Add all referenced functions to the beginning of the tree
+    for func_name in added_functions:
+        new_func_tree = ast.parse(referrable_function_dict[func_name])
+        new_tree.body = new_func_tree.body + new_tree.body
+        
+    # Patch
+    patch_functions = include_func_check(node_code, referrable_function_dict)
+    for func_name in patch_functions:
+        if func_name not in added_functions:
+            added_functions.add(func_name)
+            new_func_tree = ast.parse(referrable_function_dict[func_name])
+            new_tree.body = new_func_tree.body + new_tree.body
+
+    new_tree = clean_up_ast_tree(new_tree)
+
+    new_code = astor.to_source(new_tree)
+    return new_code
