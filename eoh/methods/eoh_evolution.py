@@ -249,10 +249,11 @@ class EvolNode:
         # Evolve many times
         for attempt in range(max_attempts):
             reasoning, code = self._evolve(method, parents, replace=False)    
-            _, fitness, error_msg = self._evaluate_fitness(code=code, max_tries=1, num_runs=num_runs)            
+            fitness, error_msg = self._evaluate_fitness(code=code, max_tries=1, num_runs=num_runs)            
             
             if fitness >= self.fitness:
                 if replace:
+                    print("--- Replacing with new node")
                     self.reasoning, self.code = reasoning, code
             if fitness >= fitness_threshold:
                 return reasoning, code
@@ -325,7 +326,7 @@ class EvolNode:
         Alignment checking with expected outputs with LLM
         """
         if code is None:
-            return 0.0, 0.0, ""
+            return 0.0, ""
         
         if test_cases is None:
             test_cases = self.test_cases
@@ -387,7 +388,7 @@ class EvolNode:
         structural_fitness = compiled_tests / total_tests
         functional_fitness = passed_tests / total_tests
         
-        return structural_fitness, functional_fitness, issue_summary + "\nError Message:\n" + error_msg
+        return functional_fitness + structural_fitness, issue_summary + "\nError Message:\n" + error_msg
 
 
     def i1(self):
