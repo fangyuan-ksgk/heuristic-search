@@ -7,6 +7,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 from typing import List, Dict
 from .llm import get_openai_response
 import re, os, json
+import ast
+import astor
 from tqdm import tqdm 
 from collections import defaultdict
 from typing import Optional, Dict, List, Callable, Tuple
@@ -53,6 +55,62 @@ def check_alignment(pred_output: dict, target_output: dict, get_response: Option
         return _check_alignment(pred_output, target_output, get_response, max_tries), ""
     except Exception as e:
         return False, str(e)
+    
+    
+def clean_up_ast_tree(new_tree):
+    # Sort imports and remove duplicates
+    import_nodes = []
+    other_nodes = []
+    
+    for node in new_tree.body:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            if not any(astor.to_source(node) == astor.to_source(existing) for existing in import_nodes):
+                import_nodes.append(node)
+        else:
+            other_nodes.append(node)
+    
+    # Sort import nodes
+    import_nodes.sort(key=lambda x: x.names[0].name if isinstance(x, ast.Import) else x.module)
+    
+    # Reconstruct the AST with sorted imports at the top
+    new_tree.body = import_nodes + other_nodes
+    
+    return new_tree
+
+def compile_code_with_references(node_code, referrable_function_dict):
+    tree = ast.parse(node_code)
+    
+    added_functions = set()
+    
+    class ReferenceReplacer(ast.NodeTransformer):
+        def visit_Import(self, node):
+            return None if any(alias.name in referrable_function_dict for alias in node.names) else node
+        
+        def visit_ImportFrom(self, node):
+            return None if node.module in referrable_function_dict else node
+        
+        def visit_FunctionDef(self, node):
+            if node.name in referrable_function_dict and node.name not in added_functions:
+                new_func = ast.parse(referrable_function_dict[node.name]).body[0]
+                added_functions.add(node.name)
+                return new_func
+            return node
+        
+        def visit_Call(self, node):
+            if isinstance(node.func, ast.Name):
+                if node.func.id in referrable_function_dict and node.func.id not in added_functions:
+                    added_functions.add(node.func.id)
+            return node
+
+    new_tree = ReferenceReplacer().visit(tree)
+    
+    for func_name in added_functions:
+        new_func_tree = ast.parse(referrable_function_dict[func_name])
+        new_tree.body = new_func_tree.body + new_tree.body
+        new_tree = clean_up_ast_tree(new_tree)
+
+    new_code = astor.to_source(new_tree)
+    return new_code
 
 #####################################
 #        Evolution on Graph         #
@@ -86,6 +144,7 @@ class EvolNode:
         self.meta_prompt = meta_prompt
         self.test_cases = []
         self.get_response = get_response
+        self.relevant_nodes = []
         
         if test_cases is not None:
             self.test_cases = test_cases
@@ -152,22 +211,24 @@ class EvolNode:
         return [case[0] for case in self.test_cases]
     
     
-    def _get_evolve_response(self, method: str, error_msg: str = ""):
+    def _get_evolve_response(self, method: str, feedback: str = ""):
         prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
         prompt_content = prompt_method()
-        prompt_content += error_msg # Append error message to the prompt
+        prompt_content += self.relevant_node_desc
+        prompt_content += "\nIdea: " + feedback # External Guidance (perhaps we should reddit / stackoverflow this thingy)
      
         response = self.get_response(prompt_content)
         return response 
 
-    def _evolve(self, method: str, parents: list = None, replace=False, error_msg: str = ""):
+    def _evolve(self, method: str, parents: list = None, replace=False, feedback: str = ""):
         """
         Note: Evolution process will be decoupled with the fitness assignment process
         """
-        response = self._get_evolve_response(method, error_msg)
+        response = self._get_evolve_response(method, feedback)
         
         try:
             reasoning, code = parse_evol_response(response)
+            code = compile_code_with_references(code, self.referrable_function_dict) # deal with node references
         except Exception as e:
             print("Parse Response Failed...")
             return None, None 
@@ -176,13 +237,16 @@ class EvolNode:
             self.reasoning, self.code = reasoning, code
         return reasoning, code
     
-    def evolve(self, method: str, parents: list = None, replace=False, max_attempts: int = 5, fitness_threshold: float = 0.8, num_runs: int = 5):
+    def evolve(self, method: str, parents: list = None, replace=False, feedback: str = "", max_attempts: int = 5, fitness_threshold: float = 0.8, num_runs: int = 5):
         """
         Evolve node and only accept structurally fit solutions
         Attempts multiple evolutions before returning the final output
         """
         
+        # Query once 
+        self.query_nodes()
         
+        # Evolve many times
         for attempt in range(max_attempts):
             reasoning, code = self._evolve(method, parents, replace=False)    
             _, fitness, error_msg = self._evaluate_fitness(code=code, max_tries=1, num_runs=num_runs)            
@@ -390,13 +454,24 @@ class EvolNode:
                    get_response=get_response)
         return node
     
-    def query_nodes(self, task: str, top_k: int = 5) -> List['EvolNode']:
+    def query_nodes(self, top_k: int = 5) -> List['EvolNode']:
         """ 
         Query nodes from library
         """
         query_engine = QueryEngine()
-        nodes = query_engine.query_node(task, top_k)
-        return nodes
+        self.relevant_nodes = query_engine.query_node(self.meta_prompt.task, top_k)
+        
+    @property 
+    def relevant_node_desc(self):
+        if len(self.relevant_nodes) == 0:
+            return ""
+        return "Available functions for use:\n" + "\n".join([node.__repr__() for node in self.relevant_nodes])
+        
+    @property
+    def referrable_function_dict(self):
+        referrable_function_dict = {node.meta_prompt.func_name: node.code for node in self.relevant_nodes} # name to code of referrable functions 
+        return referrable_function_dict
+    
     
     def context_str(self, relevant_nodes: Optional[List['EvolNode']] = None):
         """ 
