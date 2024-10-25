@@ -39,9 +39,9 @@ def require_llm_metric(value) -> bool:
 
 def type_to_metric(value) -> Callable:
     if isinstance(value, int): 
-        return lambda x, y: abs(x - y) <= 1
+        return lambda x, y: abs(int(x) - y) <= 1 if int(x) else False
     elif isinstance(value, float):
-        return lambda x, y: abs(x - y) <= 0.001
+        return lambda x, y: abs(float(x) - y) <= 0.001 if float(x) else False
     else:
         return lambda x, y: True
 
@@ -270,7 +270,7 @@ class EvolNode:
         """
         
         # Query once 
-        self.query_nodes()
+        self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
         
         # Evolve many times
         for attempt in range(max_attempts):
@@ -488,12 +488,12 @@ class EvolNode:
                    get_response=get_response)
         return node
     
-    def query_nodes(self, top_k: int = 5) -> List['EvolNode']:
+    def query_nodes(self, top_k: int = 5, ignore_self: bool = False, self_func_name: str = None) -> List['EvolNode']:
         """ 
         Query nodes from library
         """
-        query_engine = QueryEngine()
-        self.relevant_nodes = query_engine.query_node(self.meta_prompt.task, top_k)
+        query_engine = QueryEngine(ignore_self=ignore_self, self_func_name=self_func_name)
+        self.relevant_nodes = query_engine.query_node(self.meta_prompt.task)
         
     @property 
     def relevant_node_desc(self):
@@ -527,10 +527,13 @@ class QueryEngine:
     """
     QueryEngine is used to query the meta prompts from the library
     """
-    def __init__(self, library_dir: str = "methods/nodes/"):
+    def __init__(self, library_dir: str = "methods/nodes/", ignore_self: bool = False, self_func_name: str = None):
         self.library_dir = library_dir
         self.sentence_transformer = SentenceTransformer('all-MiniLM-L6-v2')
+        self.ignore_self = ignore_self
+        self.self_func_name = self_func_name
         self.meta_prompts = self.load_meta_prompts()
+        
 
     def load_meta_prompts(self):
         meta_prompts = []
@@ -540,6 +543,8 @@ class QueryEngine:
                 with open(file_path, 'r') as f:
                     node_data = json.load(f)
                 meta_prompt = MetaPrompt.from_dict(node_data['meta_prompt'])
+                if self.ignore_self and meta_prompt.func_name == self.self_func_name:
+                    continue
                 meta_prompts.append(meta_prompt)
         return meta_prompts
 
