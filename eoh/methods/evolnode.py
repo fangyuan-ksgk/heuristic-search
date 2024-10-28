@@ -38,12 +38,29 @@ def require_llm_metric(value) -> bool:
         return True
 
 def type_to_metric(value) -> Callable:
+    
+    def integer_metric(x, y: int):
+        try:
+            x_int = int(x)
+        except:
+            err_msg = f"Value {x} can't be converted into integer"
+            return False, err_msg
+        return abs(x_int - y) <= 1, ""
+    
+    def float_metric(x, y: float):
+        try:
+            x_float = float(x)
+        except:
+            err_msg = f"Value {x} can't be converted into float"
+            return False, err_msg
+        return abs(x_float - y) <= 0.001, ""
+    
     if isinstance(value, int): 
-        return lambda x, y: abs(int(x) - y) <= 1 if int(x) else False
+        return integer_metric
     elif isinstance(value, float):
-        return lambda x, y: abs(float(x) - y) <= 0.001 if float(x) else False
+        return float_metric
     else:
-        return lambda x, y: True
+        return lambda x, y: True, ""
 
 
 def _check_alignment_with_metric(pred_output: dict, target_output: dict):
@@ -57,7 +74,8 @@ def _check_alignment_with_metric(pred_output: dict, target_output: dict):
             return False, error_msg
         
         pred_value = pred_output[key]
-        metric = type_to_metric(target_value)
+        metric, error_msg_delta = type_to_metric(target_value)
+        error_msg += "\n" + error_msg_delta
         if not metric(pred_value, target_value):
             error_msg += f"Value mismatch for key {key}: {pred_value} != {target_value}\n"
             return False, error_msg
@@ -108,6 +126,8 @@ def check_alignment(pred_output: dict, target_output: dict, get_response: Option
     _, error_msg_delta = _check_alignment_with_metric(pred_output, target_output)
     error_msg += error_msg_delta
     
+    if error_msg != "":
+        return False, error_msg
     
     # 2. LLM-based alignment check 
     _, error_msg_delta = _check_alignment_with_llm(pred_output, target_output, get_response, max_tries)
