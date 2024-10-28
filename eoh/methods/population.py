@@ -21,14 +21,14 @@ class Evolution:
     def __init__(self, pop_size: int, meta_prompt: MetaPrompt, get_response: Callable, test_cases: Optional[list] = None, max_attempts: int = 3, num_eval_runs: int = 1): 
         self.pop_size = pop_size
         self.meta_prompt = meta_prompt
-        self.evol = EvolNode(meta_prompt, None, None, get_response=get_response)
+        self.evol = EvolNode(meta_prompt, None, None, get_response=get_response, test_cases=test_cases)
         self.max_attempts = max_attempts
         self.num_eval_runs = num_eval_runs
         
     def check_duplicate(self, population, code):
         return any(code == ind['code'] for ind in population)
             
-    def _get_offspring(self, pop, operator):
+    def _get_offspring(self, operator, pop: list = []):
         """ 
         Generate one offspring using specific operator 
         - Select parent
@@ -37,7 +37,7 @@ class Evolution:
         
         offspring = {"reasoning": None, "code": None, "goal": None, "fitness": None}
         parents = parent_selection(pop, self.m) if operator != "i1" else None
-        
+                
         if operator == "i1":
             self.evol.i1(replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["goal"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.goal, self.evol.fitness
