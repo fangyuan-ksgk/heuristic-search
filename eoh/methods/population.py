@@ -39,11 +39,14 @@ class Evolution:
         parents = parent_selection(pop, self.m) if operator != "i1" else None
                 
         if operator == "i1":
-            self.evol.i1(replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
+            self.evol.evolve("i1", replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["goal"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.goal, self.evol.fitness
         else: 
-            get_method = getattr(self.evol, operator)
-            get_method(parents)
+            self.evol.evolve(operator, parents, replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["goal"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.goal, self.evol.fitness
          
-        # Issue: for crossover, we need to inform operator of other parent's information, so that operation should not be in EvolNode class (?)
+        # add offspring to population
+        if not self.check_duplicate(pop, offspring["code"]):
+            pop.append(offspring)
+            
+        return pop
