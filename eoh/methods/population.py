@@ -1,12 +1,18 @@
 import numpy as np
-from .eoh_evolution import EvolGraph, EvolNode
+from .evolnode import EvolGraph, EvolNode
 from joblib import Parallel, delayed
 import concurrent.futures
+
+
+# Managing population of evolving nodes 
+# - Natural selection 
+# - Offspring generation
+
 
 class InterfaceEC():
     def __init__(self, pop_size: int, m: int,
                  goal: str,
-                 select,  # Special selection class
+                 select,  # Special selection class | where does this come from?
                  n_p: int, timeout: int, use_numba: bool, **kwargs):
         
         self.pop_size = pop_size

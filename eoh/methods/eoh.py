@@ -1,6 +1,6 @@
 import json
 import random
-from .eoh_interface_EC import InterfaceEC
+from .population import InterfaceEC
 
 class EOH:
     def __init__(self, paras, problem, select, manage):

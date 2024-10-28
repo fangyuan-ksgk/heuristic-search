@@ -4,7 +4,7 @@ from .meta_prompt import MetaPrompt
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import List, Dict
-from .eoh_evolution import EvolNode
+from .evolnode import EvolNode
 
 
 class QueryEngine:
