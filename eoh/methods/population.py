@@ -11,8 +11,29 @@ from typing import List, Optional
 
 # Ideally 
 
-def parent_selection(pop: List[EvolNode], m): 
-    raise NotImplementedError
+def parent_selection(pop: List[EvolNode], m: int) -> List[dict]:
+    """
+    Select m parents from the population using tournament selection.
+    
+    Args:
+        pop: List of dictionaries containing individuals with their properties
+        m: Number of parents to select
+        tournament_size: Number of individuals to compete in each tournament
+    
+    Returns:
+        List of selected parent dictionaries
+    """
+    selected_parents = []
+    tournament_size = len(pop) // m # Dynamic tournament size!
+
+    for _ in range(m):
+        # Each tournament now looks at population_size/m individuals
+        tournament = np.random.choice(pop, size=max(2, tournament_size), replace=False)
+        winner = max(tournament, key=lambda x: x['fitness'] if x['fitness'] is not None else float('-inf'))
+        selected_parents.append(winner)
+    
+    return selected_parents
+
 
 # Evolution process will keep populations of EvolNodes
 # - I see the point now, we don't need to use multiple EvolNode for its evolution process, the MetaPromp is designed to incorporate all required information already ...
