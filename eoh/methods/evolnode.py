@@ -446,25 +446,22 @@ class EvolNode:
         TBD: Stricter input / output type checking to ensure composibility
         """
         if self.meta_prompt.mode == PromptMode.CODE:
-            output_value = call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None) # TODO: extend to multiple outputs ...
+            output_value, err_msg = call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None) # TODO: extend to multiple outputs ...
             output_name = self.meta_prompt.outputs[0]
-            return {output_name: output_value}
+            return {output_name: output_value} # assuming single output for code-based node
+        
         elif self.meta_prompt.mode == PromptMode.PROMPT:
             output_name = self.meta_prompt.outputs[0]
             
             errors = []
             for attempt in range(max_attempts):
-                try:
-                    output_dict = call_func_prompt(inputs, self.code, self.get_response)
-                    output_value = output_dict.get(output_name, None)  # We don't like surprises
-                    if output_value is None:
-                        raise ValueError(f"Output value for {output_name} is None")
-                    return {output_name: output_value}
-                except Exception as e:
-                    errors.append(str(e))
-                    if attempt == max_attempts - 1:
-                        error_msg = "; ".join(errors)
-                        raise ValueError(f"Failed to get output after {max_attempts} attempts: {error_msg}")
+                output_dict, err_msg = call_func_prompt(inputs, self.code, self.get_response)
+                output_value = output_dict.get(output_name, None) 
+                if output_value is None:
+                    value_error_msg = f"Output value for {output_name} is None"
+                    errors.append(err_msg + "\n" + value_error_msg)
+                else:
+                    return output_dict
         
     def save(self, library_dir: str = "methods/nodes/") -> None:
         node_data = {
