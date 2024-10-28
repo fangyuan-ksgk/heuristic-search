@@ -74,9 +74,11 @@ def _check_alignment_with_metric(pred_output: dict, target_output: dict):
             return False, error_msg
         
         pred_value = pred_output[key]
-        metric, error_msg_delta = type_to_metric(target_value)
-        error_msg += "\n" + error_msg_delta
-        if not metric(pred_value, target_value):
+        metric = type_to_metric(target_value)
+        
+        is_aligned, error_msg_delta = metric(pred_value, target_value)
+        if not is_aligned:
+            error_msg += error_msg_delta + "\n"
             error_msg += f"Value mismatch for key {key}: {pred_value} != {target_value}\n"
             return False, error_msg
 
@@ -299,14 +301,18 @@ class EvolNode:
             self.tmp_code = code   
             fitness, error_msg = self._evaluate_fitness(code=code, max_tries=1, num_runs=num_runs)            
             
-            if fitness >= fitness_threshold:
-                print(f"--- Fitness: {fitness:.2f}")
-                print("--- Fitness threshold reached")
-                if replace and fitness >= self.fitness:
-                    print("--- Replacing with new node") 
-                    self.reasoning, self.code = reasoning, code
-                    self.fitness = fitness
-                return reasoning, code
+            if replace and fitness >= self.fitness:
+                
+                print("--- Replacing with new node") 
+                self.reasoning, self.code = reasoning, code # Always replace worse with better
+                self.fitness = fitness
+                
+                if fitness >= fitness_threshold: # Terminate evolution only when fitness threshold is reached
+                    print(f"--- Fitness: {fitness:.2f}")
+                    print("--- Fitness threshold reached")
+                    return reasoning, code
+            
+            
             
             # If not successful, log the attempt
             print(f" - Attempt {attempt + 1} failed. Fitness: {fitness:.2f}. Error: {error_msg}")
