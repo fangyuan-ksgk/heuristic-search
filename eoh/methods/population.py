@@ -3,7 +3,7 @@ from .evolnode import EvolNode
 from .meta_prompt import MetaPrompt
 from typing import Callable
 # from joblib import Parallel, delayed
-from typing import List
+from typing import List, Optional
 
 # Managing population of evolving nodes 
 # - Natural selection 
@@ -18,7 +18,7 @@ def parent_selection(pop: List[EvolNode], m):
 # - I see the point now, we don't need to use multiple EvolNode for its evolution process, the MetaPromp is designed to incorporate all required information already ...
 
 class Evolution: 
-    def __init__(self, pop_size: int, meta_prompt: MetaPrompt, get_response: Callable, max_attempts: int = 3, num_eval_runs: int = 1): 
+    def __init__(self, pop_size: int, meta_prompt: MetaPrompt, get_response: Callable, test_cases: Optional[list] = None, max_attempts: int = 3, num_eval_runs: int = 1): 
         self.pop_size = pop_size
         self.meta_prompt = meta_prompt
         self.evol = EvolNode(meta_prompt, None, None, get_response=get_response)
