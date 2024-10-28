@@ -176,6 +176,7 @@ class EvolNode:
             self.test_cases = test_cases
         else:
             self.get_test_cases(3) # generate 3 test cases for new node
+            
         
     def _get_extend_test_cases_response(self, num_cases: int = 1, feedback: str = ""):
         if feedback != "":
