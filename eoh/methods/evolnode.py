@@ -40,12 +40,15 @@ def require_llm_metric(value) -> bool:
 def type_to_metric(value) -> Callable:
     
     def integer_metric(x, y: int):
+        """
+        Expect integer value to be the same with each other
+        """
         try:
             x_int = int(x)
         except:
             err_msg = f"Value {x} can't be converted into integer"
             return False, err_msg
-        return abs(x_int - y) <= 1, ""
+        return abs(x_int - y) < 1, ""
     
     def float_metric(x, y: float):
         try:

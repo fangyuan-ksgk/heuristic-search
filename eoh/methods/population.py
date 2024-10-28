@@ -35,15 +35,15 @@ class Evolution:
         - Evolve (crossover or mutation)
         """
         
-        offspring = {"reasoning": None, "code": None, "goal": None, "fitness": None}
+        offspring = {"reasoning": None, "code": None, "fitness": None}
         parents = parent_selection(pop, self.m) if operator != "i1" else None
                 
         if operator == "i1":
             self.evol.evolve("i1", replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
-            offspring["reasoning"], offspring["code"], offspring["goal"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.goal, self.evol.fitness
+            offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
         else: 
             self.evol.evolve(operator, parents, replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
-            offspring["reasoning"], offspring["code"], offspring["goal"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.goal, self.evol.fitness
+            offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
          
         # add offspring to population
         if not self.check_duplicate(pop, offspring["code"]):
