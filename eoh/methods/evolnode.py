@@ -279,15 +279,13 @@ class EvolNode:
             self.tmp_code = code   
             fitness, error_msg = self._evaluate_fitness(code=code, max_tries=1, num_runs=num_runs)            
             
-            print(f"--- Fitness: {fitness:.2f}")
-            if fitness >= self.fitness:
-                if replace:
-                    print("--- Replacing with new node")
-                    self.reasoning, self.code = reasoning, code
-                    self.fitness = fitness # update fitness since you update the code and reasoing
-                    
             if fitness >= fitness_threshold:
+                print(f"--- Fitness: {fitness:.2f}")
                 print("--- Fitness threshold reached")
+                if replace and fitness >= self.fitness:
+                    print("--- Replacing with new node") 
+                    self.reasoning, self.code = reasoning, code
+                    self.fitness = fitness
                 return reasoning, code
             
             # If not successful, log the attempt
