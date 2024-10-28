@@ -452,15 +452,18 @@ class EvolNode:
             output_name = self.meta_prompt.outputs[0]
             
             errors = []
-            for attempt in range(max_attempts):
-                output_dict, err_msg = call_func_prompt(inputs, self.code, self.get_response)
-                output_value = output_dict.get(output_name, None) 
-                if output_value is None:
-                    value_error_msg = f"Output value for {output_name} is None"
+            for _ in range(max_attempts):
+                output_dict, err_msg = self.call_prompt_function(inputs, self.code, max_tries=1)
+                if output_name not in output_dict:
+                    value_error_msg = f"Output value for {output_name} is None. Output dict: {output_dict}"
                     errors.append(err_msg + "\n" + value_error_msg)
+                    continue            
                 else:
-                    return output_dict
-        
+                    return output_dict 
+                
+            error_str = "\n".join(errors)
+            raise ValueError(error_str)
+    
     def save(self, library_dir: str = "methods/nodes/") -> None:
         node_data = {
             "code": self.code,
