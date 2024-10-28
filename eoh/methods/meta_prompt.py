@@ -110,7 +110,7 @@ class MetaPrompt:
         if self.mode == PromptMode.CODE:
             prompt_indiv = ""
             for i, indiv in enumerate(indivs, 1):
-                prompt_indiv += f"No.{i} algorithm and the corresponding code are:\n{indiv['algorithm']}\n{indiv['code']}\n"
+                prompt_indiv += f"No.{i} algorithm and the corresponding code are:\n{indiv['reasoning']}\n{indiv['code']}\n"
 
             prompt_content = f"{self.task}\n"\
                 f"I have {len(indivs)} existing algorithms with their codes as follows:\n"\
@@ -121,7 +121,7 @@ class MetaPrompt:
         elif self.mode == PromptMode.PROMPT:
             prompt_indiv = ""
             for i, indiv in enumerate(indivs, 1):
-                prompt_indiv += f"No.{i} reasoning and the corresponding prompt generation function are:\n{indiv['reasoning']}\n{indiv['prompt_function']}\n"
+                prompt_indiv += f"No.{i} algorithm and the corresponding prompt generation function are:\n{indiv['reasoning']}\n{indiv['prompt_function']}\n"
 
             prompt_content = f"{self.task}\n"\
                 f"I have {len(indivs)} existing prompt generation approaches with their functions as follows:\n"\
@@ -134,7 +134,7 @@ class MetaPrompt:
         if self.mode == PromptMode.CODE:
             prompt_indiv = ""
             for i, indiv in enumerate(indivs, 1):
-                prompt_indiv += f"No.{i} algorithm and the corresponding code are:\n{indiv['algorithm']}\n{indiv['code']}\n"
+                prompt_indiv += f"No.{i} algorithm and the corresponding code are:\n{indiv['reasoning']}\n{indiv['code']}\n"
 
             prompt_content = f"{self.task}\n"\
                 f"I have {len(indivs)} existing algorithms with their codes as follows:\n"\
@@ -151,7 +151,7 @@ class MetaPrompt:
         elif self.mode == PromptMode.PROMPT:
             prompt_indiv = ""
             for i, indiv in enumerate(indivs, 1):
-                prompt_indiv += f"No.{i} reasoning and the corresponding prompt generation function are:\n{indiv['reasoning']}\n{indiv['prompt_function']}\n"
+                prompt_indiv += f"No.{i} algorithm and the corresponding prompt generation function are:\n{indiv['reasoning']}\n{indiv['prompt_function']}\n"
 
             prompt_content = f"{self.task}\n"\
                 f"I have {len(indivs)} existing prompt generation approaches with their functions as follows:\n"\
@@ -169,7 +169,7 @@ class MetaPrompt:
         if self.mode == PromptMode.CODE:
             prompt_content = f"{self.task}\n"\
                 "I have one algorithm with its code as follows.\n"\
-                f"Algorithm description: {indiv['algorithm']}\n"\
+                f"Algorithm description: {indiv['reasoning']}\n"\
                 f"Code:\n{indiv['code']}\n"\
                 "Please assist me in creating a new algorithm that has a different form but can be a modified version of the algorithm provided.\n"\
                 f"{self._base_prompt()}"
@@ -189,7 +189,7 @@ class MetaPrompt:
         if self.mode == PromptMode.CODE:
             prompt_content = f"{self.task}\n"\
                 "I have one algorithm with its code as follows.\n"\
-                f"Algorithm description: {indiv['algorithm']}\n"\
+                f"Algorithm description: {indiv['reasoning']}\n"\
                 f"Code:\n{indiv['code']}\n"\
                 "Please identify the main algorithm parameters and assist me in creating a new algorithm that has different parameter settings of the score function provided.\n"\
                 f"{self._base_prompt()}"
