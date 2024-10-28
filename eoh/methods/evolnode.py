@@ -54,15 +54,15 @@ def _check_alignment_with_metric(pred_output: dict, target_output: dict):
     for key, target_value in target_output.items():
         if key not in pred_output:
             error_msg += f"Key {key} not found in prediction output\n"
+            return False, error_msg
+        
         pred_value = pred_output[key]
         metric = type_to_metric(target_value)
         if not metric(pred_value, target_value):
             error_msg += f"Value mismatch for key {key}: {pred_value} != {target_value}\n"
-            
-    if error_msg == "":
-        return True, ""
-    else:
-        return False, error_msg
+            return False, error_msg
+
+    return True, ""
 
 
 def _check_alignment_with_llm(pred_output: dict, target_output: dict, get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
