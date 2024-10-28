@@ -454,9 +454,9 @@ class EvolNode:
             errors = []
             for _ in range(max_attempts):
                 output_dict, err_msg = self.call_prompt_function(inputs, self.code, max_tries=1)
-                if output_name not in output_dict:
-                    value_error_msg = f"Output value for {output_name} is None. Output dict: {output_dict}"
-                    errors.append(err_msg + "\n" + value_error_msg)
+                if output_dict is None or output_name not in output_dict:
+                    value_error_msg = f"Output value for {output_name} is None. Output dict: {output_dict} with error message: {err_msg}"
+                    errors.append(value_error_msg)
                     continue            
                 else:
                     return output_dict 
@@ -516,9 +516,10 @@ class EvolNode:
     
     
     def __repr__(self):
-        return self.meta_prompt._desc_prompt()
-    
-            
+        desc_str = self.meta_prompt._desc_prompt()
+        algorithm_str = f"Intuition: {self.reasoning}"
+        quality_str = f"Fitness: {self.fitness:.2f}"
+        return desc_str + "\n" + algorithm_str + "\n" + quality_str
 
 
 
