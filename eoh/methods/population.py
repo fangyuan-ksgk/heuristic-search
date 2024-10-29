@@ -2,7 +2,7 @@ import os
 import json
 import numpy as np
 from .evolnode import EvolNode
-from .meta_prompt import MetaPrompt
+from .meta_prompt import MetaPrompt, PromptMode
 from typing import Callable
 # from joblib import Parallel, delayed
 from typing import List, Optional
@@ -40,6 +40,14 @@ def parent_selection(pop: List[EvolNode], m: int, proportion: float = 0.8) -> Li
 # Evolution process will keep populations of EvolNodes
 # - I see the point now, we don't need to use multiple EvolNode for its evolution process, the MetaPromp is designed to incorporate all required information already ...
 
+
+def indiv_to_prompt(indiv: dict, mode: PromptMode) -> str:
+    if mode == PromptMode.PROMPT:
+        prompt_indiv = f"[APPROACH]: {indiv['reasoning']}\n[PROMPT FUNCTION]: {indiv['code']}\n[FITNESS]: {indiv['fitness']}\n"
+    elif mode == PromptMode.CODE:
+        prompt_indiv = f"[ALGORITHM]: {indiv['reasoning']}\n[CODE]: {indiv['code']}\n[FITNESS]: {indiv['fitness']}\n"
+    return prompt_indiv
+
 class Evolution: 
     
     def __init__(self, pop_size: int, meta_prompt: MetaPrompt, get_response: Callable, test_cases: Optional[list] = None, 
@@ -54,7 +62,7 @@ class Evolution:
         if load:
             self.population = self.load_population(filename)
         self.get_response = get_response
-        self.strategy_trace = "Initial Population information: " + self.population_info + "\n"
+        self.strategy_trace = "Initial Population information: " + self.population_info
 
     def check_duplicate(self, population, code):
         return any(code == ind['code'] for ind in population)
@@ -72,17 +80,19 @@ class Evolution:
             self.evol.evolve("i1", replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
         elif operator.startswith("e"): # cross-over operator
+            assert len(pop) >= self.num_parents, "Population size is less than the number of parents required for Crossover operator"
             parents = parent_selection(pop, self.num_parents) # in fact we don't mind 3P
             self.evol.evolve(operator, parents, replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
         elif operator.startswith("m"): # mutation operator
+            assert len(pop) >= 1, "Population size is less than the number of parents required for Mutation operator"
             parents = parent_selection(pop, 1) # one parent used for mutation
             self.evol.evolve(operator, parents[0], replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
                 
         # Evolution Info Tracing
-        offspring_info = f"Going through {self.max_attempts} of {operator} evolution steps, obtaining offspring with fitness: {offspring['fitness']}"
-        self.strategy_trace += offspring_info + "\n"
+        offspring_info = f"Going through {self.max_attempts} of {operator} evolution steps, obtaining offspring:\n {indiv_to_prompt(offspring, self.meta_prompt.mode)}"
+        self.strategy_trace += offspring_info
 
         # add offspring to population
         if not self.check_duplicate(pop, offspring["code"]):
@@ -105,10 +115,17 @@ class Evolution:
         pop = self.population
         if not pop:
             return "Population is empty"
-        best_fitness = max(ind['fitness'] for ind in pop)
-        population_size = len(pop)
-        pop_info_str = f"Best Fitness: {best_fitness}, Population Size: {population_size}"
-        return pop_info_str
+        if len(pop) == 1:
+            indiv = pop[0]
+            return f"Population size is 1, information on the best individual:\n {indiv_to_prompt(indiv, self.meta_prompt.mode)}"
+        else: 
+           # get the best 2 individuals from the population (if don't have 2, use 1)
+           best_2 = sorted(pop, key=lambda x: x['fitness'], reverse=True)[:2]
+           pop_size = len(pop)
+           best_indiv_info = ""
+           for i, indiv in enumerate(best_2, 1):
+               best_indiv_info += f"Individual {i}:\n{self.meta_prompt._get_prompt_indivs(indiv)}\n"
+           return f"Population size: {pop_size}\nBest Fitness: {best_2[0]['fitness']}\nInformation on the best 2 individuals:\n{best_indiv_info}"
     
     def load_population(self, filename: str = "default", population_dir: str = "methods/population"):
         population_folder = f"{population_dir}/{self.meta_prompt.func_name}/"
@@ -117,6 +134,9 @@ class Evolution:
             pop = json.load(f)
         return pop
     
-    def chat(self, question: str = "What is the evolution strategy being used, and does it work?") -> str:
-        prompt = question + "\n\n" + self.strategy_trace
-        return self.get_response(prompt)
+    def chat(self, question: str = "How effective is the current evolution strategy? What improvement has it made in terms of fitness, and in terms of the implementation?"):
+        prompt = f"{question}\n\n{self.strategy_trace}"
+        response = self.get_response(prompt)
+        for line in response.split('\n'):
+            print(line)
+        # return response
