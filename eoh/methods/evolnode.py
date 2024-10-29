@@ -263,9 +263,9 @@ class EvolNode:
         return [case[0] for case in self.test_cases]
     
     
-    def _get_evolve_response(self, method: str, feedback: str = ""):
+    def _get_evolve_response(self, method: str, parents: Optional[list] = None, feedback: str = ""):
         prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
-        prompt_content = prompt_method()
+        prompt_content = prompt_method(parents)
         prompt_content += self.relevant_node_desc
         prompt_content += "\nIdea: " + feedback # External Guidance (perhaps we should reddit / stackoverflow this thingy)
      
@@ -276,7 +276,7 @@ class EvolNode:
         """
         Note: Evolution process will be decoupled with the fitness assignment process
         """
-        response = self._get_evolve_response(method, feedback)
+        response = self._get_evolve_response(method, parents, feedback)
         
         try:
             reasoning, code = parse_evol_response(response)

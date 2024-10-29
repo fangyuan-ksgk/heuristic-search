@@ -6,6 +6,7 @@ import re
 import ast
 import networkx as nx
 from dataclasses import dataclass
+from typing import Optional
 
 class PromptMode(Enum):
     CODE = "code"
@@ -102,7 +103,7 @@ class MetaPrompt:
             prompt_content += f"\nCreate evaluation pairs focus on incorporating previous feedback: {feedback}"
         return prompt_content
         
-    def _get_prompt_i1(self):
+    def _get_prompt_i1(self, indivs: Optional[list] = None):
         prompt_content = f"{self.task}\n{self._base_prompt()}"
         return prompt_content
         
