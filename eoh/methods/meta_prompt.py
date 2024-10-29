@@ -139,14 +139,10 @@ class MetaPrompt:
             prompt_content = f"{self.task}\n"\
                 f"I have {len(indivs)} existing algorithms with their codes as follows:\n"\
                 f"{prompt_indiv}"\
-                "Please help me create a new algorithm that has a totally different form from the given ones but can be motivated from them.\n"\
-                "Firstly, identify the common backbone idea in the provided algorithms. Secondly, based on the backbone idea describe your new algorithm in one sentence. "\
-                "The description must be inside a brace. Thirdly, implement it in Python as a function named "\
-                f"{self.func_name}. This function should accept {len(self.inputs)} input(s): "\
-                f"{self.joined_inputs}. The function should return {len(self.output)} output(s): "\
-                f"{self.joined_outputs}. {self.inout_inf} "\
-                f"{self.other_inf}\n"\
-                "Do not give additional explanations."
+                "Please help me create a new algorithm that combines and builds upon the strengths of the given approaches.\n"\
+                "Firstly, identify the common backbone idea in the provided algorithms. Then, create a new approach that inherits and enhances these patterns while introducing novel improvements. "\
+                f"{self._base_prompt()}"
+                
             return prompt_content
         elif self.mode == PromptMode.PROMPT:
             prompt_indiv = ""
@@ -156,11 +152,10 @@ class MetaPrompt:
             prompt_content = f"{self.task}\n"\
                 f"I have {len(indivs)} existing prompt generation approaches with their functions as follows:\n"\
                 f"{prompt_indiv}"\
-                "Please help me create a new prompt generation approach that has a totally different form from the given ones but can be motivated from them.\n"\
-                "Firstly, identify the common backbone idea in the provided approaches. Secondly, based on the backbone idea describe your new approach in one sentence. "\
-                "The description must be inside a brace. Thirdly, implement a Python function that generates a prompt to guide an AI in completing the task. "\
-                f"Follow these specifications: - Function name: generate_prompt - Input parameters: {self.joined_inputs} - Return value: A string containing the final prompt for the AI.\n"\
-                "Your function should incorporate the reasoning from step 2 and use the input parameters to create a tailored prompt for the task."
+                "Please help me create a new prompt generation approach that combines and builds upon the strengths of the given approaches.\n"\
+                "First, identify the common successful patterns in the provided approaches. Then, create a new approach that inherits and enhances these patterns while introducing novel improvements. "\
+                f"{self._base_prompt()}"
+                        
             return prompt_content
         elif self.mode == PromptMode.TOOL:
             raise NotImplementedError

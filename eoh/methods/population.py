@@ -59,10 +59,15 @@ class Evolution:
         offspring = {"reasoning": None, "code": None, "fitness": None}
         parents = parent_selection(pop, self.m) if operator != "i1" else None
                 
-        if operator == "i1":
+        if operator == "i1": # initialization operator 
             self.evol.evolve("i1", replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
-        else: 
+        elif operator.startswith("e"): # cross-over operator
+            parents = parent_selection(pop, self.num_parents) # in fact we don't mind 3P
+            self.evol.evolve(operator, parents, replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
+            offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
+        elif operator.startswith("m"): # mutation operator
+            parents = parent_selection(pop, 1) # one parent used for mutation
             self.evol.evolve(operator, parents, replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
          
