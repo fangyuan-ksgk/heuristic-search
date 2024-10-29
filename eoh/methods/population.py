@@ -11,7 +11,7 @@ from typing import List, Optional
 
 # Ideally 
 
-def parent_selection(pop: List[EvolNode], m: int) -> List[dict]:
+def parent_selection(pop: List[EvolNode], m: int, proportion: float = 0.8) -> List[dict]:
     """
     Select m parents from the population using tournament selection.
     
@@ -24,7 +24,7 @@ def parent_selection(pop: List[EvolNode], m: int) -> List[dict]:
         List of selected parent dictionaries
     """
     selected_parents = []
-    tournament_size = len(pop) // m # Dynamic tournament size!
+    tournament_size = min(len(pop) // m, int(len(pop) * proportion)) # Dynamic tournament size 
 
     for _ in range(m):
         # Each tournament now looks at population_size/m individuals
@@ -39,12 +39,14 @@ def parent_selection(pop: List[EvolNode], m: int) -> List[dict]:
 # - I see the point now, we don't need to use multiple EvolNode for its evolution process, the MetaPromp is designed to incorporate all required information already ...
 
 class Evolution: 
-    def __init__(self, pop_size: int, meta_prompt: MetaPrompt, get_response: Callable, test_cases: Optional[list] = None, max_attempts: int = 3, num_eval_runs: int = 1): 
+    def __init__(self, pop_size: int, meta_prompt: MetaPrompt, get_response: Callable, test_cases: Optional[list] = None, 
+                 max_attempts: int = 3, num_eval_runs: int = 1, num_parents: int = 2): 
         self.pop_size = pop_size
         self.meta_prompt = meta_prompt
         self.evol = EvolNode(meta_prompt, None, None, get_response=get_response, test_cases=test_cases)
         self.max_attempts = max_attempts
         self.num_eval_runs = num_eval_runs
+        self.num_parents = num_parents
         
     def check_duplicate(self, population, code):
         return any(code == ind['code'] for ind in population)
@@ -57,7 +59,6 @@ class Evolution:
         """
         
         offspring = {"reasoning": None, "code": None, "fitness": None}
-        parents = parent_selection(pop, self.m) if operator != "i1" else None
                 
         if operator == "i1": # initialization operator 
             self.evol.evolve("i1", replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
