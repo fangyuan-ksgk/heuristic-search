@@ -68,7 +68,7 @@ class Evolution:
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
         elif operator.startswith("m"): # mutation operator
             parents = parent_selection(pop, 1) # one parent used for mutation
-            self.evol.evolve(operator, parents, replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
+            self.evol.evolve(operator, parents[0], replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
          
         # add offspring to population
