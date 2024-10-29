@@ -6,7 +6,7 @@ from .meta_prompt import MetaPrompt
 from typing import Callable
 # from joblib import Parallel, delayed
 from typing import List, Optional
-
+from collections import defaultdict
 # Managing population of evolving nodes 
 # - Natural selection 
 # - Offspring generation
@@ -41,17 +41,21 @@ def parent_selection(pop: List[EvolNode], m: int, proportion: float = 0.8) -> Li
 # - I see the point now, we don't need to use multiple EvolNode for its evolution process, the MetaPromp is designed to incorporate all required information already ...
 
 class Evolution: 
+    
     def __init__(self, pop_size: int, meta_prompt: MetaPrompt, get_response: Callable, test_cases: Optional[list] = None, 
                  max_attempts: int = 3, num_eval_runs: int = 1, num_parents: int = 2, filename: str = "default", load: bool = False): 
-        self.pop_size = pop_size
+        self.pop_size = pop_size # not used (for capping population size I suppose?)
         self.meta_prompt = meta_prompt
         self.evol = EvolNode(meta_prompt, None, None, get_response=get_response, test_cases=test_cases)
         self.max_attempts = max_attempts
         self.num_eval_runs = num_eval_runs
         self.num_parents = num_parents
+        self.population = []
         if load:
-            self.load_population(filename)
-        
+            self.population = self.load_population(filename)
+        self.get_response = get_response
+        self.strategy_trace = "Initial Population information: " + self.population_info + "\n"
+
     def check_duplicate(self, population, code):
         return any(code == ind['code'] for ind in population)
             
@@ -75,22 +79,44 @@ class Evolution:
             parents = parent_selection(pop, 1) # one parent used for mutation
             self.evol.evolve(operator, parents[0], replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
-         
+                
+        # Evolution Info Tracing
+        offspring_info = f"Going through {self.max_attempts} of {operator} evolution steps, obtaining offspring with fitness: {offspring['fitness']}"
+        self.strategy_trace += offspring_info + "\n"
+
         # add offspring to population
         if not self.check_duplicate(pop, offspring["code"]):
             pop.append(offspring)
             
         return pop
     
+    def get_offspring(self, method: str = "default"): 
+        self.population = self._get_offspring(method, self.population)
+        
     def save_population(self, pop: list, filename: str = "default", population_dir: str = "methods/population"):
         population_folder = f"{population_dir}/{self.meta_prompt.func_name}/"
         os.makedirs(population_folder, exist_ok=True)
-        filepath = os.path.join(population_folder, filename)
+        filepath = os.path.join(population_folder, filename+".json")
         with open(filepath, 'w') as f:
             json.dump(pop, f, indent=2)
+            
+    @property 
+    def population_info(self):
+        pop = self.population
+        if not pop:
+            return "Population is empty"
+        best_fitness = max(ind['fitness'] for ind in pop)
+        population_size = len(pop)
+        pop_info_str = f"Best Fitness: {best_fitness}, Population Size: {population_size}"
+        return pop_info_str
     
     def load_population(self, filename: str = "default", population_dir: str = "methods/population"):
-        filepath = os.path.join(population_dir, filename)
+        population_folder = f"{population_dir}/{self.meta_prompt.func_name}/"
+        filepath = os.path.join(population_folder, filename+".json")
         with open(filepath, 'r') as f:
             pop = json.load(f)
         return pop
+    
+    def chat(self, question: str = "What is the evolution strategy being used, and does it work?") -> str:
+        prompt = question + "\n\n" + self.strategy_trace
+        return self.get_response(prompt)
