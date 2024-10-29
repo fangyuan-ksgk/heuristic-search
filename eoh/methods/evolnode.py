@@ -196,6 +196,7 @@ class EvolNode:
         self.test_cases = []
         self.get_response = get_response
         self.relevant_nodes = []
+        self.error_msg = "" # contains information about encountered error :: TBD :: use LLM to summarize it
         
         if test_cases is not None:
             self.test_cases = test_cases
@@ -309,6 +310,7 @@ class EvolNode:
                 print("--- Replacing with new node") 
                 self.reasoning, self.code = reasoning, code # Always replace worse with better
                 self.fitness = fitness
+                self.error_msg = error_msg
                 
                 if fitness >= fitness_threshold: # Terminate evolution only when fitness threshold is reached
                     print(f"--- Fitness: {fitness:.2f}")
