@@ -6,7 +6,7 @@ import re
 import ast
 import networkx as nx
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 class PromptMode(Enum):
     CODE = "code"
@@ -102,6 +102,18 @@ class MetaPrompt:
         if feedback != "":
             prompt_content += f"\nCreate evaluation pairs focus on incorporating previous feedback: {feedback}"
         return prompt_content
+    
+    def _get_prompt_indivs(self, indivs: Union[list, dict]) -> str:
+        if isinstance(indivs, dict):
+            indivs = [indivs]
+            
+        prompt_indiv = ""
+        for i, indiv in enumerate(indivs, 1):
+            if self.mode == PromptMode.CODE:
+                prompt_indiv += f"No.{i}:\n[ALGORITHM]: {indiv['reasoning']}\n[CODE]: {indiv['code']}\n"
+            elif self.mode == PromptMode.PROMPT:
+                prompt_indiv += f"No.{i}:\n[APPROACH]: {indiv['reasoning']}\n[PROMPT FUNCTION]: {indiv['code']}\n"                    
+        return prompt_indiv
         
     def _get_prompt_i1(self, indivs: Optional[list] = None):
         prompt_content = f"{self.task}\n{self._base_prompt()}"
@@ -109,9 +121,7 @@ class MetaPrompt:
         
     def _get_prompt_e1(self, indivs: list):
         if self.mode == PromptMode.CODE:
-            prompt_indiv = ""
-            for i, indiv in enumerate(indivs, 1):
-                prompt_indiv += f"No.{i} algorithm and the corresponding code are:\n{indiv['reasoning']}\n{indiv['code']}\n"
+            prompt_indiv = self._get_prompt_indivs(indivs)
 
             prompt_content = f"{self.task}\n"\
                 f"I have {len(indivs)} existing algorithms with their codes as follows:\n"\
@@ -120,9 +130,7 @@ class MetaPrompt:
                 f"{self._base_prompt()}"
             return prompt_content
         elif self.mode == PromptMode.PROMPT:
-            prompt_indiv = ""
-            for i, indiv in enumerate(indivs, 1):
-                prompt_indiv += f"No.{i} algorithm and the corresponding prompt generation function are:\n{indiv['reasoning']}\n{indiv['prompt_function']}\n"
+            prompt_indiv = self._get_prompt_indivs(indivs)
 
             prompt_content = f"{self.task}\n"\
                 f"I have {len(indivs)} existing prompt generation approaches with their functions as follows:\n"\
@@ -133,9 +141,7 @@ class MetaPrompt:
         
     def _get_prompt_e2(self, indivs: list):
         if self.mode == PromptMode.CODE:
-            prompt_indiv = ""
-            for i, indiv in enumerate(indivs, 1):
-                prompt_indiv += f"No.{i} algorithm and the corresponding code are:\n{indiv['reasoning']}\n{indiv['code']}\n"
+            prompt_indiv = self._get_prompt_indivs(indivs)
 
             prompt_content = f"{self.task}\n"\
                 f"I have {len(indivs)} existing algorithms with their codes as follows:\n"\
@@ -146,9 +152,7 @@ class MetaPrompt:
                 
             return prompt_content
         elif self.mode == PromptMode.PROMPT:
-            prompt_indiv = ""
-            for i, indiv in enumerate(indivs, 1):
-                prompt_indiv += f"No.{i} algorithm and the corresponding prompt generation function are:\n{indiv['reasoning']}\n{indiv['prompt_function']}\n"
+            prompt_indiv = self._get_prompt_indivs(indivs)
 
             prompt_content = f"{self.task}\n"\
                 f"I have {len(indivs)} existing prompt generation approaches with their functions as follows:\n"\
@@ -162,19 +166,18 @@ class MetaPrompt:
             raise NotImplementedError
 
     def _get_prompt_m1(self, indiv: dict):
+        prompt_indiv = self._get_prompt_indivs(indiv)
         if self.mode == PromptMode.CODE:
             prompt_content = f"{self.task}\n"\
                 "I have one algorithm with its code as follows.\n"\
-                f"Algorithm description: {indiv['reasoning']}\n"\
-                f"Code:\n{indiv['code']}\n"\
+                f"{prompt_indiv}"\
                 "Please assist me in creating a new algorithm that has a different form but can be a modified version of the algorithm provided.\n"\
                 f"{self._base_prompt()}"
             return prompt_content
         elif self.mode == PromptMode.PROMPT:
             prompt_content = f"{self.task}\n"\
                 "I have one prompt generation approach with its function as follows.\n"\
-                f"Reasoning: {indiv['reasoning']}\n"\
-                f"Function:\n{indiv['prompt_function']}\n"\
+                f"{prompt_indiv}"\
                 "Please assist me in creating a new prompt generation approach that has a different form but can be a modified version of the approach provided.\n"\
                 f"{self._base_prompt()}"
             return prompt_content
@@ -182,19 +185,18 @@ class MetaPrompt:
             raise NotImplementedError
 
     def _get_prompt_m2(self, indiv: dict):
+        prompt_indiv = self._get_prompt_indivs(indiv)
         if self.mode == PromptMode.CODE:
             prompt_content = f"{self.task}\n"\
                 "I have one algorithm with its code as follows.\n"\
-                f"Algorithm description: {indiv['reasoning']}\n"\
-                f"Code:\n{indiv['code']}\n"\
+                f"{prompt_indiv}"\
                 "Please identify the main algorithm parameters and assist me in creating a new algorithm that has different parameter settings of the score function provided.\n"\
                 f"{self._base_prompt()}"
             return prompt_content
         elif self.mode == PromptMode.PROMPT:
             prompt_content = f"{self.task}\n"\
                 "I have one prompt generation approach with its function as follows.\n"\
-                f"Reasoning: {indiv['reasoning']}\n"\
-                f"Function:\n{indiv['prompt_function']}\n"\
+                f"{prompt_indiv}"\
                 "Please identify the main approach parameters and assist me in creating a new prompt generation approach that has different parameter settings of the prompt generation function provided.\n"\
                 f"{self._base_prompt()}"
             return prompt_content
