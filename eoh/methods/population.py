@@ -1,3 +1,5 @@
+import os
+import json
 import numpy as np
 from .evolnode import EvolNode
 from .meta_prompt import MetaPrompt
@@ -40,13 +42,15 @@ def parent_selection(pop: List[EvolNode], m: int, proportion: float = 0.8) -> Li
 
 class Evolution: 
     def __init__(self, pop_size: int, meta_prompt: MetaPrompt, get_response: Callable, test_cases: Optional[list] = None, 
-                 max_attempts: int = 3, num_eval_runs: int = 1, num_parents: int = 2): 
+                 max_attempts: int = 3, num_eval_runs: int = 1, num_parents: int = 2, filename: str = "default", load: bool = False): 
         self.pop_size = pop_size
         self.meta_prompt = meta_prompt
         self.evol = EvolNode(meta_prompt, None, None, get_response=get_response, test_cases=test_cases)
         self.max_attempts = max_attempts
         self.num_eval_runs = num_eval_runs
         self.num_parents = num_parents
+        if load:
+            self.load_population(filename)
         
     def check_duplicate(self, population, code):
         return any(code == ind['code'] for ind in population)
@@ -76,4 +80,17 @@ class Evolution:
         if not self.check_duplicate(pop, offspring["code"]):
             pop.append(offspring)
             
+        return pop
+    
+    def save_population(self, pop: list, filename: str = "default", population_dir: str = "methods/population"):
+        population_folder = f"{population_dir}/{self.meta_prompt.func_name}/"
+        os.makedirs(population_folder, exist_ok=True)
+        filepath = os.path.join(population_folder, filename)
+        with open(filepath, 'w') as f:
+            json.dump(pop, f, indent=2)
+    
+    def load_population(self, filename: str = "default", population_dir: str = "methods/population"):
+        filepath = os.path.join(population_dir, filename)
+        with open(filepath, 'r') as f:
+            pop = json.load(f)
         return pop
