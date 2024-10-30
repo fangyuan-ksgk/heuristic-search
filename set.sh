@@ -1,4 +1,4 @@
-pip install nb-mermaid
+pip install nb-mermaid astor
 npm install @mermaid-js/mermaid-cli
 # brew install inkscape imagemagick
 # curl -fsSL https://d2lang.com/install.sh | sh -s --
