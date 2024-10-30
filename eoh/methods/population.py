@@ -134,9 +134,10 @@ class Evolution:
             pop = json.load(f)
         return pop
     
-    def chat(self, question: str = "How effective is the current evolution strategy? What improvement has it made in terms of fitness, and in terms of the implementation?"):
+    def chat(self, question: str = "How effective is the current evolution strategy? What improvement has it made in terms of fitness, and in terms of the implementation?",
+             get_response: Optional[Callable] = None):
         prompt = f"{question}\n\n{self.strategy_trace}"
-        response = self.get_response(prompt)
+        response = self.get_response(prompt) if get_response is None else get_response(prompt)
         for line in response.split('\n'):
             print(line)
         # return response

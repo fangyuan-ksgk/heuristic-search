@@ -391,6 +391,9 @@ class EvolNode:
         
         if test_cases is None:
             test_cases = self.test_cases
+        
+        if self.meta_prompt.mode == PromptMode.PROMPT:
+            num_runs = min(2, num_runs) # sanity check against stochastic nature of prompt-based node
             
         test_cases = test_cases * num_runs # repeat
         

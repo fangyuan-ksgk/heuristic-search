@@ -13,6 +13,15 @@ class PromptMode(Enum):
     TOOL = "tool"
     PROMPT = "prompt"
     
+    
+def get_prompt_mode(mode: str):
+    if mode in [PromptMode.CODE.value, PromptMode.PROMPT.value]:
+        return PromptMode(mode)
+    if "CODE" in mode:
+        return PromptMode.CODE
+    else:
+        return PromptMode.PROMPT
+    
 # MetaPrompt describe meta-heuristic for each node's generation (i1) evolution (e1, e2) and mutation (m1, m2)
 # -- Meta Heuristic includes Task, Function Input and Output
 # -- Prompt Templating Function for Node's evolution
@@ -218,12 +227,12 @@ class MetaPrompt:
     def from_dict(cls, data: dict) -> 'MetaPrompt':
         return cls(
             task=data["task"],
-            func_name=data["func_name"],
+            func_name=data["func_name"] if "func_name" in data else data["name"],
             inputs=data["inputs"],
             outputs=data["outputs"],
             input_types=data["input_types"],
             output_types=data["output_types"],
-            mode=PromptMode(data["mode"])
+            mode=get_prompt_mode(data["mode"])
         )
         
     @classmethod
