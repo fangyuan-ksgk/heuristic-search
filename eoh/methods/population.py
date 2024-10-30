@@ -5,7 +5,7 @@ from .evolnode import EvolNode
 from .meta_prompt import MetaPrompt, PromptMode
 from typing import Callable
 # from joblib import Parallel, delayed
-from typing import List, Optional
+from typing import List, Optional, Union
 from collections import defaultdict
 # Managing population of evolving nodes 
 # - Natural selection 
@@ -100,8 +100,12 @@ class Evolution:
             
         return pop
     
-    def get_offspring(self, method: str = "default"): 
-        self.population = self._get_offspring(method, self.population)
+    def get_offspring(self, method: Union[str, List[str]] = "default"):
+        if isinstance(method, str):
+            self.population = self._get_offspring(method, self.population)
+        elif isinstance(method, list):
+            for m in method:
+                self.population = self._get_offspring(m, self.population)
         
     def save_population(self, pop: list, filename: str = "default", population_dir: str = "methods/population"):
         population_folder = f"{population_dir}/{self.meta_prompt.func_name}/"
