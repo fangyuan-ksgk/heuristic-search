@@ -11,6 +11,8 @@ from tqdm import tqdm
 from collections import defaultdict
 from typing import Optional, Dict, List, Callable, Tuple
 
+MAX_ATTEMPTS = 3
+
 
 def map_input_output(test_case_list: List[dict], input_names: List[str], output_names: List[str]) -> List[Tuple[dict, dict]]:
     inputs = []
@@ -503,7 +505,8 @@ class EvolNode:
             "code": self.code,
             "reasoning": self.reasoning,
             "meta_prompt": self.meta_prompt.to_dict(),  # Assuming MetaPrompt has a to_dict method
-            "test_cases": [{"input": test_case[0], "expected_output": test_case[1]} for test_case in self.test_cases]
+            "test_cases": [{"input": test_case[0], "expected_output": test_case[1]} for test_case in self.test_cases],
+            "fitness": self.fitness
         }
         node_path = os.path.join(library_dir, f"{self.meta_prompt.func_name}_node.json")
         os.makedirs(os.path.dirname(node_path), exist_ok=True)
@@ -518,7 +521,7 @@ class EvolNode:
         meta_prompt = MetaPrompt.from_dict(node_data['meta_prompt'])  # Assuming MetaPrompt has a from_dict method
         test_cases = [tuple([test_case['input'], test_case['expected_output']]) for test_case in node_data['test_cases']]
         node = cls(meta_prompt=meta_prompt, code=node_data['code'], reasoning=node_data['reasoning'], test_cases=test_cases,
-                   get_response=get_response)
+                   get_response=get_response, fitness=node_data['fitness'])
         return node
     
     def query_nodes(self, top_k: int = 5, ignore_self: bool = False, self_func_name: str = None) -> List['EvolNode']:
@@ -554,6 +557,11 @@ class EvolNode:
         algorithm_str = f"Intuition: {self.reasoning}"
         quality_str = f"Fitness: {self.fitness:.2f}"
         return desc_str + "\n" + algorithm_str + "\n" + quality_str
+    
+    def __str__(self): 
+        desc_str = self.meta_prompt._desc_prompt()
+        algorithm_str = f"Intuition: {self.reasoning}"
+        return desc_str + "\n" + algorithm_str
 
 
 
@@ -620,19 +628,49 @@ class PlanNode:
         self.meta_prompt = meta_prompt 
         self.get_response = get_response 
         self.nodes = nodes
+        self.relevant_nodes = None
+        self.max_attempts = MAX_ATTEMPTS
+
         
-    def _evolve_plan_dict(self):
+    def _evolve_plan_dict(self, feedback: str = "", replace: bool = True):
         
-        # Step 1: Generate Pseudo-Code for SubTask Decomposition
-        prompt = self.meta_prompt._get_pseudo_code_prompt() # Pseudo-Code Prompt (Non-implemented functional)
-        response = self.get_response(prompt) # Use Strong LLM to build up pseudo-code
-        code = extract_python_code(response) # Extract Python Code from response 
+        err_msg = ""
+        
+        # Step 1: Generate Pseudo-Code for reliable sub-tasks decomposition
+        prompt = self.meta_prompt._get_pseudo_code_prompt(feedback)
+
+        self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
+        prompt += "\n" + self.relevant_node_desc
+        
+        response = self.get_response(prompt) 
+        code = extract_python_code(response)
+        
+        if code == "":
+            err_msg += "No pseudo-code block found in the planning response: \n {response}\n"
 
         # Step 2: Generate Planning DAG: Multiple Nodes 
-        graph_prompt = self.meta_prompt._get_plan_graph_prompt(code) 
+        graph_prompt = self.meta_prompt._get_plan_graph_prompt(code)
         plan_response = self.get_response(graph_prompt)
-        plan_dict = extract_json_from_text(plan_response)
-        return plan_dict
+        try:
+            plan_dict = extract_json_from_text(plan_response)
+        except ValueError as e:
+            plan_dict = {}
+            err_msg += f"Failed to extract JSON from planning response:\n{e}\nResponse was:\n{plan_response}\n"
+        
+        plan_dict = self._update_plan_dict(plan_dict)
+        
+        return plan_dict, err_msg
+    
+    def evolve_plan_dict(self, feedback: str = ""):
+        err_msg = ""
+        for i in range(self.max_attempts):
+            plan_dict, err_msg_delta = self._evolve_plan_dict(feedback)
+            if err_msg_delta == "":
+                return plan_dict, ""
+            err_msg += f"Plan evolution {i} failed with error message: \n{err_msg_delta}\n"
+            
+        return {}, err_msg
+        
     
     def _spawn_nodes(self, plan_dict: Dict):
         """ 
@@ -717,3 +755,32 @@ class PlanNode:
                     plan_node.nodes.append(node)
 
         return plan_node
+    
+    
+    def query_nodes(self, top_k: int = 5, ignore_self: bool = False, self_func_name: str = None) -> List['EvolNode']:
+        """ 
+        Query nodes from library
+        """
+        query_engine = QueryEngine(ignore_self=ignore_self, self_func_name=self_func_name)
+        self.relevant_nodes = query_engine.query_node(self.meta_prompt.task)
+        
+    def _update_plan_dict(self, plan_dict):
+        for node in self.relevant_nodes:
+            for sub_node in plan_dict["nodes"]:
+                if node.meta_prompt.func_name == sub_node["name"]:
+                    for k in ["inputs", "input_types", "outputs", "output_types"]:
+                        sub_node[k] = getattr(node.meta_prompt, k)
+                    for k in ["code", "reasoning", "fitness"]:
+                        sub_node[k] = getattr(node, k)
+        return plan_dict
+        
+    @property 
+    def relevant_node_desc(self):
+        if len(self.relevant_nodes) == 0:
+            return ""
+        return "You could call these available functions without defining them:\n" + "\n".join([str(node) for node in self.relevant_nodes])
+        
+    @property
+    def referrable_function_dict(self):
+        referrable_function_dict = {node.meta_prompt.func_name: node.code for node in self.relevant_nodes} # name to code of referrable functions 
+        return referrable_function_dict
