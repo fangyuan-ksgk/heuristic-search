@@ -503,7 +503,8 @@ class EvolNode:
             "code": self.code,
             "reasoning": self.reasoning,
             "meta_prompt": self.meta_prompt.to_dict(),  # Assuming MetaPrompt has a to_dict method
-            "test_cases": [{"input": test_case[0], "expected_output": test_case[1]} for test_case in self.test_cases]
+            "test_cases": [{"input": test_case[0], "expected_output": test_case[1]} for test_case in self.test_cases],
+            "fitness": self.fitness
         }
         node_path = os.path.join(library_dir, f"{self.meta_prompt.func_name}_node.json")
         os.makedirs(os.path.dirname(node_path), exist_ok=True)
@@ -518,7 +519,7 @@ class EvolNode:
         meta_prompt = MetaPrompt.from_dict(node_data['meta_prompt'])  # Assuming MetaPrompt has a from_dict method
         test_cases = [tuple([test_case['input'], test_case['expected_output']]) for test_case in node_data['test_cases']]
         node = cls(meta_prompt=meta_prompt, code=node_data['code'], reasoning=node_data['reasoning'], test_cases=test_cases,
-                   get_response=get_response)
+                   get_response=get_response, fitness=node_data['fitness'])
         return node
     
     def query_nodes(self, top_k: int = 5, ignore_self: bool = False, self_func_name: str = None) -> List['EvolNode']:
@@ -554,6 +555,11 @@ class EvolNode:
         algorithm_str = f"Intuition: {self.reasoning}"
         quality_str = f"Fitness: {self.fitness:.2f}"
         return desc_str + "\n" + algorithm_str + "\n" + quality_str
+    
+    def __str__(self): 
+        desc_str = self.meta_prompt._desc_prompt()
+        algorithm_str = f"Intuition: {self.reasoning}"
+        return desc_str + "\n" + algorithm_str
 
 
 
@@ -621,10 +627,14 @@ class PlanNode:
         self.get_response = get_response 
         self.nodes = nodes
         
-    def _evolve_plan_dict(self):
+    def _evolve_plan_dict(self, feedback: str = "", replace: bool = True):
         
         # Step 1: Generate Pseudo-Code for SubTask Decomposition
-        prompt = self.meta_prompt._get_pseudo_code_prompt() # Pseudo-Code Prompt (Non-implemented functional)
+        prompt = self.meta_prompt._get_pseudo_code_prompt(feedback) # Pseudo-Code Prompt (Non-implemented functional)
+
+        self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
+        prompt += "\n" + self.relevant_node_desc
+        
         response = self.get_response(prompt) # Use Strong LLM to build up pseudo-code
         code = extract_python_code(response) # Extract Python Code from response 
 
@@ -717,3 +727,22 @@ class PlanNode:
                     plan_node.nodes.append(node)
 
         return plan_node
+    
+    
+    def query_nodes(self, top_k: int = 5, ignore_self: bool = False, self_func_name: str = None) -> List['EvolNode']:
+        """ 
+        Query nodes from library
+        """
+        query_engine = QueryEngine(ignore_self=ignore_self, self_func_name=self_func_name)
+        self.relevant_nodes = query_engine.query_node(self.meta_prompt.task)
+        
+    @property 
+    def relevant_node_desc(self):
+        if len(self.relevant_nodes) == 0:
+            return ""
+        return "You could call these available functions without defining them:\n" + "\n".join([str(node) for node in self.relevant_nodes])
+        
+    @property
+    def referrable_function_dict(self):
+        referrable_function_dict = {node.meta_prompt.func_name: node.code for node in self.relevant_nodes} # name to code of referrable functions 
+        return referrable_function_dict
