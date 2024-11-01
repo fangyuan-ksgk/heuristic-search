@@ -377,8 +377,10 @@ class MetaPlan:
         prompt_content = PLAN_GRAPH_PROMPT.replace("inputs_str", input_str).replace("input_types_str", input_types_str).replace("outputs_str", output_str).replace("output_types_str", output_types_str)
         return prompt_content
     
-    def _get_pseudo_code_prompt(self):
+    def _get_pseudo_code_prompt(self, feedback: str = ""):
         prompt_content = f"Task: {self.task}\n{self._base_pseudo_code_prompt}"
+        if feedback:
+            prompt_content += f"\nPlease incorporate this feedback in your solution: {feedback}"
         return prompt_content
     
     def _get_plan_graph_prompt(self, code: str):
