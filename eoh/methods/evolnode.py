@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
-from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT
+from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT, check_n_rectify_plan_dict
 from .meta_execute import call_func_code, call_func_prompt, compile_code_with_references
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -658,6 +658,9 @@ class PlanNode:
             err_msg += f"Failed to extract JSON from planning response:\n{e}\nResponse was:\n{plan_response}\n"
         
         plan_dict = self._update_plan_dict(plan_dict)
+        plan_dict, err_msg_delta = check_n_rectify_plan_dict(plan_dict)
+        if err_msg_delta:
+            err_msg += err_msg_delta
         
         return plan_dict, err_msg
     
