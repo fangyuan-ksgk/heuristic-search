@@ -618,7 +618,8 @@ class PlanNode:
     
     def __init__(self, meta_prompt: MetaPlan, 
                  get_response: Optional[Callable] = get_openai_response,
-                 nodes: Optional[List[EvolNode]] = None):
+                 nodes: Optional[List[EvolNode]] = None,
+                 max_attempts: int = 3):
         """ 
         Planning Node for subtask decomposition
         - Spawn helper nodes for better task performance
@@ -627,6 +628,7 @@ class PlanNode:
         self.get_response = get_response 
         self.nodes = nodes
         self.relevant_nodes = None
+        self.max_attempts = max_attempts
 
         
     def _evolve_plan_dict(self, feedback: str = "", replace: bool = True):
@@ -657,6 +659,17 @@ class PlanNode:
         plan_dict = self._update_plan_dict(plan_dict)
         
         return plan_dict, err_msg
+    
+    def evolve_plan_dict(self, feedback: str = ""):
+        err_msg = ""
+        for i in range(self.max_attempts):
+            plan_dict, err_msg_delta = self._evolve_plan_dict(feedback)
+            if err_msg_delta == "":
+                return plan_dict, ""
+            err_msg += f"Plan evolution {i} failed with error message: \n{err_msg_delta}\n"
+            
+        return {}, err_msg
+        
     
     def _spawn_nodes(self, plan_dict: Dict):
         """ 
