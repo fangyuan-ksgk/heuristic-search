@@ -118,8 +118,9 @@ def _call_func_prompt(input_data: Dict[str, Any], code: str, get_response: calla
     func_name = "generate_prompt"
     prompt_func = mod.__dict__[func_name]
     prompt = prompt_func(**input_data)
+    print(prompt)
     response = get_response(prompt)
-    
+    print(response)
     try:
         output_dict = extract_json_from_text(response)
         return output_dict
