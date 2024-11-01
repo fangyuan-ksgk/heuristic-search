@@ -9,13 +9,57 @@ import io
 from tqdm import tqdm
 from .meta_prompt import parse_plan_graph
 
-d2_prefix = """vars: {
-  d2-config: {
-    sketch: true
+d2_prefix_template = '''"{task}" {
+  near: top-center
+  shape: text
+  style: {
+    font-size: 29
+    bold: true
+    underline: true
   }
 }
 classes: {
-  code: {
+  retrieved node: {
+    label: ""
+    shape: cylinder
+    width: 70
+    height: 90
+    style: {
+      fill: lightgreen
+      shadow: true
+    }
+  }
+  hypothetical node: {
+    label: ""
+    shape: diamond
+    width: 80
+    style: {
+      fill: yellow
+      shadow: true
+    }
+  }
+}'''
+
+
+d2_prefix_template_any_size = '''"{task}" {
+  near: top-center
+  shape: text
+  style: {
+    font-size: 29
+    bold: true
+    underline: true
+  }
+}
+classes: {
+  retrieved node: {
+    label: ""
+    shape: cylinder
+    style: {
+      fill: lightgreen
+      shadow: true
+    }
+  }
+  hypothetical node: {
     label: ""
     shape: diamond
     style: {
@@ -23,19 +67,13 @@ classes: {
       shadow: true
     }
   }
-}
+}'''
 
-classes: {
-  llm: {
-    label: ""
-    shape: hexagon
-    style: {
-      fill: lightblue
-      shadow: true
-    }
-  }
-}
-"""
+def get_d2_prefix(task: str, limit_size: bool = True) -> str:
+    # Sanitize task string - remove periods and escape quotes
+    sanitized_task = task.replace(".", "").replace('"', '\\"')
+    template = d2_prefix_template if limit_size else d2_prefix_template_any_size
+    return template.replace('"{task}"', f'"{sanitized_task}"')
 
 object_template_with_overhead = """{object_name}.class: {object_type}
 {object_name}.label: "{object_name}"
@@ -49,7 +87,7 @@ object_template_with_overhead = """{object_name}.class: {object_type}
 }}"""
 
 object_template = """{object_name}.class: {object_type}
-{object_name}.label: "{object_name}"
+{object_name}.label: "{object_label}"
 {object_name}: {{
   style: {{
     opacity: {opacity}
@@ -68,28 +106,36 @@ code_template = """{object_name}_code: |python
   }}
 }}"""
 
-get_object_name = lambda node: node['name'].replace(".","_")
-
+def get_object_name_and_label(node: dict, include_mode: bool = True, name_key: str = "task") -> str: 
+    mode_str = "Prompt + LLM" if node["type"] == "PROMPT" else "Code + Compiler"
+    if include_mode:
+        name = node[name_key]
+        label = f"{node[name_key]}\n{mode_str}"
+    else:
+        name = node[name_key]
+        label = node[name_key]
+    return name, label
 
 def build_d2_code_node(node: dict) -> str:
-    object_name = get_object_name(node)
+    object_name, object_label = get_object_name_and_label(node)
     code_str = node["code_str"]
     opacity = node["opacity"]
     opacity = min(1.0, max(0.0, opacity))
     opacity_str = f"{opacity:.2f}"
-    return code_template.format(object_name=object_name, code_str=code_str, opacity=opacity_str)
+    return code_template.format(object_name=object_name, object_label=object_label, code_str=code_str, opacity=opacity_str)
 
-def build_d2_node(node: dict) -> str:
-   
-    object_name = get_object_name(node)
-    object_type = node["type"]
-    assert object_type in ["code", "llm"]
+def build_d2_node(node: dict, include_mode: bool = True) -> str:
+    object_name, object_label = get_object_name_and_label(node, include_mode)
+    object_type = node["class"]
+    assert object_type in ["retrieved node", "hypothetical node"]
     opacity = node["opacity"]
     opacity = min(1.0, max(0.0, opacity))
     opacity_str = f"{opacity:.2f}"
     
-    return object_template.format(object_name=object_name, object_type=object_type, opacity=opacity_str)
-
+    # Escape the newline character for D2
+    object_label = object_label.replace("\n", "\\n")
+    
+    return object_template.format(object_name=object_name, object_label=object_label, object_type=object_type, opacity=opacity_str)
 
 link_template = """{start_object_name} -> {end_object_name}: {{
   style.stroke: black
@@ -108,7 +154,7 @@ link_code_template = """{start_object_name} -> {start_object_name}_code: {{
 def build_d2_code_edge(str_node: dict) -> str:
     opacity = min(1.0, max(0.0, str_node["opacity"]))
     opacity_str = f"{opacity:.2f}"
-    start_object_name = get_object_name(str_node)
+    start_object_name, _ = get_object_name_and_label(str_node)
     return link_code_template.format(start_object_name=start_object_name,  opacity=opacity_str)
 
 
@@ -116,20 +162,20 @@ def build_d2_edge(str_node: dict, end_node: dict) -> str:
     opacity = min(1.0, max(0.0, end_node["opacity"]))
     opacity_str = f"{opacity:.2f}"
     
-    start_object_name = get_object_name(str_node)
-    end_object_name = get_object_name(end_node)
+    start_object_name, _ = get_object_name_and_label(str_node)
+    end_object_name, _ = get_object_name_and_label(end_node)
     
     return link_template.format(start_object_name=start_object_name, end_object_name=end_object_name, opacity=opacity_str)
 
 
-def build_d2_from_dag(dag: dict) -> str:
+def build_d2_from_dag(dag: dict, task: str, include_mode: bool = True) -> str:
     """
     Convert Sub-DAG dictionary into d2 code
     """
-    d2_code = d2_prefix 
+    d2_code = get_d2_prefix(task) 
 
     for node_id, node in dag.items():
-        object_str = build_d2_node(node)
+        object_str = build_d2_node(node, include_mode)
         d2_code += "\n" + object_str
         if node["code_str"]:
             code_str = build_d2_code_node(node)
@@ -153,8 +199,8 @@ def visualize_plan_dict(plan_dict: dict):
     plot_plan_graph(parsed_dag)
 
 
-def plot_plan_graph(dag, output_dir="d2_output", show=True, name="plan_graph"):
-    d2_code = build_d2_from_dag(dag)
+def plot_plan_graph(dag, output_dir="d2_output", show=True, name="plan_graph", task: str = "", include_mode: bool = True):
+    d2_code = build_d2_from_dag(dag, task, include_mode)
     png_file_path = save_png_from_d2(d2_code, name, output_dir=output_dir)
     
     if png_file_path and show:
@@ -199,14 +245,14 @@ def save_png_from_d2(d2_code, file_name, output_dir="d2_output"):
     return png_file_path
 
 
-def visualize_dag(dag: dict, output_dir="sandbox", show: bool = True, cap_node_number = 50, name: str = ""):
+def visualize_dag(dag: dict, output_dir="sandbox", show: bool = True, cap_node_number = 50, name: str = "", task: str = "", include_mode: bool = True):
     """
     Visualize the DAG using d2
     """
     if 'opacity' not in dag[list(dag.keys())[0]]:
         dag = decide_opacity_of_dag(dag, progress=1.0, cap_node_number=cap_node_number)
         
-    d2_code = build_d2_from_dag(dag)
+    d2_code = build_d2_from_dag(dag, task, include_mode)
     png_file_path = save_png_from_d2(d2_code, f"{name}_dag", output_dir=output_dir)
     if png_file_path:
         if show:    

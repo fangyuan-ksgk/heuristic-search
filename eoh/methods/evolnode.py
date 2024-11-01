@@ -765,6 +765,8 @@ class PlanNode:
         self.relevant_nodes = query_engine.query_node(self.meta_prompt.task)
         
     def _update_plan_dict(self, plan_dict):
+        if plan_dict == {}:
+            return {}
         for node in self.relevant_nodes:
             for sub_node in plan_dict["nodes"]:
                 if node.meta_prompt.func_name == sub_node["name"]:
