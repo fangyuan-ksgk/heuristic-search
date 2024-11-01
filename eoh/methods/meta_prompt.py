@@ -525,12 +525,20 @@ def extract_python_funcions(response: str) -> str:
     return code
 
 
+def decide_node_class(node: dict) -> str:
+    if "code" in node and node["code"] != "": 
+        return "retrieved node"
+    else:
+        return "hypothetical node"
+
+
 def parse_plan_graph(plan_dict: dict) -> dict:
     # Create a DAG structure compatible with the existing visualization function
     dag = {}
     for node in plan_dict["nodes"]:
         node_id = node["name"]
         task_str = f"Task: {node['task']}\nInput: {node['inputs']}\nOutput: {node['outputs']}\nTarget: {node['target']}\nMode: {node['mode']}"
+        node_class = decide_node_class(node)
         dag[node_id] = {
             "name": node["name"],
             "type": "code" if node["mode"] == "CODE" else "llm",
@@ -538,7 +546,9 @@ def parse_plan_graph(plan_dict: dict) -> dict:
             "importance": 1.0,
             "edges": [],
             "task_str": task_str,
-            "code_str": ""  # Add the code_str field, initially empty
+            "code_str": "",  # Add the code_str field, initially empty
+            "class": node_class,
+            "task": node["task"]
         }
     
     # Add edges to the DAG
