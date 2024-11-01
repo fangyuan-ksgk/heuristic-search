@@ -194,17 +194,20 @@ def build_d2_from_dag(dag: dict, task: str, include_mode: bool = True) -> str:
     return d2_code
 
 
-def visualize_plan_dict(plan_dict: dict):
+def visualize_plan_dict(plan_dict: dict, task: str):
     parsed_dag = parse_plan_graph(plan_dict)
-    plot_plan_graph(parsed_dag)
+    plot_plan_graph(parsed_dag, task=task, include_mode=True)
 
 
 def plot_plan_graph(dag, output_dir="d2_output", show=True, name="plan_graph", task: str = "", include_mode: bool = True):
     d2_code = build_d2_from_dag(dag, task, include_mode)
     png_file_path = save_png_from_d2(d2_code, name, output_dir=output_dir)
     
-    if png_file_path and show:
-        visualize_dag(dag, output_dir=output_dir, show=show, name=name)
+    if png_file_path and show: 
+        dag_graph = Image.open(png_file_path)
+        dag_graph.show()
+    if not png_file_path:
+        assert False, "Error: PNG file could not be generated."
     
     return png_file_path
 
