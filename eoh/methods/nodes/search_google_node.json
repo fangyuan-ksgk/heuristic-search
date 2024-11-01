@@ -59,5 +59,6 @@
         "result": "...example search results for Multiple Space Query..."
       }
     }
-  ]
+  ],
+  "fitness": 1.0
 }
