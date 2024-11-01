@@ -271,6 +271,11 @@ Generate a python function with sub-functions to complete the task.
 Can use pseudo code for sub-functions with explicit input, input types, output types, and comments, but no implementations.
 """
 
+PLAN_REQUIRED_KEYS = ["task", "name", "inputs", "input_types", "outputs", "output_types", "target", "mode"]
+# def check_n_rectify_plan_dict(plan_dict: dict):
+    
+
+
 PLAN_GRAPH_PROMPT = """Generate a JSON-style plan represented as a Directed Acyclic Graph (DAG) for the task. The plan should include:
 - **Nodes**: Each node represents a key action or step and must contain the following attributes:
 - `task`: Description of the task.
@@ -346,6 +351,7 @@ Provide the output in the following JSON structure:
     "mode: "CODE"
 }
 """
+
 
 # MetaPlan decompose a task into chained sub-tasks (output-intput chained)
 @dataclass
