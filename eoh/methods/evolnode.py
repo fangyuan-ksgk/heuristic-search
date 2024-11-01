@@ -631,6 +631,8 @@ class PlanNode:
         
     def _evolve_plan_dict(self, feedback: str = "", replace: bool = True):
         
+        err_msg = ""
+        
         # Step 1: Generate Pseudo-Code for reliable sub-tasks decomposition
         prompt = self.meta_prompt._get_pseudo_code_prompt(feedback)
 
@@ -639,15 +641,22 @@ class PlanNode:
         
         response = self.get_response(prompt) 
         code = extract_python_code(response)
+        
+        if code == "":
+            err_msg += "No pseudo-code block found in the planning response: \n {response}\n"
 
         # Step 2: Generate Planning DAG: Multiple Nodes 
-        graph_prompt = self.meta_prompt._get_plan_graph_prompt(code) 
+        graph_prompt = self.meta_prompt._get_plan_graph_prompt(code)
         plan_response = self.get_response(graph_prompt)
-        plan_dict = extract_json_from_text(plan_response)
+        try:
+            plan_dict = extract_json_from_text(plan_response)
+        except ValueError as e:
+            plan_dict = {}
+            err_msg += f"Failed to extract JSON from planning response:\n{e}\nResponse was:\n{plan_response}\n"
         
         plan_dict = self._update_plan_dict(plan_dict)
         
-        return plan_dict
+        return plan_dict, err_msg
     
     def _spawn_nodes(self, plan_dict: Dict):
         """ 
