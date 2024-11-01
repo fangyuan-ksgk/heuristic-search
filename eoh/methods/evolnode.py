@@ -532,7 +532,7 @@ class EvolNode:
     def relevant_node_desc(self):
         if len(self.relevant_nodes) == 0:
             return ""
-        return "Available functions for use:\n" + "\n".join([node.__repr__() for node in self.relevant_nodes])
+        return "Available functions for use:\n" + "\n".join([node.__repr__() for node in self.relevant_nodes]) + "If you intend to use this function, put the function calls into your generated function (assume the functions are already implemented). Do not use it in a separate code block with your generated function.\n"
         
     @property
     def referrable_function_dict(self):

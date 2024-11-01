@@ -77,9 +77,13 @@ class MetaPrompt:
             prompt_content = (
                 f"First, describe your new reasoning and main thoughts in one sentence. "
                 "The description must be inside a brace. Implement a Python function that generates a prompt to guide an AI in completing the task. "
-                f"Follow these specifications: - Function name: generate_prompt - Input parameters: {self.joined_inputs} - Return value: A string containing the final prompt for the AI. "
-                f"Ask for JSON-style response with output dictionary: {{" + ', '.join(f"'{out}': {type_hint}(...)" for out, type_hint in zip(self.outputs, self.output_types)) + "}}\n"
-                "Your function should incorporate the reasoning from step 1 and use the input parameters to create a tailored prompt for the task. ")
+                "Second, in another brace, evaluate all of the given tools and decide for each tool whether they are useful for the AI to complete the task. If you determine they are, use it."
+                f"Then, code a function that completes the task. Follow these specifications: - Function name: generate_prompt - Input parameters: {self.joined_inputs} - Return value: A string containing the final prompt for the AI. "
+                f"Ask for JSON-style response with output dictionary: {{" + ', '.join(f"'{out}': {type_hint}(...)" for out, type_hint in zip(self.outputs, self.output_types)) + "}} in a markdown format\n"
+                "Make sure that you generate a prompt that is able to output the json-style response and maybe some reasoning. You can do this by commanding it to follow a certain output structure with json, however you are not allowed to use backticks. Make sure the output is in json format with right types or people will die\n"
+                "Your function should incorporate the reasoning from step 1 and use the input parameters to create a tailored prompt for the task. Make sure to only give one code block. The AI is only able to access the returned prompt, and nothing else.\n\n"
+                "IMPORTANT: Only you have access to the tools given to you, the AI is unable to use it, so if you find a tool very useful for the AI, use it and put its output in the prompt you give to the AI. DO not make the AI do work when you have a tool that already does that work and do not preprocess the output, use the AI to preprocess for you. DO not assume what tools you have, only use the tools given. Do not n"
+            )
             return prompt_content
         elif self.mode == PromptMode.TOOL:
             raise NotImplementedError
