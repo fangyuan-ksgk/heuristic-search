@@ -626,22 +626,27 @@ class PlanNode:
         self.meta_prompt = meta_prompt 
         self.get_response = get_response 
         self.nodes = nodes
+        self.relevant_nodes = None
+
         
     def _evolve_plan_dict(self, feedback: str = "", replace: bool = True):
         
-        # Step 1: Generate Pseudo-Code for SubTask Decomposition
-        prompt = self.meta_prompt._get_pseudo_code_prompt(feedback) # Pseudo-Code Prompt (Non-implemented functional)
+        # Step 1: Generate Pseudo-Code for reliable sub-tasks decomposition
+        prompt = self.meta_prompt._get_pseudo_code_prompt(feedback)
 
         self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
         prompt += "\n" + self.relevant_node_desc
         
-        response = self.get_response(prompt) # Use Strong LLM to build up pseudo-code
-        code = extract_python_code(response) # Extract Python Code from response 
+        response = self.get_response(prompt) 
+        code = extract_python_code(response)
 
         # Step 2: Generate Planning DAG: Multiple Nodes 
         graph_prompt = self.meta_prompt._get_plan_graph_prompt(code) 
         plan_response = self.get_response(graph_prompt)
         plan_dict = extract_json_from_text(plan_response)
+        
+        plan_dict = self._update_plan_dict(plan_dict)
+        
         return plan_dict
     
     def _spawn_nodes(self, plan_dict: Dict):
@@ -735,6 +740,16 @@ class PlanNode:
         """
         query_engine = QueryEngine(ignore_self=ignore_self, self_func_name=self_func_name)
         self.relevant_nodes = query_engine.query_node(self.meta_prompt.task)
+        
+    def _update_plan_dict(self, plan_dict):
+        for node in self.relevant_nodes:
+            for sub_node in plan_dict["nodes"]:
+                if node.meta_prompt.func_name == sub_node["name"]:
+                    for k in ["inputs", "input_types", "outputs", "output_types"]:
+                        sub_node[k] = getattr(node.meta_prompt, k)
+                    for k in ["code", "reasoning", "fitness"]:
+                        sub_node[k] = getattr(node, k)
+        return plan_dict
         
     @property 
     def relevant_node_desc(self):
