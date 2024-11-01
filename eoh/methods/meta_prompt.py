@@ -269,12 +269,7 @@ def parse_evol_response(response: str):
 pseudo_code_prompt = """ 
 Generate a python function with sub-functions to complete the task. 
 Can use pseudo code for sub-functions with explicit input, input types, output types, and comments, but no implementations.
-"""
-
-PLAN_REQUIRED_KEYS = ["task", "name", "inputs", "input_types", "outputs", "output_types", "target", "mode"]
-# def check_n_rectify_plan_dict(plan_dict: dict):
-    
-
+""" 
 
 PLAN_GRAPH_PROMPT = """Generate a JSON-style plan represented as a Directed Acyclic Graph (DAG) for the task. The plan should include:
 - **Nodes**: Each node represents a key action or step and must contain the following attributes:
@@ -330,6 +325,67 @@ Provide the output in the following JSON structure:
 }
 ```
 """
+
+PLAN_REQUIRED_KEYS = ["task", "name", "inputs", "input_types", "outputs", "output_types", "target", "mode"]
+ALLOWED_EXTRA_KEYS = ['code', 'reasoning', 'fitness']
+
+
+def check_n_rectify_plan_dict(plan_dict: dict):
+    """
+    1. Ensure all required keys are present in the plan_dict
+    2. For edges which use ['task', 'name', 'id' (if exists)] as source or target, rectify them to using 'name' instead
+    3. Clean up keys for 'nodes' to only contain required keys
+    """
+    err_msg = []
+    
+    if not isinstance(plan_dict, dict) or 'nodes' not in plan_dict or 'edges' not in plan_dict:
+        err_msg.append("Invalid plan_dict structure: must be a dict with 'nodes' and 'edges' keys")
+        return {}, ("\n").join(err_msg)
+    
+    # Check if all required keys are present in the nodes
+    for node in plan_dict['nodes']:
+        missing_keys = [key for key in PLAN_REQUIRED_KEYS if key not in node]
+        if missing_keys:
+            err_msg.append(f"Planning Node {node.get('name', 'unknown')} is missing required keys: {', '.join(missing_keys)}")
+    if err_msg:
+        return {}, ("\n").join(err_msg)
+    
+    # Rectify edges to use 'name' consistently
+    id_to_name_map = {node.get('id', ''): node['name'] for node in plan_dict['nodes']}
+    task_to_name_map = {node['task']: node['name'] for node in plan_dict['nodes']}
+    name_set = {node['name'] for node in plan_dict["nodes"]}
+    
+    def rectify_edge_endpoint(endpoint: str):
+        err_msg = ""
+        if endpoint in id_to_name_map:
+            return id_to_name_map[endpoint], err_msg
+        elif endpoint in task_to_name_map:
+            return task_to_name_map[endpoint], err_msg
+        elif endpoint in name_set:
+            return endpoint, err_msg
+        else:
+            err_msg = f"Planning EdgeEndpoint {endpoint} not found in plan_dict"
+            return endpoint, err_msg
+    
+    for edge in plan_dict['edges']:
+        source, err_msg_delta = rectify_edge_endpoint(edge['source'])
+        if err_msg_delta:
+            err_msg.append(err_msg_delta)
+        target, err_msg_delta = rectify_edge_endpoint(edge['target'])
+        if err_msg_delta:
+            err_msg.append(err_msg_delta)
+        edge["source"], edge["target"] = source, target
+    
+    if err_msg:
+        return {}, ("\n").join(err_msg)
+        
+    # Clean up nodes, remove weird keys
+    for node in plan_dict['nodes']:
+        for key in node.keys():
+            if key not in PLAN_REQUIRED_KEYS + ALLOWED_EXTRA_KEYS:
+                node.pop(key)
+
+    return plan_dict, ("\n").join(err_msg)
   
 
 # For evaluation node, external memory is important (it could access local files through its code-interpreter, a skill which it should learn in the process)
