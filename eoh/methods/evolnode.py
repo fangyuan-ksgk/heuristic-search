@@ -11,6 +11,8 @@ from tqdm import tqdm
 from collections import defaultdict
 from typing import Optional, Dict, List, Callable, Tuple
 
+MAX_ATTEMPTS = 3
+
 
 def map_input_output(test_case_list: List[dict], input_names: List[str], output_names: List[str]) -> List[Tuple[dict, dict]]:
     inputs = []
@@ -618,8 +620,7 @@ class PlanNode:
     
     def __init__(self, meta_prompt: MetaPlan, 
                  get_response: Optional[Callable] = get_openai_response,
-                 nodes: Optional[List[EvolNode]] = None,
-                 max_attempts: int = 3):
+                 nodes: Optional[List[EvolNode]] = None):
         """ 
         Planning Node for subtask decomposition
         - Spawn helper nodes for better task performance
@@ -628,7 +629,7 @@ class PlanNode:
         self.get_response = get_response 
         self.nodes = nodes
         self.relevant_nodes = None
-        self.max_attempts = max_attempts
+        self.max_attempts = MAX_ATTEMPTS
 
         
     def _evolve_plan_dict(self, feedback: str = "", replace: bool = True):
