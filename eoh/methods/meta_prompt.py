@@ -487,7 +487,53 @@ def generate_test_cases_template(plan_dict: dict, main_test_cases: list) -> str:
     return f"```json\n{json.dumps(test_cases_list, indent=4)}\n```"
 
 
-def _spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable):
+def _filter_test_cases_list(test_cases_list, main_test_cases, accept_extra: bool = False):
+    """Filter and validate test cases against main test cases.
+    
+    Args:
+        test_cases_list: List of dictionaries containing test cases for each step
+        main_test_cases: List of tuples containing (input, output) pairs to validate against
+        accept_extra: Whether to keep additional test cases beyond the main ones
+    
+    Returns:
+        Dictionary mapping step names to filtered test cases
+    """
+    err_msg = []
+    
+    # Find indices of main test cases in the first step
+    match_indices = []
+    match_case_indices = []
+    first_step = test_cases_list[0]
+    last_step = test_cases_list[-1]
+    for main_case in main_test_cases:
+        main_input = main_case[0]
+        for i, test_input in enumerate(first_step['inputs']):
+            if test_input == main_input:
+                test_output = last_step['outputs'][i]
+                main_output = main_case[1]
+                if test_output == main_output:
+                    match_indices.append(i)
+                    match_case_indices.append(main_case)
+                else:
+                    err_msg.append(f"Output mismatch for input {main_input}, expected {main_output}, got {test_output}")
+                break
+        
+    filtered_list = []
+    for step in test_cases_list:
+        filtered_step = {
+            'name': step['name'],
+            'inputs': [step['inputs'][i] for i in match_indices],
+            'outputs': [step['outputs'][i] for i in match_indices]
+        }
+        filtered_list.append(filtered_step)
+        
+    if len(filtered_list) == 0:
+        err_msg.append("No matching test cases with main test cases found")
+                    
+    return filtered_list, "\n".join(err_msg) if err_msg else ""
+
+
+def _spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable) -> tuple[list, str]:
     # generating prompt for spawning sub-node test cases
     plan_str = get_plan_str(plan_dict)
 
@@ -498,11 +544,12 @@ def _spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Call
     response = get_response(spawn_prompt)
 
     try: 
-        spawned_test_cases = extract_json_from_text(response)
-        return spawned_test_cases, ""
+        test_cases_list = extract_json_from_text(response)
+        filtered_list, err_msg = _filter_test_cases_list(test_cases_list, main_test_cases)
+        return filtered_list, err_msg
     except Exception as e:
         err_msg = f"Error in spawning test cases: {e}"
-        return None, err_msg
+        return [], err_msg
     
 def _build_test_cases_dict(spawned_test_cases: list):
     output_dict = {}
@@ -616,9 +663,7 @@ class MetaPlan:
             outputs=data["outputs"],
             input_types=data["input_types"],
             output_types=data["output_types"]
-        )
-    
-    # e1/e2/m1/m2 to be implemented
+        )    
 
 
 def build_graph_from_json(parsed_json):
