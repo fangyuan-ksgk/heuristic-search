@@ -1,150 +1,93 @@
 {
   "nodes": [
     {
-      "task": "Research and understand Dilireba's interests and public persona.",
-      "name": "research_dilireba",
+      "task": "Search Google for celebrity wiki page",
+      "name": "search_google",
       "inputs": [
-        "dilireba_information_sources"
+        "query"
       ],
       "input_types": [
-        "list"
+        "str"
       ],
       "outputs": [
-        "dilireba_profile"
+        "result"
       ],
       "output_types": [
-        "dict"
+        "str"
       ],
-      "target": "Gain insights into her preferences and values.",
+      "target": "Obtain celebrity's wiki page URL",
+      "mode": "CODE",
+      "code": "\nimport http.client\nimport json\nimport os\nfrom typing import Dict, Any\n\ndef _search_google(query: str) -> Dict[str, Any]:\n    \"\"\"\n    Use Serper API to search Google for information\n    \n    Args:\n        query (str): The search query\n    \n    Returns:\n        Dict[str, Any]: Parsed JSON response from the API\n    \"\"\"\n    conn = http.client.HTTPSConnection(\"google.serper.dev\")\n    payload = json.dumps({\"q\": query})\n    headers = {\n        'X-API-KEY': os.environ[\"SERPER_API_KEY\"],\n        'Content-Type': 'application/json'\n    }\n    \n    try:\n        conn.request(\"POST\", \"/search\", payload, headers)\n        res = conn.getresponse()\n        data = res.read()\n        return json.loads(data.decode(\"utf-8\"))\n    except Exception as e:\n        print(f\"Error occurred during API request: {str(e)}\")\n        return {}\n    finally:\n        conn.close()\n        \ndef search_google(query: str) -> str: \n    \"\"\" \n    Input query, return search result string from Google\n    \"\"\"\n    result = _search_google(query)\n    result_dict = {k.replace(\"organic\", \"Search Result\"): v for k, v in result.items() if k in [\"answerBox\", \"organic\"]}\n    result_str = json.dumps(result_dict, indent=2)\n    return result_str \n",
+      "reasoning": "Search google for top search results",
+      "fitness": 1.0
+    },
+    {
+      "task": "Extract birthdate from wiki page",
+      "name": "extract_birthdate",
+      "inputs": [
+        "html"
+      ],
+      "input_types": [
+        "str"
+      ],
+      "outputs": [
+        "birthdate"
+      ],
+      "output_types": [
+        "str"
+      ],
+      "target": "Extract celebrity's birthdate",
       "mode": "CODE"
     },
     {
-      "task": "Improve personal skills and attributes based on research (e.g., language, hobbies).",
-      "name": "self_improvement",
+      "task": "Calculate age",
+      "name": "calculate_age",
       "inputs": [
-        "dilireba_profile"
+        "birthdate"
       ],
       "input_types": [
-        "dict"
+        "str"
       ],
       "outputs": [
-        "improved_skills"
+        "age"
       ],
       "output_types": [
-        "dict"
+        "int"
       ],
-      "target": "Become more relatable and increase attractiveness.",
+      "target": "Calculate celebrity's age",
       "mode": "CODE"
     },
     {
-      "task": "Network to find connections in common with Dilireba.",
-      "name": "network_with_her_circle",
+      "task": "Get celebrity's age",
+      "name": "get_celeb_age",
       "inputs": [
-        "professional_contacts",
-        "dilireba_profile"
+        "name"
       ],
       "input_types": [
-        "list",
-        "dict"
+        "str"
       ],
       "outputs": [
-        "potential_common_connections"
+        "age"
       ],
       "output_types": [
-        "list"
+        "int"
       ],
-      "target": "Build avenues for introduction.",
-      "mode": "PROMPT"
-    },
-    {
-      "task": "Engage on social media positively and naturally.",
-      "name": "social_media_engagement",
-      "inputs": [
-        "dilireba_profile"
-      ],
-      "input_types": [
-        "dict"
-      ],
-      "outputs": [
-        "engagement_feedback"
-      ],
-      "output_types": [
-        "dict"
-      ],
-      "target": "Increase visibility in a non-intrusive manner.",
+      "target": "Obtain celebrity's age",
       "mode": "CODE"
-    },
-    {
-      "task": "Leverage mutual connections for a credible introduction.",
-      "name": "seek_introduction",
-      "inputs": [
-        "potential_common_connections",
-        "improved_skills"
-      ],
-      "input_types": [
-        "list",
-        "dict"
-      ],
-      "outputs": [
-        "introduction_opportunity"
-      ],
-      "output_types": [
-        "bool"
-      ],
-      "target": "Secure a meeting or interaction.",
-      "mode": "PROMPT"
-    },
-    {
-      "task": "Prepare for and execute a successful meeting or interaction.",
-      "name": "execute_meeting",
-      "inputs": [
-        "introduction_opportunity",
-        "improved_skills",
-        "dilireba_profile"
-      ],
-      "input_types": [
-        "bool",
-        "dict",
-        "dict"
-      ],
-      "outputs": [
-        "meeting_results"
-      ],
-      "output_types": [
-        "dict"
-      ],
-      "target": "Lay groundwork for ongoing association.",
-      "mode": "PROMPT"
     }
   ],
   "edges": [
     {
-      "source": "research_dilireba",
-      "target": "self_improvement"
+      "source": "search_google",
+      "target": "extract_birthdate"
     },
     {
-      "source": "research_dilireba",
-      "target": "network_with_her_circle"
+      "source": "extract_birthdate",
+      "target": "calculate_age"
     },
     {
-      "source": "research_dilireba",
-      "target": "social_media_engagement"
-    },
-    {
-      "source": "self_improvement",
-      "target": "seek_introduction"
-    },
-    {
-      "source": "network_with_her_circle",
-      "target": "seek_introduction"
-    },
-    {
-      "source": "social_media_engagement",
-      "target": "seek_introduction"
-    },
-    {
-      "source": "seek_introduction",
-      "target": "execute_meeting"
+      "source": "calculate_age",
+      "target": "get_celeb_age"
     }
   ]
 }

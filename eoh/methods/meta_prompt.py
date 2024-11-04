@@ -329,8 +329,52 @@ Provide the output in the following JSON structure:
 PLAN_REQUIRED_KEYS = ["task", "name", "inputs", "input_types", "outputs", "output_types", "target", "mode"]
 ALLOWED_EXTRA_KEYS = ['code', 'reasoning', 'fitness']
 
-
-def check_n_rectify_plan_dict(plan_dict: dict):
+def _rectify_plan_dict(plan_dict: dict, meta_prompt: "MetaPlan"):
+    main_func_name = meta_prompt.func_name
+    err_msg = []
+    
+    # 1. Remove nodes with empty function names
+    nodes = [node for node in plan_dict["nodes"] if node.get("name", "") and node.get("name", "") != main_func_name]
+    removed_nodes = set(node["name"] for node in plan_dict["nodes"]) - set(node["name"] for node in nodes)
+    
+    # 2. Remove edges connected to removed nodes
+    edges = [edge for edge in plan_dict["edges"] 
+             if edge["source"] not in removed_nodes and edge["target"] not in removed_nodes]
+    
+    # 3. Validate start and end nodes
+    start_nodes = {node["name"] for node in nodes 
+                  if not any(edge["target"] == node["name"] for edge in edges)}
+    end_nodes = {node["name"] for node in nodes 
+                if not any(edge["source"] == node["name"] for edge in edges)}
+    
+    print("Start nodes: ", start_nodes)
+    print("End nodes: ", end_nodes)
+    
+    # Check input/output compatibility
+    for node in nodes:
+        if node["name"] in start_nodes:
+            if node["input_types"] != meta_prompt.input_types: 
+                err_msg.append(f"Start node {node['name']} has incompatible input types")
+            elif node["inputs"] != meta_prompt.inputs:
+                node["inputs"] = meta_prompt.inputs
+        if node["name"] in end_nodes:
+            if node["output_types"] != meta_prompt.output_types:
+                err_msg.append(f"End node {node['name']} has incompatible output types")
+            elif node["outputs"] != meta_prompt.outputs:
+                node["outputs"] = meta_prompt.outputs
+    
+    # Update plan_dict with cleaned data
+    plan_dict = {
+        "nodes": nodes,
+        "edges": edges
+    }
+    
+    if len(err_msg) == 0:
+        return plan_dict, ""
+    else: # why would we ever return a mal-functioning plan_dict anyway ...
+        return {}, err_msg
+    
+def check_n_rectify_plan_dict(plan_dict: dict, meta_prompt: "MetaPlan"):
     """
     1. Ensure all required keys are present in the plan_dict
     2. For edges which use ['task', 'name', 'id' (if exists)] as source or target, rectify them to using 'name' instead
@@ -384,8 +428,12 @@ def check_n_rectify_plan_dict(plan_dict: dict):
         keys_to_remove = [key for key in node.keys() if key not in PLAN_REQUIRED_KEYS + ALLOWED_EXTRA_KEYS]
         for key in keys_to_remove:
             node.pop(key)
+            
+    plan_dict, err_msg_delta = _rectify_plan_dict(plan_dict, meta_prompt)
+    if err_msg_delta:
+        err_msg.append(err_msg_delta)
 
-    return plan_dict, ("\n").join(err_msg)
+    return plan_dict, ("\n").join(err_msg) if err_msg else ""
   
 
 # For evaluation node, external memory is important (it could access local files through its code-interpreter, a skill which it should learn in the process)
