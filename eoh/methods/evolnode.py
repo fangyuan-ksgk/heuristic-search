@@ -620,7 +620,7 @@ class PlanNode:
     
     def __init__(self, meta_prompt: MetaPlan, 
                  get_response: Optional[Callable] = get_openai_response,
-                 nodes: Optional[List[EvolNode]] = None):
+                 nodes: List[EvolNode] = []):
         """ 
         Planning Node for subtask decomposition
         - Spawn helper nodes for better task performance
