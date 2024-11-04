@@ -658,7 +658,7 @@ class PlanNode:
             err_msg += f"Failed to extract JSON from planning response:\n{e}\nResponse was:\n{plan_response}\n"
         
         plan_dict = self._update_plan_dict(plan_dict)
-        plan_dict, err_msg_delta = check_n_rectify_plan_dict(plan_dict)
+        plan_dict, err_msg_delta = check_n_rectify_plan_dict(plan_dict, self.meta_prompt)
         if err_msg_delta:
             err_msg += err_msg_delta
         
