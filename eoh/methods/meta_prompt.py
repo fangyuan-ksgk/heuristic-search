@@ -333,8 +333,11 @@ def _rectify_plan_dict(plan_dict: dict, meta_prompt: "MetaPlan"):
     main_func_name = meta_prompt.func_name
     err_msg = []
     
-    # 1. Remove nodes with empty function names
-    nodes = [node for node in plan_dict["nodes"] if node.get("name", "") and node.get("name", "") != main_func_name]
+    seen_names = {}
+    for node in plan_dict["nodes"]:
+        if node.get("name", "") and node.get("name", "") != main_func_name:
+            seen_names[node["name"]] = node
+    nodes = list(seen_names.values())
     removed_nodes = set(node["name"] for node in plan_dict["nodes"]) - set(node["name"] for node in nodes)
     
     # 2. Remove edges connected to removed nodes
@@ -347,8 +350,8 @@ def _rectify_plan_dict(plan_dict: dict, meta_prompt: "MetaPlan"):
     end_nodes = {node["name"] for node in nodes 
                 if not any(edge["source"] == node["name"] for edge in edges)}
     
-    print("Start nodes: ", start_nodes)
-    print("End nodes: ", end_nodes)
+    # print("Start nodes: ", start_nodes)
+    # print("End nodes: ", end_nodes)
     
     # Check input/output compatibility
     for node in nodes:
@@ -431,10 +434,27 @@ def check_n_rectify_plan_dict(plan_dict: dict, meta_prompt: "MetaPlan"):
             
     plan_dict, err_msg_delta = _rectify_plan_dict(plan_dict, meta_prompt)
     if err_msg_delta:
-        err_msg.append(err_msg_delta)
+        err_msg += err_msg_delta
 
     return plan_dict, ("\n").join(err_msg) if err_msg else ""
   
+
+def get_plan_str(plan_dict: dict) -> str:
+    # Build string representation of nodes
+    nodes_str = "Nodes:\n"
+    for node in plan_dict['nodes']:
+        nodes_str += f"- Task: {node['task']}\n"
+        nodes_str += f"  Name: {node['name']}\n"
+        nodes_str += f"  Inputs: {', '.join(node['inputs'])} ({', '.join(node['input_types'])})\n"
+        nodes_str += f"  Outputs: {', '.join(node['outputs'])} ({', '.join(node['output_types'])})\n\n"
+    
+    # Build string representation of execution flow
+    edges_str = "Execution Flow:\n"
+    for edge in plan_dict['edges']:
+        edges_str += f"- {edge['source']} → {edge['target']}\n"
+    
+    return nodes_str + edges_str
+
 
 # For evaluation node, external memory is important (it could access local files through its code-interpreter, a skill which it should learn in the process)
 # How do we improve on the evaluation? Can we evaluate on the evaluation result? 
