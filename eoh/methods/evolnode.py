@@ -671,10 +671,10 @@ class PlanNode:
         
         return plan_dict, err_msg
     
-    def evolve_plan_dict(self, feedback: str = ""):
+    def evolve_plan_dict(self, feedback: str = "", method: str = "i1"):
         err_msg = ""
         for i in range(self.max_attempts):
-            plan_dict, err_msg_delta = self._evolve_plan_dict(feedback)
+            plan_dict, err_msg_delta = self._evolve_plan_dict(feedback, method=method)
             if err_msg_delta == "":
                 return plan_dict, ""
             err_msg += f"Plan evolution {i} failed with error message: \n{err_msg_delta}\n"

@@ -533,6 +533,33 @@ def _filter_test_cases_list(test_cases_list, main_test_cases, accept_extra: bool
     return filtered_list, "\n".join(err_msg) if err_msg else ""
 
 
+def combine_test_cases_list(t1, t2):
+    # combining test cases list from different runs ...
+    combined_t = []
+    for (sub_node_cases1, sub_node_cases2) in zip(t1, t2):
+        combined_cases = {"name": sub_node_cases1["name"],
+                        "inputs": sub_node_cases1["inputs"] + sub_node_cases2["inputs"],
+                        "outputs": sub_node_cases1["outputs"] + sub_node_cases2["outputs"]}
+        combined_t.append(combined_cases)
+        
+    # filter unique inputs ...
+    unique_indices = [] 
+    unique_initial_inputs = []
+    first_step_inputs = combined_t[0]['inputs']
+    for i, input_dict in enumerate(first_step_inputs):
+        if input_dict not in unique_initial_inputs:
+            unique_indices.append(i)
+            unique_initial_inputs.append(input_dict)
+        else:
+            continue
+        
+    for sub_node_cases in combined_t:
+        sub_node_cases["inputs"] = [sub_node_cases["inputs"][i] for i in unique_indices]
+        sub_node_cases["outputs"] = [sub_node_cases["outputs"][i] for i in unique_indices]
+        
+    return combined_t
+
+
 def _spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable) -> tuple[list, str]:
     # generating prompt for spawning sub-node test cases
     plan_str = get_plan_str(plan_dict)
@@ -558,16 +585,27 @@ def _build_test_cases_dict(spawned_test_cases: list):
         output_dict[cases["name"]] = sub_node_test_cases
     return output_dict 
 
-def spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable, max_tries: int = 3) -> tuple[dict, str]:
+
+def spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable, max_tries: int = 6) -> tuple[dict, str]:
+    test_case_count = len(main_test_cases)
+    test_cases_list = []
+    err_msg = []
     for _ in range(max_tries):
-        spawned_test_cases, err_msg = _spawn_test_cases(plan_dict, main_test_cases, get_response)
-        if err_msg == "":
-            try:
-                return _build_test_cases_dict(spawned_test_cases), ""
-            except Exception as e:
-                err_msg = f"Error in building test cases: {e}"
-                return {}, err_msg
-    return {}, err_msg
+        test_cases_list_delta, err_msg_delta = _spawn_test_cases(plan_dict, main_test_cases, get_response)
+        if err_msg_delta == "" and test_cases_list != []:
+            test_cases_list = combine_test_cases_list(test_cases_list, test_cases_list_delta)
+        elif err_msg_delta == "" and test_cases_list == []:
+            test_cases_list = test_cases_list_delta
+        else:
+            err_msg.append(err_msg_delta)
+        
+        if test_cases_list and len(test_cases_list[0]["inputs"]) >= test_case_count:
+            break
+
+    if test_cases_list:
+        return _build_test_cases_dict(test_cases_list), "\n".join(err_msg) if err_msg else ""
+    else:
+        return {}, "\n".join(err_msg) if err_msg else ""
 
 # For evaluation node, external memory is important (it could access local files through its code-interpreter, a skill which it should learn in the process)
 # How do we improve on the evaluation? Can we evaluate on the evaluation result? 
