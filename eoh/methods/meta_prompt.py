@@ -381,9 +381,9 @@ def check_n_rectify_plan_dict(plan_dict: dict):
         
     # Clean up nodes, remove weird keys
     for node in plan_dict['nodes']:
-        for key in node.keys():
-            if key not in PLAN_REQUIRED_KEYS + ALLOWED_EXTRA_KEYS:
-                node.pop(key)
+        keys_to_remove = [key for key in node.keys() if key not in PLAN_REQUIRED_KEYS + ALLOWED_EXTRA_KEYS]
+        for key in keys_to_remove:
+            node.pop(key)
 
     return plan_dict, ("\n").join(err_msg)
   
