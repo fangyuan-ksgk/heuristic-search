@@ -6,7 +6,7 @@ import re
 import ast
 import networkx as nx
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional, Union, Callable
 
 class PromptMode(Enum):
     CODE = "code"
@@ -457,6 +457,71 @@ def get_plan_str(plan_dict: dict) -> str:
     return nodes_str + edges_str
 
 
+def generate_test_cases_template(plan_dict: dict, main_test_cases: list) -> str:
+    test_cases_list = []
+    inputs = [io[0] for io in main_test_cases]
+    outputs = [io[1] for io in main_test_cases]
+    
+    for i, node in enumerate(plan_dict['nodes']):
+        node_test_case = {
+            "name": node['name'],
+            "inputs": [],
+            "outputs": []
+        }
+        
+        # Handle entry node (first node)
+        if i == 0:
+            node_test_case["inputs"] = inputs
+            node_test_case["outputs"] = [{"result": "..."} for _ in inputs]
+        # Handle exit node (last node)
+        elif i == len(plan_dict['nodes']) - 1:
+            node_test_case["inputs"] = [{"google_result": "..."} for _ in inputs]
+            node_test_case["outputs"] = outputs
+        # Handle intermediate nodes
+        else:
+            node_test_case["inputs"] = [{input_name: "..." for input_name in node['inputs']} for _ in inputs]
+            node_test_case["outputs"] = [{output_name: "..." for output_name in node['outputs']} for _ in inputs]
+            
+        test_cases_list.append(node_test_case)
+    
+    return f"```json\n{json.dumps(test_cases_list, indent=4)}\n```"
+
+
+def _spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable):
+    # generating prompt for spawning sub-node test cases
+    plan_str = get_plan_str(plan_dict)
+
+    oneshot_prompt = generate_test_cases_template(plan_dict, main_test_cases)
+
+    spawn_prompt = f"Here is a execution plan for a function: \n{plan_str}\n\n help generate test cases for each sub-function by filling the ... with proper inputs and outputs, output JSON like this: \n{oneshot_prompt}"
+
+    response = get_response(spawn_prompt)
+
+    try: 
+        spawned_test_cases = extract_json_from_text(response)
+        return spawned_test_cases, ""
+    except Exception as e:
+        err_msg = f"Error in spawning test cases: {e}"
+        return None, err_msg
+    
+def _build_test_cases_dict(spawned_test_cases: list):
+    output_dict = {}
+    for cases in spawned_test_cases:
+        sub_node_test_cases = [(i, o) for i, o in zip(cases["inputs"], cases["outputs"])]
+        output_dict[cases["name"]] = sub_node_test_cases
+    return output_dict 
+
+def spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable, max_tries: int = 3) -> tuple[dict, str]:
+    for _ in range(max_tries):
+        spawned_test_cases, err_msg = _spawn_test_cases(plan_dict, main_test_cases, get_response)
+        if err_msg == "":
+            try:
+                return _build_test_cases_dict(spawned_test_cases), ""
+            except Exception as e:
+                err_msg = f"Error in building test cases: {e}"
+                return {}, err_msg
+    return {}, err_msg
+
 # For evaluation node, external memory is important (it could access local files through its code-interpreter, a skill which it should learn in the process)
 # How do we improve on the evaluation? Can we evaluate on the evaluation result? 
 
@@ -508,11 +573,23 @@ class MetaPlan:
         prompt_content = PLAN_GRAPH_PROMPT.replace("inputs_str", input_str).replace("input_types_str", input_types_str).replace("outputs_str", output_str).replace("output_types_str", output_types_str)
         return prompt_content
     
-    def _get_pseudo_code_prompt(self, feedback: str = ""):
+    def _get_prompt_i1(self, feedback: str = "", parents: list = []):
         prompt_content = f"Task: {self.task}\n{self._base_pseudo_code_prompt}"
         if feedback:
             prompt_content += f"\nPlease incorporate this feedback in your solution: {feedback}"
         return prompt_content
+    
+    def _get_prompt_m1(self, feedback: str = "", parents: list = []):
+        raise NotImplementedError("Method m1 not implemented")
+        
+    def _get_prompt_m2(self, feedback: str = "", parents: list = []):
+        raise NotImplementedError("Method m2 not implemented")
+    
+    def _get_prompt_e1(self, feedback: str = "", parents: list = []):
+        raise NotImplementedError("Method e1 not implemented")
+    
+    def _get_prompt_e2(self, feedback: str = "", parents: list = []):
+        raise NotImplementedError("Method e2 not implemented")
     
     def _get_plan_graph_prompt(self, code: str):
         prompt_content = f"Task: {self.task}\n\n"

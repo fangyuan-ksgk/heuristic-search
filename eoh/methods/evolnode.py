@@ -639,12 +639,12 @@ class PlanNode:
         self.max_attempts = MAX_ATTEMPTS
 
         
-    def _evolve_plan_dict(self, feedback: str = "", replace: bool = True):
+    def _evolve_plan_dict(self, feedback: str = "", replace: bool = True, method: str = "i1", parents: list = []):
         
         err_msg = ""
         
         # Step 1: Generate Pseudo-Code for reliable sub-tasks decomposition
-        prompt = self.meta_prompt._get_pseudo_code_prompt(feedback)
+        prompt = getattr(self.meta_prompt, f"_get_prompt_{method}")(feedback, parents)
 
         self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
         prompt += "\n" + self.relevant_node_desc
