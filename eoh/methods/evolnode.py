@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import struct
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
 from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT, check_n_rectify_plan_dict
 from .meta_execute import call_func_code, call_func_prompt, compile_code_with_references
@@ -280,7 +281,7 @@ class EvolNode:
         Note: Evolution process will be decoupled with the fitness assignment process
         """
         response = self._get_evolve_response(method, parents, feedback)
-        
+        print(response)
         try:
             reasoning, code = parse_evol_response(response)
             code = compile_code_with_references(code, self.referrable_function_dict) # deal with node references
@@ -298,15 +299,17 @@ class EvolNode:
         Attempts multiple evolutions before returning the final output
         """
         
-        # Query once 
+        # Query once
+        offsprings = [] 
         self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
         
         # Evolve many times
         for attempt in range(max_attempts):
             reasoning, code = self._evolve(method, parents, replace=False) 
             self.tmp_code = code   
-            fitness, error_msg = self._evaluate_fitness(code=code, max_tries=1, num_runs=num_runs)            
-            
+            fitness, error_msg = self._evaluate_fitness(code=code, max_tries=1, num_runs=num_runs)      
+            structural_fitness = fitness.structural_fitness
+            fitness = fitness()
             if replace and fitness >= self.fitness:
                 
                 print("--- Replacing with new node") 
@@ -318,13 +321,16 @@ class EvolNode:
                     print(f"--- Fitness: {fitness:.2f}")
                     print("--- Fitness threshold reached")
                     return reasoning, code
-            
+            elif not replace and structural_fitness == 1.0:
+                offsprings.append({"reasoning": reasoning, "code": code, "fitness": fitness})
             
             
             # If not successful, log the attempt
             print(f" - Attempt {attempt + 1} failed. Fitness: {fitness:.2f}. Error: {error_msg}")
         
         # If all attempts fail, return None
+        if not replace:
+            return offsprings
         print(f"Evolution failed after {max_attempts} attempts.")
         return None, None
     
@@ -384,12 +390,12 @@ class EvolNode:
         
     
     def _evaluate_fitness(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, code: Optional[str] = None, 
-                                        max_tries: int = 3, num_runs: int = 1) -> float:
+                                        max_tries: int = 3, num_runs: int = 1) -> Fitness:
         """ 
         Alignment checking with expected outputs with LLM
         """
         if code is None:
-            return 0.0, ""
+            return Fitness(0.0, 0.0), ""
         
         if test_cases is None:
             test_cases = self.test_cases
@@ -433,6 +439,7 @@ class EvolNode:
             elif self.meta_prompt.mode == PromptMode.PROMPT:
                 
                 output_dict, error_msg_delta = self.call_prompt_function(test_input, code, max_tries)
+                print(code)
                 if error_msg_delta == "":
                     compiled_tests += 1
                     is_aligned = check_alignment(output_dict, test_output, self.get_response)
@@ -456,7 +463,7 @@ class EvolNode:
         functional_fitness = passed_tests / total_tests
         fitness = Fitness(structural_fitness, functional_fitness)
         
-        return fitness(), f" {str(fitness)}\n" + issue_summary + "\nError Message:\n" + error_msg
+        return fitness, f" {str(fitness)}\n" + issue_summary + "\nError Message:\n" + error_msg
 
 
     def i1(self):
