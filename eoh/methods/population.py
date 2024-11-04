@@ -7,6 +7,7 @@ from typing import Callable
 # from joblib import Parallel, delayed
 from typing import List, Optional, Union
 from collections import defaultdict
+import random
 # Managing population of evolving nodes 
 # - Natural selection 
 # - Offspring generation
@@ -28,11 +29,12 @@ def parent_selection(pop: List[EvolNode], m: int, proportion: float = 0.8) -> Li
     selected_parents = []
     tournament_size = min(len(pop) // m, int(len(pop) * proportion)) # Dynamic tournament size 
 
-    for _ in range(m):
+    while len(selected_parents) != m:
         # Each tournament now looks at population_size/m individuals
         tournament = np.random.choice(pop, size=max(2, tournament_size), replace=False)
         winner = max(tournament, key=lambda x: x['fitness'] if x['fitness'] is not None else float('-inf'))
-        selected_parents.append(winner)
+        if winner not in selected_parents:
+            selected_parents.append(winner)
     
     return selected_parents
 
@@ -51,7 +53,7 @@ def indiv_to_prompt(indiv: dict, mode: PromptMode) -> str:
 class Evolution: 
     
     def __init__(self, pop_size: int, meta_prompt: MetaPrompt, get_response: Callable, test_cases: Optional[list] = None, 
-                 max_attempts: int = 3, num_eval_runs: int = 1, num_parents: int = 2, filename: str = "default", load: bool = False): 
+                 max_attempts: int = 3, num_eval_runs: int = 1, num_parents: int = 2, filename: str = "default", load: bool = False, mutation_rate: float = 0.1): 
         self.pop_size = pop_size # not used (for capping population size I suppose?)
         self.meta_prompt = meta_prompt
         self.evol = EvolNode(meta_prompt, None, None, get_response=get_response, test_cases=test_cases)
@@ -59,39 +61,70 @@ class Evolution:
         self.num_eval_runs = num_eval_runs
         self.num_parents = num_parents
         self.population = []
+        self.load = load
         if load:
             self.population = self.load_population(filename)
+        self.mutation_rate = mutation_rate
         self.get_response = get_response
         self.strategy_trace = "Initial Population information: " + self.population_info
 
     def check_duplicate(self, population, code):
         return any(code == ind['code'] for ind in population)
             
-    def _get_offspring(self, operator, pop: list = []):
+    def _get_offspring(self, operator, pop: list = [], max_attempts: int = -1):
         """ 
         Generate one offspring using specific operator 
         - Select parent
         - Evolve (crossover or mutation)
         """
+        if max_attempts == -1:
+            max_attempts = self.max_attempts
         
         offspring = {"reasoning": None, "code": None, "fitness": None}
                 
         if operator == "i1": # initialization operator 
-            self.evol.evolve("i1", replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
+            self.evol.evolve("i1", replace=True, max_attempts=max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
         elif operator.startswith("e"): # cross-over operator
+            if not self.load and len(pop) < self.num_parents:
+                while len(pop) < self.num_parents:
+                    pop.extend(self.evol.evolve("i1", max_attempts=1, num_runs=self.num_eval_runs))
             assert len(pop) >= self.num_parents, "Population size is less than the number of parents required for Crossover operator"
             parents = parent_selection(pop, self.num_parents) # in fact we don't mind 3P
-            self.evol.evolve(operator, parents, replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
+            self.evol.evolve(operator, parents, replace=True, max_attempts=max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
         elif operator.startswith("m"): # mutation operator
+            if not self.load and len(pop) < 1:
+                pop = self._get_offspring("i1", pop, 1)
+                
             assert len(pop) >= 1, "Population size is less than the number of parents required for Mutation operator"
             parents = parent_selection(pop, 1) # one parent used for mutation
-            self.evol.evolve(operator, parents[0], replace=True, max_attempts=self.max_attempts, num_runs=self.num_eval_runs)
+            self.evol.evolve(operator, parents[0], replace=True, max_attempts=max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
-                
+        elif operator == "t": #traditional GA
+            if not self.load and len(pop) < self.pop_size:
+                while len(pop) < self.pop_size:
+                    pop.extend(self.evol.evolve("i1", max_attempts=1, num_runs=self.num_eval_runs))
+            assert len(pop) >= self.num_parents, "Population size is less than the number of parents required for Traditional operator"
+            for i in range(max_attempts):
+                parents = parent_selection(pop, self.num_parents)
+                offspring = []
+                while len(offspring) == 0 or self.check_duplicate(pop, offspring[0]["code"]):
+                    offspring = self.evol.evolve("e1", parents, max_attempts=1, num_runs=self.num_eval_runs)
+                offspring = offspring[0]
+                if random.random() < self.mutation_rate:
+                    offspring_m = []
+                    while len(offspring_m) == 0 or self.check_duplicate(pop, offspring_m[0]["code"]):
+                        offspring_m = self.evol.evolve("m1", offspring, max_attempts=1, num_runs=self.num_eval_runs)
+                    offspring = offspring_m[0]
+                offspring_info = f"Going through {1} of {operator} evolution steps, obtaining offspring:\n {indiv_to_prompt(offspring, self.meta_prompt.mode)}"
+                self.strategy_trace += offspring_info
+
+                pop.append(offspring)
+                if offspring["fitness"] == 1.0: break
+            return pop
         # Evolution Info Tracing
-        offspring_info = f"Going through {self.max_attempts} of {operator} evolution steps, obtaining offspring:\n {indiv_to_prompt(offspring, self.meta_prompt.mode)}"
+        offspring_info = f"Going through {max_attempts} of {operator} evolution steps, obtaining offspring:\n {indiv_to_prompt(offspring, self.meta_prompt.mode)}"
         self.strategy_trace += offspring_info
 
         # add offspring to population
