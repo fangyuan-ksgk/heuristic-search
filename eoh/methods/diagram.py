@@ -106,7 +106,7 @@ code_template = """{object_name}_code: |python
   }}
 }}"""
 
-def get_object_name_and_label(node: dict, include_mode: bool = True, name_key: str = "task") -> str: 
+def get_object_name_and_label(node: dict, include_mode: bool = True, name_key: str = "name") -> str: 
     mode_str = "Prompt + LLM" if node["type"] == "PROMPT" else "Code + Compiler"
     if include_mode:
         name = node[name_key]
