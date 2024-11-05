@@ -1,11 +1,22 @@
 from typing import List, Optional, Union, Callable
 from transformers import AutoTokenizer
-from openai import OpenAI 
+from openai import OpenAI, AsyncOpenAI
 from os import getenv
 import torch
 import random 
 import anthropic
 import os
+import asyncio
+import aiohttp
+import time
+
+# os.environ["OPENAI_API_KEY"] = "YOUR OPENAI API KEY"
+# os.environ["GROQ_API_KEY"] = "YOUR GROQ API KEY"
+# os.environ["HF_TOKEN"] = "YOUR HUGGINGFACE TOKEN"
+# os.environ["ANTHROPIC_API_KEY"] = "YOUR ANTHROPIC API KEY"
+# os.environ["GITHUB_TOKEN"] = "YOUR GITHUB TOKEN"
+# RUNPOD_API_KEY = "YOUR RUNPOD API KEY"
+# RUNPOD_ENDPOINT_ID = "YOUR RUNPOD ENDPOINT ID"
 
 oai_client = OpenAI()
 claude_client = anthropic.Anthropic()
@@ -198,6 +209,47 @@ def fold_vllm_response_func(name: str = "")->Callable:
     model = VLLM(name="meta-llama/Llama-3.1-8B-Instruct" if not name else name)
     get_vllm_response = lambda query: model.completions([query])[0]
     return get_vllm_response
+
+#########################
+# RundPod vLLM endpoint #
+#########################
+
+def get_async_vllm_endpoint(endpoint_id: str, runpod_api_key: str) -> Callable:
+    async def get_completion(client, session, query: str, system_prompt: str = "You are a Turing award winner."):
+        return await client.chat.completions.create(
+            model="meta-llama/Llama-3.1-8B-Instruct",
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": query}]
+        )
+        
+    async def run_parallel_inference(query_list: list, system_prompt: str = "You are a Turing award winner."):
+        client = AsyncOpenAI(
+            base_url=f"https://api.runpod.ai/v2/{endpoint_id}/openai/v1",
+            api_key=runpod_api_key,
+        )
+        
+        async with aiohttp.ClientSession() as session:
+            start_time = time.time()
+            
+            # Create tasks for parallel execution
+            tasks = [get_completion(client, session, query, system_prompt) for query in query_list]
+            # Run all tasks concurrently and gather results
+            responses = await asyncio.gather(*tasks)
+            
+            elapsed_time = time.time() - start_time
+            
+            return responses
+        
+    import nest_asyncio
+    nest_asyncio.apply()  # Add this at the top of your notebook or before async code
+
+    def get_vllm_endpoint_response(prompt: list, system_prompt: str = "You are a Turing award winner.") -> list:
+        responses = asyncio.run(run_parallel_inference(prompt, system_prompt))
+        return [r.choices[0].message.content for r in responses]
+    
+    return get_vllm_endpoint_response
+
+
+
     
 try:
     import groq
