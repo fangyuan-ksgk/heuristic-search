@@ -194,8 +194,8 @@ except ImportError:
     # Just write a dummy VLLM class for Mac instance here 
     print("Could not load vllm class, check CUDA support and GPU RAM size")
     
-def fold_vllm_response_func(name: str)->Callable:
-    model = VLLM(name="meta-llama/Llama-3.1-8B-Instruct")
+def fold_vllm_response_func(name: str = "")->Callable:
+    model = VLLM(name="meta-llama/Llama-3.1-8B-Instruct" if not name else name)
     get_vllm_response = lambda query: model.completions([query])[0]
     return get_vllm_response
     
