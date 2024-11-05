@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Callable
 from transformers import AutoTokenizer
 from openai import OpenAI 
 from os import getenv
@@ -194,6 +194,10 @@ except ImportError:
     # Just write a dummy VLLM class for Mac instance here 
     print("Could not load vllm class, check CUDA support and GPU RAM size")
     
+def fold_get_vllm_response_func(name: str)->Callable:
+    model = VLLM(name="meta-llama/Llama-3.1-8B-Instruct")
+    get_vllm_response = lambda query: model.completions([query])[0]
+    return get_vllm_response
     
 try:
     import groq
