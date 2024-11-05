@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import struct
-from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
+from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response, spawn_test_cases
 from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT, check_n_rectify_plan_dict
 from .meta_execute import call_func_code, call_func_prompt, compile_code_with_references
 from sentence_transformers import SentenceTransformer
@@ -12,8 +12,9 @@ from tqdm import tqdm
 from collections import defaultdict
 from typing import Optional, Dict, List, Callable, Tuple
 
-MAX_ATTEMPTS = 3
-
+MAX_ATTEMPTS = 6
+SPAWN_TEST_MAX_TRIES = 20
+NODE_EVOLVE_MAX_ATTEMPTS = 5
 
 def map_input_output(test_case_list: List[dict], input_names: List[str], output_names: List[str]) -> List[Tuple[dict, dict]]:
     inputs = []
@@ -627,7 +628,8 @@ class PlanNode:
     
     def __init__(self, meta_prompt: MetaPlan, 
                  get_response: Optional[Callable] = get_openai_response,
-                 nodes: List[EvolNode] = []):
+                 nodes: List[EvolNode] = [],
+                 plan_dict: dict = {}):
         """ 
         Planning Node for subtask decomposition
         - Spawn helper nodes for better task performance
@@ -637,6 +639,7 @@ class PlanNode:
         self.nodes = nodes
         self.relevant_nodes = None
         self.max_attempts = MAX_ATTEMPTS
+        self.plan_dict = plan_dict
 
         
     def _evolve_plan_dict(self, feedback: str = "", replace: bool = True, method: str = "i1", parents: list = []):
@@ -676,13 +679,49 @@ class PlanNode:
         for i in range(self.max_attempts):
             plan_dict, err_msg_delta = self._evolve_plan_dict(feedback, method=method)
             if err_msg_delta == "":
+                self.plan_dict = plan_dict
                 return plan_dict, ""
             err_msg += f"Plan evolution {i} failed with error message: \n{err_msg_delta}\n"
             
         return {}, err_msg
+    
+    def spawn_test_cases(self, main_test_cases: list) -> tuple[bool, str]: 
+        test_cases_dict, err_msg = spawn_test_cases(self.plan_dict, main_test_cases, self.get_response, SPAWN_TEST_MAX_TRIES)
+        if test_cases_dict:
+            self.test_cases_dict = test_cases_dict
+            print(f"Spawned {len(test_cases_dict)} test cases for all sub-nodes")
+            return True, err_msg
+        else:
+            print(f"Failed to spawn test cases: {err_msg}")
+            return False, err_msg 
         
     
-    def _spawn_nodes(self, plan_dict: Dict):
+    def evolve_sub_nodes(self, method: str = "i1"):
+        """
+        Evolve all sub-nodes using their respective test cases
+        """
+        for node_dict in self.plan_dict["nodes"]:
+            meta_prompt = MetaPrompt(
+                task=node_dict["task"],
+                func_name=node_dict["name"],
+                inputs=node_dict["inputs"],
+                outputs=node_dict["outputs"],
+                input_types=node_dict["input_types"],
+                output_types=node_dict["output_types"],
+                mode=PromptMode((node_dict.get("mode", "code")).lower())
+            )
+            test_cases = self.test_cases_dict[node_dict["name"]]
+            node = EvolNode(meta_prompt, None, None, get_response=self.get_response, test_cases=test_cases)
+            node.evolve(method, replace=True, max_attempts=NODE_EVOLVE_MAX_ATTEMPTS, num_runs=2)
+            self.nodes.append(node)
+            
+    def evolve_plan(self, method: str = "i1"):
+        """ 
+        Allocate budget to each plans, ensemble fitness of nodes after budget exhausted and re-allocate more budgets to a selection of plans
+        """
+        raise NotImplementedError
+    
+    def _spawn_nodes(self, plan_dict: Dict): # bad idea since test cases are not grounded ... 
         """ 
         Spawn new nodes based on plan_dict
         - Each node is evolved as CODE and PROMPT, we let evaluation result decides which one to keep
