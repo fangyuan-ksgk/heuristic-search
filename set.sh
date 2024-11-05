@@ -6,3 +6,4 @@ pip install --upgrade transformers trl huggingface_hub datasets accelerate bitsa
 MAX_JOBS=4 pip install flash-attn -U --no-build-isolation --force-reinstall
 pip install flashinfer -i https://flashinfer.ai/whl/cu121/torch2.3
 pip install --upgrade vllm
+pip install --upgrade jupyterlab
