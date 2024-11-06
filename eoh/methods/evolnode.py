@@ -685,6 +685,52 @@ class PlanNode:
             
         return {}, err_msg
     
+    def evolve_plan_dict_parallel(self, feedback: str = "", method: str = "i1", parents: list = [], replace: bool = True, batch_size: int = 10):
+        """ 
+        Handling batch inference
+        """
+        if not self.nodes:
+            return False, "No nodes available for evolution"
+        
+        print(f"Evolving {len(self.nodes)} nodes in parallel with batch size {batch_size}...")
+
+        err_msg = ""
+        prompts = []
+        for i in range(batch_size):
+            prompt = getattr(self.meta_prompt, f"_get_prompt_{method}")(feedback, parents)
+            self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
+            prompt += "\n" + self.relevant_node_desc
+            prompts.append(prompt)
+        
+        responses = self.get_response(prompts)
+        
+        plan_dicts = []
+        for response in responses:
+            code = extract_python_code(response)
+            
+            if code == "":
+                err_msg += "No pseudo-code block found in the planning response: \n {response}\n"
+
+            # Step 2: Generate Planning DAG: Multiple Nodes 
+            graph_prompt = self.meta_prompt._get_plan_graph_prompt(code)
+            plan_response = self.get_response(graph_prompt)
+            try:
+                plan_dict = extract_json_from_text(plan_response)
+            except ValueError as e:
+                plan_dict = {}
+                err_msg += f"Failed to extract JSON from planning response:\n{e}\nResponse was:\n{plan_response}\n"
+            
+            plan_dict = self._update_plan_dict(plan_dict)
+            plan_dict, err_msg_delta = check_n_rectify_plan_dict(plan_dict, self.meta_prompt)
+            if err_msg_delta:
+                err_msg += err_msg_delta
+            if plan_dict:
+                plan_dicts.append(plan_dict)
+        
+        return plan_dicts, err_msg
+    
+    
+    
     def spawn_test_cases(self, main_test_cases: list) -> tuple[bool, str]: 
         test_cases_dict, err_msg = spawn_test_cases(self.plan_dict, main_test_cases, self.get_response, SPAWN_TEST_MAX_TRIES)
         if test_cases_dict:
