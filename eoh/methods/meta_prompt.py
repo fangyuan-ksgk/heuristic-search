@@ -606,6 +606,39 @@ def spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Calla
         return _build_test_cases_dict(test_cases_list), "\n".join(err_msg) if err_msg else ""
     else:
         return {}, "\n".join(err_msg) if err_msg else ""
+    
+def spawn_test_cases_parallel(plan_dict: dict, main_test_cases: list, get_response: Callable, batch_size: int = 1) -> tuple[dict, str]:
+
+    plan_str = get_plan_str(plan_dict)
+    oneshot_prompt = generate_test_cases_template(plan_dict, main_test_cases)
+    spawn_prompt = f"Here is a execution plan for a function: \n{plan_str}\n\n help generate test cases for each sub-function by filling the ... with proper inputs and outputs, output JSON like this: \n{oneshot_prompt}"
+    spawn_prompts = [spawn_prompt] * batch_size
+
+    responses = get_response(spawn_prompts)
+
+    test_cases_deltas = []
+    err_msgs = []
+    for response in responses:
+        try: 
+            test_cases_list = extract_json_from_text(response)
+            filtered_list, err_msg = _filter_test_cases_list(test_cases_list, main_test_cases)
+            if filtered_list:
+                test_cases_deltas.append(filtered_list)
+            err_msgs.append(err_msg)
+        except Exception as e:
+            err_msgs.append(f"Error in spawning test cases: {e}")
+    
+    for i, test_cases_delta in enumerate(test_cases_deltas):
+        if i == 0:
+            test_cases_list = test_cases_delta
+        else:
+            test_cases_list = combine_test_cases_list(test_cases_list, test_cases_delta)
+
+    if test_cases_list:
+        return _build_test_cases_dict(test_cases_list), "\n".join(err_msgs) if err_msgs else ""
+    else:
+        return {}, "\n".join(err_msgs) if err_msgs else ""
+    
 
 # For evaluation node, external memory is important (it could access local files through its code-interpreter, a skill which it should learn in the process)
 # How do we improve on the evaluation? Can we evaluate on the evaluation result? 
