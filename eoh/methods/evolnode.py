@@ -260,7 +260,6 @@ class Fitness:
         if self.structural_fitness >= 0.8 and self.functional_fitness <= 0.2:
             return "This function runs, but never correctly"
         return f"Function runs with success rate: {self.structural_fitness*100:.1f}%, runs correctly with rate: {self.functional_fitness*100:.1f}%"
-            
         
     
 
@@ -436,9 +435,11 @@ class EvolNode:
         reasonings, codes = self._evolve(method, parents, batch_size=batch_size)
         fitness_per_code, errors_per_code, global_summary = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs)
         
+        print(global_summary)
+        
         offspings = []
         for code_index in fitness_per_code:
-            fitness = fitness_per_code[code_index]
+            fitness = fitness_per_code[code_index]()
             reasoning = reasonings[code_index]
             code = codes[code_index]
             err_msg = "\n".join(errors_per_code[code_index]) if len(errors_per_code[code_index]) > 0 else ""
