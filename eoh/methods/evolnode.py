@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import struct
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response, spawn_test_cases
 from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT, check_n_rectify_plan_dict
-from .meta_execute import call_func_code, call_func_prompt_parallel, call_func_prompt, compile_code_with_references
+from .meta_execute import call_func_code, call_func_prompt_parallel, call_func_prompt, compile_code_with_references, combine_scores, combine_errors
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from .llm import get_openai_response
@@ -121,12 +121,15 @@ def _check_alignment_with_llm_sequential(pred_output: dict, target_output: dict,
     return False, error_msg
 
 
-def _check_alignment_with_metric_parallel(output_per_code_per_test: Dict[int, Dict[int, Dict]], test_inputs: List[Dict], target_outputs: List[Dict]):
+def _check_alignment_with_metric_parallel(output_per_code_per_test: Dict[int, Dict[int, Dict]],
+                                          errors_per_code_per_test: Dict[int, Dict[int, List[str]]],
+                                          test_inputs: List[Dict], 
+                                          target_outputs: List[Dict]):
     
     scores_per_code_per_test = defaultdict(lambda: defaultdict(list))
-    for code_index, test_index in output_per_code_per_test.keys():
-        for test_index, output_dict in output_per_code_per_test[code_index].items():
-            pred_output, target_output = output_dict, target_outputs[test_index]
+    for code_index in output_per_code_per_test:
+        for test_index in output_per_code_per_test[code_index]:
+            pred_output, target_output = output_per_code_per_test[code_index][test_index], target_outputs[test_index]
             trimmed_pred = {k: v for k, v in pred_output.items() if not require_llm_metric(v)}
             trimmed_target = {k: v for k, v in target_output.items() if not require_llm_metric(v)}            
             if len(trimmed_pred) == 0 and len(trimmed_target) == 0:
@@ -135,17 +138,26 @@ def _check_alignment_with_metric_parallel(output_per_code_per_test: Dict[int, Di
             is_aligned, error_msg = _check_alignment_with_metric(pred_output, target_output)
             scores_per_code_per_test[code_index][test_index].append(float(is_aligned))
             
-    return scores_per_code_per_test
+            if not is_aligned:
+                error_msg = f"Input: {test_inputs[test_index]}, prediction is not aligned with expected output, Expected: {target_outputs[test_index]} Predicted: {pred_output}, Error message: {error_msg}\n"
+                errors_per_code_per_test[code_index][test_index].append(error_msg)
+            
+    return scores_per_code_per_test, errors_per_code_per_test
 
 
-def _check_alignment_with_llm_parallel(output_per_code_per_test: Dict[int, Dict[int, Dict]], test_inputs: List[Dict], target_outputs: List[Dict], get_response: Optional[Callable] = get_openai_response, batch_size: int = 3):
+def _check_alignment_with_llm_parallel(output_per_code_per_test: Dict[int, Dict[int, Dict]], 
+                                       errors_per_code_per_test: Dict[int, Dict[int, List[str]]],
+                                       test_inputs: List[Dict], 
+                                       target_outputs: List[Dict], 
+                                       get_response: Optional[Callable] = get_openai_response, 
+                                       batch_size: int = 3):
     
     # Unpack output dictionary into prompts
     prompts = []
     indices = []
-    for code_index, test_index in output_per_code_per_test.keys():
-        for test_index, output_dict in output_per_code_per_test[code_index].items():
-            pred_output, target_output = output_dict, target_outputs[test_index]
+    for code_index in output_per_code_per_test:
+        for test_index in output_per_code_per_test[code_index]:
+            pred_output, target_output = output_per_code_per_test[code_index][test_index], target_outputs[test_index]
             trimmed_pred = {k: v for k, v in pred_output.items() if require_llm_metric(v)}
             trimmed_target = {k: v for k, v in target_output.items() if require_llm_metric(v)}            
             if len(trimmed_pred) == 0 and len(trimmed_target) == 0:
@@ -153,6 +165,9 @@ def _check_alignment_with_llm_parallel(output_per_code_per_test: Dict[int, Dict[
             prompt = ALIGNMENT_CHECK_PROMPT.format(pred_output=trimmed_pred, target_output=trimmed_target)
             prompts.append(prompt)
             indices.append((code_index, test_index))
+            
+    prompts = prompts * batch_size
+    indices = indices * batch_size
             
     # Get LLM responses
     responses = get_response(prompts)
@@ -165,19 +180,20 @@ def _check_alignment_with_llm_parallel(output_per_code_per_test: Dict[int, Dict[
             check_dict = extract_json_from_text(response)
             scores_per_code_per_test[code_index][test_index].append(float(check_dict['aligned']))
         except:
-            continue
+            errors_per_code_per_test[code_index][test_index].append(f"LLM Evaluation Failed: {response}")
     
     # Calculate average score and report issue summary
     score_per_code_per_test = defaultdict(lambda: defaultdict(float))
-    issue_summary = ""
-    for code_index, test_index in scores_per_code_per_test.keys():
-        for test_index, scores in scores_per_code_per_test[code_index].items():
-            score = sum(scores) / len(scores)
+
+    for code_index in scores_per_code_per_test:
+        for test_index in scores_per_code_per_test[code_index]:
+            score = sum(scores_per_code_per_test[code_index][test_index]) / len(scores_per_code_per_test[code_index][test_index])
             score_per_code_per_test[code_index][test_index] = score
             if score == 0:
-                issue_summary += f"Input: {test_inputs[test_index]}, prediction is not aligned with expected output, Expected: {target_outputs[test_index]} Predicted: {output_per_code_per_test[code_index][test_index]}\n"
+                error_msg = f"Input: {test_inputs[test_index]}, prediction is not aligned with expected output, Expected: {target_outputs[test_index]} Predicted: {output_per_code_per_test[code_index][test_index]}\n"
+                errors_per_code_per_test[code_index][test_index].append(error_msg)
             
-    return score_per_code_per_test, issue_summary
+    return score_per_code_per_test, errors_per_code_per_test
 
 
 
@@ -211,28 +227,17 @@ def check_alignment_sequential(pred_output: dict, target_output: dict, get_respo
     
 def check_alignment_parallel(output_per_code_per_test: Dict[int, Dict[int, Dict]], test_inputs: List[Dict], target_outputs: List[Dict], get_response: Optional[Callable] = get_openai_response, batch_size: int = 3):
     # make sure to combined score obtained from both steps (average of both)
-    error_msg = ""
+    errors_per_code_per_test = defaultdict(lambda: defaultdict(list))
     
     # Get scores from metric-based alignment check
-    metric_scores, issue_summary = _check_alignment_with_metric_parallel(output_per_code_per_test, test_inputs, target_outputs)
-    error_msg += issue_summary
+    metric_scores, errors_per_code_per_test = _check_alignment_with_metric_parallel(output_per_code_per_test, errors_per_code_per_test, test_inputs, target_outputs)
     
     # Get scores from LLM-based alignment check 
-    llm_scores, issue_summary = _check_alignment_with_llm_parallel(output_per_code_per_test, test_inputs, target_outputs, get_response, batch_size)
-    error_msg += issue_summary
+    llm_scores, errors_per_code_per_test = _check_alignment_with_llm_parallel(output_per_code_per_test, errors_per_code_per_test, test_inputs, target_outputs, get_response, batch_size)
     
-    # Combine scores by averaging
-    scores_per_code_per_test = defaultdict(lambda: defaultdict(float))
-    for code_index in metric_scores:
-        for test_index in metric_scores[code_index]:
-            metric_score = metric_scores[code_index][test_index]
-            llm_score = llm_scores[code_index][test_index]
-            scores_per_code_per_test[code_index][test_index] = (metric_score + llm_score) / 2
+    score_per_code_per_test = combine_scores(llm_scores, metric_scores)
     
-    return scores_per_code_per_test, error_msg
-            
-    
-
+    return score_per_code_per_test, errors_per_code_per_test
     
     
     
@@ -429,20 +434,26 @@ class EvolNode:
         
         # Evolve many times
         reasonings, codes = self._evolve(method, parents, batch_size=batch_size)
-        fitnesses, err_msgs  = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs)
+        fitness_per_code, errors_per_code, global_summary = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs)
         
         offspings = []
-        for reasoning, code, fitness, err_msg in zip(reasonings, codes, fitnesses, err_msgs):
+        for code_index in fitness_per_code:
+            fitness = fitness_per_code[code_index]
+            reasoning = reasonings[code_index]
+            code = codes[code_index]
+            err_msg = "\n".join(errors_per_code[code_index]) if len(errors_per_code[code_index]) > 0 else ""
+            
             if fitness >= self.fitness:
                 if replace:
                     self.reasoning, self.code = reasoning, code
                     self.fitness = fitness
                     self.error_msg = err_msg
-            if fitness >= fitness_threshold:
-                offsprings.append({"reasoning": reasoning, "code": code, "fitness": fitness})
+
+            if fitness > fitness_threshold:
+                offsprings.append({"reasoning": reasoning, "code": code, "fitness": fitness, "err_msg": err_msg})
                 
-        if not replace:
-            return offsprings
+            if not replace: 
+                return offsprings
         
     
     def _evaluate_structure_fitness(self, test_inputs: List[Dict], code: Optional[str] = None) -> Tuple[float, str]:
@@ -507,7 +518,7 @@ class EvolNode:
     
     def call_code_function_parallel(self, test_inputs: List[Dict], codes: Optional[List[str]] = None, file_path: Optional[str] = None):
         output_per_code_per_test = defaultdict(lambda: defaultdict(dict))
-        error_per_code_per_test = defaultdict(lambda: defaultdict(list))
+        errors_per_code_per_test = defaultdict(lambda: defaultdict(list))
         
         if codes is None: 
             codes = [self.code]
@@ -516,13 +527,50 @@ class EvolNode:
             for (code_index, code) in enumerate(codes):
                 output_value, error_msg = call_func_code(test_input, code, self.meta_prompt.func_name, file_path=file_path)
                 if error_msg != "":
-                    error_per_code_per_test[code_index][test_index].append(error_msg)
+                    errors_per_code_per_test[code_index][test_index].append(error_msg)
                 else:
                     output_name = self.meta_prompt.outputs[0]
                     output_dict = {output_name: output_value}
                     output_per_code_per_test[code_index][test_index] = output_dict
                             
-        return output_per_code_per_test, error_per_code_per_test
+        return output_per_code_per_test, errors_per_code_per_test
+    
+    def summarize_fitness(self, codes, score_per_code_per_test, output_per_code_per_test, test_inputs, max_tries):
+        
+        structual_fitness_per_code_per_test = defaultdict(lambda: defaultdict(float))
+        for (code_index, code) in enumerate(codes):
+            for (test_index, test_input) in enumerate(test_inputs):
+                if code_index in output_per_code_per_test and test_index in output_per_code_per_test[code_index]:
+                    list_output = list(output_per_code_per_test[code_index][test_index].values())
+                    if self.meta_prompt.mode == PromptMode.CODE: 
+                        structural_fitness = float(len(list_output) > 0)
+                    elif self.meta_prompt.mode == PromptMode.PROMPT:
+                        structural_fitness = float(len(list_output) / max_tries)
+                else:
+                    structural_fitness = 0
+                structual_fitness_per_code_per_test[code_index][test_index] = structural_fitness
+        
+        structual_fitness_per_code = defaultdict(float)
+        for code_index in structual_fitness_per_code_per_test:
+            structual_fitness_per_code[code_index] = sum(list(structual_fitness_per_code_per_test[code_index].values())) / len(test_inputs)
+        
+        functional_fitness_per_code_per_test = defaultdict(lambda: defaultdict(float))
+        for (code_index, code) in enumerate(codes):
+            for (test_index, test_input) in enumerate(test_inputs):
+                if code_index in score_per_code_per_test and test_index in score_per_code_per_test[code_index]:
+                    functional_fitness = score_per_code_per_test[code_index][test_index]
+                else:
+                    functional_fitness = 0
+                functional_fitness_per_code_per_test[code_index][test_index] = functional_fitness
+        
+        functional_fitness_per_code = defaultdict(float)
+        for code_index in functional_fitness_per_code_per_test:
+            functional_fitness_per_code[code_index] = sum(list(functional_fitness_per_code_per_test[code_index].values())) / len(test_inputs)
+        
+        fitness_per_code = defaultdict(Fitness)
+        for code_index in structual_fitness_per_code:
+            fitness_per_code[code_index] = Fitness(structual_fitness_per_code[code_index], functional_fitness_per_code[code_index])
+        return fitness_per_code
     
     
     def _evaluate_fitness(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, codes: Optional[List[str]] = [], 
@@ -539,9 +587,9 @@ class EvolNode:
                 
         
         if self.meta_prompt.mode == PromptMode.CODE: 
-            output_per_code_per_test, error_msg = self.call_code_function_parallel(test_cases, codes)
+            output_per_code_per_test, errors_per_code_per_test = self.call_code_function_parallel(test_cases, codes)
         elif self.meta_prompt.mode == PromptMode.PROMPT:
-            output_per_code_per_test, error_msg = self.call_prompt_function_parallel(test_cases, codes, max_tries)
+            output_per_code_per_test, errors_per_code_per_test = self.call_prompt_function_parallel(test_cases, codes, max_tries)
         else:
             raise ValueError(f"Unknown mode: {self.meta_prompt.mode}")
         
@@ -549,19 +597,19 @@ class EvolNode:
         # alignment checking
         test_inputs = [case[0] for case in test_cases]
         target_outputs = [case[1] for case in test_cases]
-        pass_score_per_code, issue_summary = check_alignment_parallel(output_per_code_per_test, test_inputs, target_outputs, self.get_response)
+        score_per_code_per_test, evaluate_errors_per_code_per_test = check_alignment_parallel(output_per_code_per_test, test_inputs, target_outputs, 
+                                                                                              self.get_response, batch_size=num_runs)
+        errors_per_code = combine_errors(evaluate_errors_per_code_per_test, errors_per_code_per_test)
         
-        # # add overal information
-        # global_summary = f"--- Compiled {compiled_tests} out of {total_tests} test cases\n"
-        # global_summary += f"--- Passed {functional_fitness:.2f}% of compiled test cases\n"
-        # issue_summary = global_summary + issue_summary
-
-        # structural_fitness = compiled_tests / total_tests
-        # functional_fitness = passed_tests / total_tests
-        # fitness = Fitness(structural_fitness, functional_fitness)
+        fitness_per_code = self.summarize_fitness(codes, score_per_code_per_test, output_per_code_per_test, test_inputs, max_tries)
         
-        # return fitness, f" {str(fitness)}\n" + issue_summary + "\nError Message:\n" + error_msg
+        # Get best fitness
+        best_fitness = max(fitness_per_code.values(), key=lambda x: x())
+        global_summary = f"Best code has structural fitness {best_fitness.structural_fitness:.2f}, "
+        global_summary += f"functional fitness {best_fitness.functional_fitness:.2f}, "
+        global_summary += f"global fitness {best_fitness():.2f}"
         
+        return fitness_per_code, errors_per_code, global_summary  # TBD: return error messages ...
         
     
     def _evaluate_fitness_sequential(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, code: Optional[str] = None, 

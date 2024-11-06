@@ -266,3 +266,32 @@ def compile_code_with_references(node_code, referrable_function_dict):
 
     new_code = astor.to_source(new_tree)
     return new_code
+
+def combine_scores(llm_scores, metric_scores):
+    # Initialize combined scores dictionary
+    combined_scores = defaultdict(lambda: defaultdict(list))
+    combined_score = defaultdict(lambda: defaultdict(float))
+        
+    # For each code index in metric scores
+    for k in metric_scores: 
+        for i in metric_scores[k]: 
+            combined_scores[k][i] += metric_scores[k][i]
+    for k in llm_scores: 
+        for i in llm_scores[k]: 
+            combined_scores[k][i] += llm_scores[k][i]
+    
+    for k in combined_scores: 
+        for i in combined_scores[k]: 
+            combined_score[k][i] = sum(combined_scores[k][i]) / len(combined_scores[k][i])
+    
+    return combined_score
+
+def combine_errors(errors_per_code_per_test_1, errors_per_code_per_test_2):
+    errors_per_code = defaultdict(lambda: defaultdict(list))
+    
+    for k in errors_per_code_per_test_1:
+        for i in errors_per_code_per_test_1[k]:
+            errors_per_code[k][i] += errors_per_code_per_test_1[k][i]
+            errors_per_code[k][i] += errors_per_code_per_test_2[k][i]
+            
+    return errors_per_code
