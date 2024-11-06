@@ -487,7 +487,80 @@ def generate_test_cases_template(plan_dict: dict, main_test_cases: list) -> str:
     return f"```json\n{json.dumps(test_cases_list, indent=4)}\n```"
 
 
-def _spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable):
+def _filter_test_cases_list(test_cases_list, main_test_cases, accept_extra: bool = False):
+    """Filter and validate test cases against main test cases.
+    
+    Args:
+        test_cases_list: List of dictionaries containing test cases for each step
+        main_test_cases: List of tuples containing (input, output) pairs to validate against
+        accept_extra: Whether to keep additional test cases beyond the main ones
+    
+    Returns:
+        Dictionary mapping step names to filtered test cases
+    """
+    err_msg = []
+    
+    # Find indices of main test cases in the first step
+    match_indices = []
+    match_case_indices = []
+    first_step = test_cases_list[0]
+    last_step = test_cases_list[-1]
+    for main_case in main_test_cases:
+        main_input = main_case[0]
+        for i, test_input in enumerate(first_step['inputs']):
+            if test_input == main_input:
+                test_output = last_step['outputs'][i]
+                main_output = main_case[1]
+                if test_output == main_output:
+                    match_indices.append(i)
+                    match_case_indices.append(main_case)
+                else:
+                    err_msg.append(f"Output mismatch for input {main_input}, expected {main_output}, got {test_output}")
+                break
+        
+    filtered_list = []
+    for step in test_cases_list:
+        filtered_step = {
+            'name': step['name'],
+            'inputs': [step['inputs'][i] for i in match_indices],
+            'outputs': [step['outputs'][i] for i in match_indices]
+        }
+        filtered_list.append(filtered_step)
+        
+    if len(filtered_list) == 0:
+        err_msg.append("No matching test cases with main test cases found")
+                    
+    return filtered_list, "\n".join(err_msg) if err_msg else ""
+
+
+def combine_test_cases_list(t1, t2):
+    # combining test cases list from different runs ...
+    combined_t = []
+    for (sub_node_cases1, sub_node_cases2) in zip(t1, t2):
+        combined_cases = {"name": sub_node_cases1["name"],
+                        "inputs": sub_node_cases1["inputs"] + sub_node_cases2["inputs"],
+                        "outputs": sub_node_cases1["outputs"] + sub_node_cases2["outputs"]}
+        combined_t.append(combined_cases)
+        
+    # filter unique inputs ...
+    unique_indices = [] 
+    unique_initial_inputs = []
+    first_step_inputs = combined_t[0]['inputs']
+    for i, input_dict in enumerate(first_step_inputs):
+        if input_dict not in unique_initial_inputs:
+            unique_indices.append(i)
+            unique_initial_inputs.append(input_dict)
+        else:
+            continue
+        
+    for sub_node_cases in combined_t:
+        sub_node_cases["inputs"] = [sub_node_cases["inputs"][i] for i in unique_indices]
+        sub_node_cases["outputs"] = [sub_node_cases["outputs"][i] for i in unique_indices]
+        
+    return combined_t
+
+
+def _spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable) -> tuple[list, str]:
     # generating prompt for spawning sub-node test cases
     plan_str = get_plan_str(plan_dict)
 
@@ -498,11 +571,12 @@ def _spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Call
     response = get_response(spawn_prompt)
 
     try: 
-        spawned_test_cases = extract_json_from_text(response)
-        return spawned_test_cases, ""
+        test_cases_list = extract_json_from_text(response)
+        filtered_list, err_msg = _filter_test_cases_list(test_cases_list, main_test_cases)
+        return filtered_list, err_msg
     except Exception as e:
         err_msg = f"Error in spawning test cases: {e}"
-        return None, err_msg
+        return [], err_msg
     
 def _build_test_cases_dict(spawned_test_cases: list):
     output_dict = {}
@@ -511,16 +585,61 @@ def _build_test_cases_dict(spawned_test_cases: list):
         output_dict[cases["name"]] = sub_node_test_cases
     return output_dict 
 
-def spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable, max_tries: int = 3) -> tuple[dict, str]:
+
+def spawn_test_cases_sequential(plan_dict: dict, main_test_cases: list, get_response: Callable, max_tries: int = 6) -> tuple[dict, str]: # Deprecated
+    test_case_count = len(main_test_cases)
+    test_cases_list = []
+    err_msg = []
     for _ in range(max_tries):
-        spawned_test_cases, err_msg = _spawn_test_cases(plan_dict, main_test_cases, get_response)
-        if err_msg == "":
-            try:
-                return _build_test_cases_dict(spawned_test_cases), ""
-            except Exception as e:
-                err_msg = f"Error in building test cases: {e}"
-                return {}, err_msg
-    return {}, err_msg
+        test_cases_list_delta, err_msg_delta = _spawn_test_cases(plan_dict, main_test_cases, get_response)
+        if err_msg_delta == "" and test_cases_list != []:
+            test_cases_list = combine_test_cases_list(test_cases_list, test_cases_list_delta)
+        elif err_msg_delta == "" and test_cases_list == []:
+            test_cases_list = test_cases_list_delta
+        else:
+            err_msg.append(err_msg_delta)
+        
+        if test_cases_list and len(test_cases_list[0]["inputs"]) >= test_case_count:
+            break
+
+    if test_cases_list:
+        return _build_test_cases_dict(test_cases_list), "\n".join(err_msg) if err_msg else ""
+    else:
+        return {}, "\n".join(err_msg) if err_msg else ""
+    
+    
+def spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable, batch_size: int = 1) -> tuple[dict, str]:
+
+    plan_str = get_plan_str(plan_dict)
+    oneshot_prompt = generate_test_cases_template(plan_dict, main_test_cases)
+    spawn_prompt = f"Here is a execution plan for a function: \n{plan_str}\n\n help generate test cases for each sub-function by filling the ... with proper inputs and outputs, output JSON like this: \n{oneshot_prompt}"
+    spawn_prompts = [spawn_prompt] * batch_size
+
+    responses = get_response(spawn_prompts)
+
+    test_cases_deltas = []
+    err_msgs = []
+    for response in responses:
+        try: 
+            test_cases_list = extract_json_from_text(response)
+            filtered_list, err_msg = _filter_test_cases_list(test_cases_list, main_test_cases)
+            if filtered_list:
+                test_cases_deltas.append(filtered_list)
+            err_msgs.append(err_msg)
+        except Exception as e:
+            err_msgs.append(f"Error in spawning test cases: {e}")
+    
+    for i, test_cases_delta in enumerate(test_cases_deltas):
+        if i == 0:
+            test_cases_list = test_cases_delta
+        else:
+            test_cases_list = combine_test_cases_list(test_cases_list, test_cases_delta)
+
+    if test_cases_list:
+        return _build_test_cases_dict(test_cases_list), "\n".join(err_msgs) if err_msgs else ""
+    else:
+        return {}, "\n".join(err_msgs) if err_msgs else ""
+    
 
 # For evaluation node, external memory is important (it could access local files through its code-interpreter, a skill which it should learn in the process)
 # How do we improve on the evaluation? Can we evaluate on the evaluation result? 
@@ -616,9 +735,7 @@ class MetaPlan:
             outputs=data["outputs"],
             input_types=data["input_types"],
             output_types=data["output_types"]
-        )
-    
-    # e1/e2/m1/m2 to be implemented
+        )    
 
 
 def build_graph_from_json(parsed_json):
