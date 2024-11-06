@@ -508,19 +508,22 @@ class EvolNode:
     
     def call_code_function_parallel(self, test_inputs: List[Dict], codes: Optional[List[str]] = None, file_path: Optional[str] = None):
         output_per_code_per_test = defaultdict(lambda: defaultdict(dict))
+        error_per_code_per_test = defaultdict(lambda: defaultdict(list))
+        
         if codes is None: 
             codes = [self.code]
         
-        error_msgs = []
         for (test_index, test_input) in enumerate(test_inputs):
             for (code_index, code) in enumerate(codes):
                 output_value, error_msg = call_func_code(test_input, code, self.meta_prompt.func_name, file_path=file_path)
-                output_name = self.meta_prompt.outputs[0]
-                output_dict = {output_name: output_value}
-                output_per_code_per_test[code_index][test_index] = output_dict
-                error_msgs.append(error_msg)
-        
-        return output_per_code_per_test, "\n".join(error_msgs) if len(error_msgs) > 0 else ""
+                if error_msg != "":
+                    error_per_code_per_test[code_index][test_index].append(error_msg)
+                else:
+                    output_name = self.meta_prompt.outputs[0]
+                    output_dict = {output_name: output_value}
+                    output_per_code_per_test[code_index][test_index] = output_dict
+                            
+        return output_per_code_per_test, error_per_code_per_test
     
     
     def _evaluate_fitness(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, codes: Optional[List[str]] = [], 
