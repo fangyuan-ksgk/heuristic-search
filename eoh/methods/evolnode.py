@@ -502,8 +502,7 @@ class EvolNode:
     
     
     def call_prompt_function_parallel(self, test_inputs: List[Dict], codes: Optional[List[str]], max_tries: int = 3):
-        output_per_code_per_test = call_func_prompt_parallel(test_inputs, codes, max_tries, self.get_response)
-        return output_per_code_per_test, ""
+        return call_func_prompt_parallel(test_inputs, codes, max_tries, self.get_response)
     
     
     def call_code_function_parallel(self, test_inputs: List[Dict], codes: Optional[List[str]] = None, file_path: Optional[str] = None):
