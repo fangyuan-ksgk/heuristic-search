@@ -1,16 +1,15 @@
 from abc import ABC, abstractmethod
 import struct
-from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response, spawn_test_cases
+from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response, spawn_test_cases, spawn_test_cases_parallel
 from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT, check_n_rectify_plan_dict
 from .meta_execute import call_func_code, call_func_prompt, compile_code_with_references
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
-from typing import List, Dict
 from .llm import get_openai_response
 import re, os, json
 from tqdm import tqdm 
 from collections import defaultdict
-from typing import Optional, Dict, List, Callable, Tuple
+from typing import Optional, Union, Dict, List, Callable, Tuple
 
 MAX_ATTEMPTS = 6
 SPAWN_TEST_MAX_TRIES = 20
@@ -635,13 +634,31 @@ class PlanNode:
         - Spawn helper nodes for better task performance
         """
         self.meta_prompt = meta_prompt 
-        self.get_response = get_response 
+        self._get_response = get_response 
         self.nodes = nodes
         self.relevant_nodes = None
         self.max_attempts = MAX_ATTEMPTS
         self.plan_dict = plan_dict
 
-        
+    @property
+    def get_response(self, prompt: Union[str, List[str]]) -> Union[str, List[str]]:
+        if isinstance(prompt, str):
+            prompts = [prompt]
+            n_prompt = 1
+        else:
+            prompts = prompt 
+            n_prompt = len(prompts)
+        try: 
+            responses = self._get_response(prompts)
+        except: 
+            responses = []
+            for p in prompts:
+                responses.append(self._get_response(p))
+        if n_prompt == 1:
+            return responses[0]
+        else:
+            return responses        
+    
     def _evolve_plan_dict(self, feedback: str = "", replace: bool = True, method: str = "i1", parents: list = []):
         
         err_msg = ""
@@ -674,7 +691,7 @@ class PlanNode:
         
         return plan_dict, err_msg
     
-    def evolve_plan_dict(self, feedback: str = "", method: str = "i1"):
+    def evolve_plan_dict_sequential(self, feedback: str = "", method: str = "i1"): # Deprecated
         err_msg = ""
         for i in range(self.max_attempts):
             plan_dict, err_msg_delta = self._evolve_plan_dict(feedback, method=method)
@@ -685,9 +702,9 @@ class PlanNode:
             
         return {}, err_msg
     
-    def evolve_plan_dict_parallel(self, feedback: str = "", method: str = "i1", parents: list = [], replace: bool = True, batch_size: int = 10):
+    def evolve_plan_dict(self, feedback: str = "", method: str = "i1", parents: list = [], replace: bool = True, batch_size: int = 10):
         """ 
-        Handling batch inference
+        Handling batch inference or sequential inference
         """
         print(f" :: Evolving {batch_size} plans in parallel...")
 
@@ -730,7 +747,9 @@ class PlanNode:
                 err_msg += err_msg_delta
             if plan_dict:
                 plan_dicts.append(plan_dict)
-        
+                
+        if len(plan_dicts) > 0:
+            self.plan_dict = plan_dicts[0]
         return plan_dicts, err_msg
     
     
@@ -745,6 +764,15 @@ class PlanNode:
             print(f"Failed to spawn test cases: {err_msg}")
             return False, err_msg 
         
+    def spawn_test_cases_parallel(self, main_test_cases: list, batch_size: int = 1) -> tuple[bool, str]:
+        test_cases_dict, err_msg = spawn_test_cases_parallel(self.plan_dict, main_test_cases, self.get_response, SPAWN_TEST_MAX_TRIES)
+        if test_cases_dict:
+            self.test_cases_dict = test_cases_dict
+            print(f"Spawned {len(test_cases_dict)} test cases for all sub-nodes")
+            return True, err_msg
+        else:
+            print(f"Failed to spawn test cases: {err_msg}")
+            return False, err_msg 
     
     def evolve_sub_nodes(self, method: str = "i1"):
         """
