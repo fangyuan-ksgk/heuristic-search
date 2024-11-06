@@ -83,16 +83,16 @@ class Evolution:
         offspring = {"reasoning": None, "code": None, "fitness": None}
                 
         if operator == "i1": # initialization operator 
-            self.evol.evolve("i1", replace=True, max_attempts=max_attempts, num_runs=self.num_eval_runs)
+            self.evol.evolve("i1", replace=True, max_attempts=max_attempts, num_runs=self.num_eval_runs, batch_size=self.pop_size)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
         
         elif operator.startswith("e"): # cross-over operator
             if not self.load and len(pop) < self.num_parents:
                 while len(pop) < self.num_parents:
-                    pop.extend(self.evol.evolve("i1", max_attempts=1, num_runs=self.num_eval_runs))
+                    pop.extend(self.evol.evolve("i1", max_attempts=1, num_runs=self.num_eval_runs, batch_size=self.pop_size))
             assert len(pop) >= self.num_parents, "Population size is less than the number of parents required for Crossover operator"
             parents = parent_selection(pop, self.num_parents) # in fact we don't mind 3P
-            self.evol.evolve(operator, parents, replace=True, max_attempts=max_attempts, num_runs=self.num_eval_runs)
+            self.evol.evolve(operator, parents, replace=True, max_attempts=max_attempts, num_runs=self.num_eval_runs, batch_size=self.pop_size)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
         
         elif operator.startswith("m"): # mutation operator
@@ -101,24 +101,24 @@ class Evolution:
                 
             assert len(pop) >= 1, "Population size is less than the number of parents required for Mutation operator"
             parents = parent_selection(pop, 1) # one parent used for mutation
-            self.evol.evolve(operator, parents[0], replace=True, max_attempts=max_attempts, num_runs=self.num_eval_runs)
+            self.evol.evolve(operator, parents[0], replace=True, max_attempts=max_attempts, num_runs=self.num_eval_runs, batch_size=self.pop_size)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
         
         elif operator == "t": #traditional GA
             if not self.load and len(pop) < self.pop_size:
                 while len(pop) < self.pop_size:
-                    pop.extend(self.evol.evolve("i1", max_attempts=1, num_runs=self.num_eval_runs))
+                    pop.extend(self.evol.evolve("i1", max_attempts=1, num_runs=self.num_eval_runs, batch_size=self.pop_size))
             assert len(pop) >= self.num_parents, "Population size is less than the number of parents required for Traditional operator"
             for i in range(max_attempts):
                 parents = parent_selection(pop, self.num_parents)
                 offspring = []
                 while len(offspring) == 0 or self.check_duplicate(pop, offspring[0]["code"]):
-                    offspring = self.evol.evolve("e1", parents, max_attempts=1, num_runs=self.num_eval_runs)
+                    offspring = self.evol.evolve("e1", parents, max_attempts=1, num_runs=self.num_eval_runs, batch_size=self.pop_size)
                 offspring = offspring[0]
                 if random.random() < self.mutation_rate:
                     offspring_m = []
                     while len(offspring_m) == 0 or self.check_duplicate(pop, offspring_m[0]["code"]):
-                        offspring_m = self.evol.evolve("m1", offspring, max_attempts=1, num_runs=self.num_eval_runs)
+                        offspring_m = self.evol.evolve("m1", offspring, max_attempts=1, num_runs=self.num_eval_runs, batch_size=self.pop_size)
                     offspring = offspring_m[0]
                 offspring_info = f"Going through {1} of {operator} evolution steps, obtaining offspring:\n {indiv_to_prompt(offspring, self.meta_prompt.mode)}"
                 self.strategy_trace += offspring_info
