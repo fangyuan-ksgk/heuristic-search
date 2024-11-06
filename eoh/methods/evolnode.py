@@ -689,22 +689,21 @@ class PlanNode:
         """ 
         Handling batch inference
         """
-        if not self.nodes:
-            return False, "No nodes available for evolution"
-        
-        print(f"Evolving {len(self.nodes)} nodes in parallel with batch size {batch_size}...")
+        print(f" :: Evolving {batch_size} plans in parallel...")
+
 
         err_msg = ""
         prompts = []
-        for i in range(batch_size):
-            prompt = getattr(self.meta_prompt, f"_get_prompt_{method}")(feedback, parents)
-            self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
-            prompt += "\n" + self.relevant_node_desc
-            prompts.append(prompt)
+        prompt = getattr(self.meta_prompt, f"_get_prompt_{method}")(feedback, parents)
+        self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
+        prompt += "\n" + self.relevant_node_desc
+        prompts = [prompt] * batch_size
         
-        responses = self.get_response(prompts)
+        responses = self.get_response(prompts) # get pseudo-code for each plan
+        print(" :: Pseudo-code generated for each plan")
         
         plan_dicts = []
+        graph_prompts = []
         for response in responses:
             code = extract_python_code(response)
             
@@ -713,7 +712,12 @@ class PlanNode:
 
             # Step 2: Generate Planning DAG: Multiple Nodes 
             graph_prompt = self.meta_prompt._get_plan_graph_prompt(code)
-            plan_response = self.get_response(graph_prompt)
+            graph_prompts.append(graph_prompt)
+            
+        plan_responses = self.get_response(graph_prompts) # get plan_dict for each plan
+        print(" :: Plan_dict generated for each plan")
+        
+        for plan_response in plan_responses:
             try:
                 plan_dict = extract_json_from_text(plan_response)
             except ValueError as e:
