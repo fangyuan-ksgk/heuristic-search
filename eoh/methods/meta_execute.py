@@ -2,12 +2,13 @@ import types
 import importlib.util
 import sys
 from .meta_prompt import extract_json_from_text
-from typing import Any, get_type_hints, Dict
+from typing import Any, get_type_hints, Dict, List
 import inspect
 from typing import get_origin, get_args
 import ast 
 import astor 
 import re 
+from collections import defaultdict
 
 
 def check_type(value, expected_type):
@@ -138,8 +139,47 @@ def call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callab
         return _call_func_prompt(input_data, code, get_response), ""
     except Exception as e:
         return None, str(e)
+
+
+def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str], max_tries: int, get_response: callable):
+    """ 
+    Parallel calling of prompt function
+    """
+    outputs_per_code_per_test = defaultdict(lambda: defaultdict(list))
     
+    prompts = []
+    input_indices = []
+    for (input_index, input_dict) in enumerate(input_dicts):
+        for (code_index, code) in enumerate(codes):
+            mod = types.ModuleType('dynamic_module')
+            exec(code, mod.__dict__)
+            func_name = "generate_prompt"
+            prompt_func = mod.__dict__[func_name]
+            prompt = prompt_func(**input_dict)
+            prompts.append(prompt)
+            input_indices.append((input_index, code_index))
+            
+    responses = get_response(prompts)
     
+    for (response, (input_index, code_index)) in zip(responses, input_indices):
+        try:
+            output_dict = extract_json_from_text(response)
+            outputs_per_code_per_test[code_index][input_index].append(output_dict)
+        
+        except Exception as e:
+            # print(f"Error in parsing LLM response: {e}\nResponse:\n{response}")
+            raise ValueError(f"Failed to parse LLM response: {e}")
+    
+    output_per_code_per_test = defaultdict(lambda: defaultdict(dict))
+    for code_index, input_index in outputs_per_code_per_test.keys():
+        for input_index, output_list in outputs_per_code_per_test[code_index].items():
+            for output_dict in output_list:
+                if output_dict != {}:   # Keep non-empty output dict
+                    output_per_code_per_test[code_index][input_index] = output_dict
+                
+    return output_per_code_per_test
+
+
 
 def clean_up_ast_tree(new_tree):
     # Sort imports and remove duplicates
