@@ -85,6 +85,7 @@ class Evolution:
         if operator == "i1": # initialization operator 
             self.evol.evolve("i1", replace=True, max_attempts=max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
+        
         elif operator.startswith("e"): # cross-over operator
             if not self.load and len(pop) < self.num_parents:
                 while len(pop) < self.num_parents:
@@ -93,6 +94,7 @@ class Evolution:
             parents = parent_selection(pop, self.num_parents) # in fact we don't mind 3P
             self.evol.evolve(operator, parents, replace=True, max_attempts=max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
+        
         elif operator.startswith("m"): # mutation operator
             if not self.load and len(pop) < 1:
                 pop = self._get_offspring("i1", pop, 1)
@@ -101,6 +103,7 @@ class Evolution:
             parents = parent_selection(pop, 1) # one parent used for mutation
             self.evol.evolve(operator, parents[0], replace=True, max_attempts=max_attempts, num_runs=self.num_eval_runs)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
+        
         elif operator == "t": #traditional GA
             if not self.load and len(pop) < self.pop_size:
                 while len(pop) < self.pop_size:
@@ -123,6 +126,7 @@ class Evolution:
                 pop.append(offspring)
                 if offspring["fitness"] == 1.0: break
             return pop
+        
         # Evolution Info Tracing
         offspring_info = f"Going through {max_attempts} of {operator} evolution steps, obtaining offspring:\n {indiv_to_prompt(offspring, self.meta_prompt.mode)}"
         self.strategy_trace += offspring_info
