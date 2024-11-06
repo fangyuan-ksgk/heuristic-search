@@ -486,6 +486,20 @@ class EvolNode:
         TBD: Inheritance to accumulated codebase with 'file_path' | Graph Topology naturally enables inheritance
         TBD: Stricter input / output type checking to ensure composibility
         """
+            
+        input_types = self.meta_prompt.input_types
+        
+        if (len(input_types) == len(list(set(input_types)))):
+            new_input = {}
+            param_names = self.meta_prompt.inputs
+            for param_name, value in inputs.items():
+                if param_name in param_names:
+                    new_input[param_name] = value
+                else:
+                    for idx, type_hint in enumerate(input_types):
+                        if type(value).__name__ == type_hint:
+                            new_input[param_names[idx]] = value
+            inputs = new_input
         if self.meta_prompt.mode == PromptMode.CODE:
             output_value, err_msg = call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None) # TODO: extend to multiple outputs ...
             output_name = self.meta_prompt.outputs[0]
