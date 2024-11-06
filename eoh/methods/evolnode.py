@@ -420,7 +420,7 @@ class EvolNode:
             
         return reasonings, codes
     
-    def evolve(self, method: str, parents: list = None, replace=False, feedback: str = "", batch_size: int = 5, fitness_threshold: float = 0.8, 
+    def evolve(self, method: str, parents: list = None, replace=True, feedback: str = "", batch_size: int = 5, fitness_threshold: float = 0.8, 
                num_runs: int = 5, max_tries: int = 3):
         """
         Evolve node and only accept structurally fit solutions
@@ -586,11 +586,12 @@ class EvolNode:
         if self.meta_prompt.mode == PromptMode.PROMPT:
             num_runs = min(2, num_runs) # sanity check against stochastic nature of prompt-based node
                 
+        test_inputs = [case[0] for case in test_cases]
         
         if self.meta_prompt.mode == PromptMode.CODE: 
-            output_per_code_per_test, errors_per_code_per_test = self.call_code_function_parallel(test_cases, codes)
+            output_per_code_per_test, errors_per_code_per_test = self.call_code_function_parallel(test_inputs, codes)
         elif self.meta_prompt.mode == PromptMode.PROMPT:
-            output_per_code_per_test, errors_per_code_per_test = self.call_prompt_function_parallel(test_cases, codes, max_tries)
+            output_per_code_per_test, errors_per_code_per_test = self.call_prompt_function_parallel(test_inputs, codes, max_tries)
         else:
             raise ValueError(f"Unknown mode: {self.meta_prompt.mode}")
         
