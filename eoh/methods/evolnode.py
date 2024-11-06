@@ -121,40 +121,63 @@ def _check_alignment_with_llm_sequential(pred_output: dict, target_output: dict,
     return False, error_msg
 
 
-def _check_alignment_with_llm(pred_outputs: List[dict], test_outputs: List[dict], get_response: Optional[Callable] = get_openai_response, batch_size: int = 3):
+def _check_alignment_with_llm(pred_outputs: List[dict], test_outputs: List[dict], test_inputs: List[dict], get_response: Optional[Callable] = get_openai_response, batch_size: int = 3):
     """ 
-    Return alignment rate (float valued) instead of boolean
-    Run batch_size times of alignment check in parallel, record rate of success on effective runs
+    Batch LLM-based alignment checking.
+    Returns:
+    - alignment_rate: float between 0 and 1
+    - error_msg: string describing any errors in the process
     """
     error_msg = ""
-    
     prompts = []
-    for pred_output, target_output in zip(pred_outputs, test_outputs):
-        prompt = ALIGNMENT_CHECK_PROMPT.format(pred_output=pred_output, target_output=target_output)
+    test_case_indices = []  # Track which test case each prompt corresponds to
+    issue_summary = ""
 
-        trimmed_pred_output = {k: v for k, v in pred_output.items() if require_llm_metric(v)}
-        trimmed_target_output = {k: v for k, v in target_output.items() if require_llm_metric(v)}
-    
-        if len(trimmed_pred_output) == 0 and len(trimmed_target_output) == 0:
-            return True, ""
+    # Create prompts only for cases that need LLM evaluation
+    for i, (pred_output, target_output, test_input) in enumerate(zip(pred_outputs, test_outputs, test_inputs)):
+        # Filter outputs to only include fields requiring LLM evaluation
+        trimmed_pred = {k: v for k, v in pred_output.items() if require_llm_metric(v)}
+        trimmed_target = {k: v for k, v in target_output.items() if require_llm_metric(v)}
         
-        # Update the prompt with trimmed outputs
-        prompt = ALIGNMENT_CHECK_PROMPT.format(pred_output=trimmed_pred_output, target_output=trimmed_target_output)
+        if len(trimmed_pred) == 0 and len(trimmed_target) == 0:
+            continue
+            
+        prompt = ALIGNMENT_CHECK_PROMPT.format(pred_output=trimmed_pred, target_output=trimmed_target)
         prompts.append(prompt)
-        
+        test_case_indices.append(i)
+
+    if not prompts:  # No cases require LLM evaluation
+        return 1.0, ""
+
+    # Repeat prompts to match batch_size
     prompts = prompts * batch_size
+    test_case_indices = test_case_indices * batch_size
+    
+    # Get LLM responses
     responses = get_response(prompts)
     
-    check_results = []
-    for response in responses:
+    # Process responses and track results
+    alignment_results = defaultdict(list)  # Maps test case index to list of alignment results
+    
+    for i, response in enumerate(responses):
+        test_idx = test_case_indices[i]
         try:
             check_dict = extract_json_from_text(response)
-            check_results.append(check_dict['aligned'])
-        except:
-            error_msg += "--- Parsing LLM Evaluation Failed: " + str(e) + "\n"
-    
-    aligned_rate = sum(check_results) / len(check_results)
-    return aligned_rate, error_msg
+            alignment_results[test_idx].append(check_dict['aligned'])
+        except Exception as e:
+            error_msg += f"Failed to parse LLM response for test case {test_idx}: {str(e)}\n"
+
+    # Calculate average alignment rate for each test case
+    test_case_rates = {}
+    for test_idx, results in alignment_results.items():
+        test_case_rates[test_idx] = sum(results) / len(results)
+        if test_case_rates[test_idx] == 0:
+            issue_summary += f"Input: {test_inputs[test_idx]}, prediction is not aligned with expected output, Expected: {test_outputs[test_idx]} Predicted: {pred_outputs[test_idx]}\n"
+
+    # Calculate overall alignment rate
+    overall_rate = sum(test_case_rates.values()) / len(test_case_rates) if test_case_rates else 0
+
+    return overall_rate, issue_summary if issue_summary != "" else error_msg
 
 
 
@@ -186,23 +209,26 @@ def check_alignment_sequential(pred_output: dict, target_output: dict, get_respo
         return False, error_msg
     
     
-def check_alignment(pred_outputs: List[dict], test_outputs: List[dict], get_response: Optional[Callable] = get_openai_response, batch_size: int = 3):
+def check_alignment(pred_outputs: List[dict], test_outputs: List[dict], test_inputs: List[dict], get_response: Optional[Callable] = get_openai_response, batch_size: int = 3):
     """ 
     Batch alignment checking with expected outputs with LLM
     If target output belongs to certain type, use metric-based check only, otherwise use LLM-based check ... 
     """
+    issue_summary = ""
     # metric based check has higher substitue llm based alignment check 
     try: 
         alignment_checks = []
-        for pred_output, target_output in zip(pred_outputs, test_outputs):
+        for pred_output, target_output, test_input in zip(pred_outputs, test_outputs, test_inputs):
             is_aligned, error_msg = _check_alignment_with_metric(pred_output, target_output)
+            if not is_aligned:
+                issue_summary += f"Input: {test_input}, Output is missing or of wrong type, Expected: {target_output} Predicted: {pred_output}\n"
             alignment_checks.append(is_aligned)
             error_msg += error_msg
             
-        aligned_rate = sum(alignment_checks) / len(alignment_checks)
-        return aligned_rate, error_msg
+        aligned_rate = sum(alignment_checks) / len(alignment_checks) if len(alignment_checks) > 0 else 0
+        return aligned_rate, issue_summary
     except:
-        return _check_alignment_with_llm(pred_outputs, test_outputs, get_response, batch_size)
+        return _check_alignment_with_llm(pred_outputs, test_outputs, test_inputs, get_response, batch_size)
     
         
     
@@ -490,31 +516,44 @@ class EvolNode:
         error_msg = ""
         issue_summary = ""
         
-        pred_outputs, test_outputs = [], []
+        pred_outputs, test_outputs, test_inputs = [], [], []
         
         for test_input, test_output in tqdm(test_cases, desc="Evaluating fitness"):
             if self.meta_prompt.mode == PromptMode.CODE:
                 output_dict, error_msg_delta = self.call_code_function(test_input, code, file_path=None)
                 if error_msg_delta == "":
-                    passed_tests += 1
+                    compiled_tests += 1
                     pred_outputs.append(output_dict)
                     test_outputs.append(test_output)
+                    test_inputs.append(test_input)
                 else:
                     error_msg += error_msg_delta
                     
             elif self.meta_prompt.mode == PromptMode.PROMPT:
                 output_dict, error_msg_delta = self.call_prompt_function(test_input, code, max_tries)
                 if error_msg_delta == "":
-                    passed_tests += 1
+                    compiled_tests += 1
                     pred_outputs.append(output_dict)
                     test_outputs.append(test_output)
+                    test_inputs.append(test_input)
                 else:
                     error_msg += error_msg_delta
             else:
                 raise ValueError(f"Unknown mode: {self.meta_prompt.mode}")
         
         # alignment checking
-        alignment_checks, error_msg_deltas = check_alignment(pred_outputs, test_outputs, self.get_response)
+        functional_fitness, issue_summary = check_alignment(pred_outputs, test_outputs, test_inputs, self.get_response)
+        
+        
+        # add overal information
+        global_summary = f"--- Compiled {compiled_tests} out of {total_tests} test cases\n"
+        global_summary += f"--- Passed {functional_fitness:.2f}% of compiled test cases\n"
+        issue_summary = global_summary + issue_summary
+
+        structural_fitness = compiled_tests / total_tests
+        functional_fitness = passed_tests / total_tests
+        fitness = Fitness(structural_fitness, functional_fitness)
+        
         
     
     def _evaluate_fitness_sequential(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, code: Optional[str] = None, 
