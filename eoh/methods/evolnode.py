@@ -158,13 +158,21 @@ def _check_alignment_with_llm_parallel(output_per_code_per_test: Dict[int, Dict[
     for code_index in output_per_code_per_test:
         for test_index in output_per_code_per_test[code_index]:
             pred_output, target_output = output_per_code_per_test[code_index][test_index], target_outputs[test_index]
-            trimmed_pred = {k: v for k, v in pred_output.items() if require_llm_metric(v)}
-            trimmed_target = {k: v for k, v in target_output.items() if require_llm_metric(v)}            
+            
+            trimmed_pred = {}
+            trimmed_target = {}
+            for target_name, target_value in target_output.items():
+                if require_llm_metric(target_value) and target_name in pred_output:
+                    trimmed_target[target_name] = target_value
+                    trimmed_pred[target_name] = pred_output[target_name]
+    
             if len(trimmed_pred) == 0 and len(trimmed_target) == 0:
                 continue
+            
             prompt = ALIGNMENT_CHECK_PROMPT.format(pred_output=trimmed_pred, target_output=trimmed_target)
             prompts.append(prompt)
             indices.append((code_index, test_index))
+            
             
     prompts = prompts * batch_size
     indices = indices * batch_size
@@ -225,7 +233,9 @@ def check_alignment_sequential(pred_output: dict, target_output: dict, get_respo
         return False, error_msg
     
     
-def check_alignment_parallel(output_per_code_per_test: Dict[int, Dict[int, Dict]], test_inputs: List[Dict], target_outputs: List[Dict], get_response: Optional[Callable] = get_openai_response, batch_size: int = 3):
+def check_alignment_parallel(output_per_code_per_test: Dict[int, Dict[int, Dict]], test_inputs: List[Dict], target_outputs: List[Dict], get_response: Optional[Callable] = get_openai_response, 
+                             batch_size: int = 3):
+    
     # make sure to combined score obtained from both steps (average of both)
     errors_per_code_per_test = defaultdict(lambda: defaultdict(list))
     
@@ -233,7 +243,8 @@ def check_alignment_parallel(output_per_code_per_test: Dict[int, Dict[int, Dict]
     metric_scores, errors_per_code_per_test = _check_alignment_with_metric_parallel(output_per_code_per_test, errors_per_code_per_test, test_inputs, target_outputs)
     
     # Get scores from LLM-based alignment check 
-    llm_scores, errors_per_code_per_test = _check_alignment_with_llm_parallel(output_per_code_per_test, errors_per_code_per_test, test_inputs, target_outputs, get_response, batch_size)
+    llm_scores, errors_per_code_per_test = _check_alignment_with_llm_parallel(output_per_code_per_test, errors_per_code_per_test, test_inputs, target_outputs,
+                                                                              get_response, batch_size)
     
     score_per_code_per_test = combine_scores(llm_scores, metric_scores)
     
@@ -433,6 +444,8 @@ class EvolNode:
         
         # Evolve many times
         reasonings, codes = self._evolve(method, parents, batch_size=batch_size)
+        self.reasonings = reasonings
+        self.codes = codes
         fitness_per_code, errors_per_code, global_summary = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs)
         
         print(global_summary)
@@ -442,7 +455,7 @@ class EvolNode:
             fitness = fitness_per_code[code_index]()
             reasoning = reasonings[code_index]
             code = codes[code_index]
-            err_msg = "\n".join(errors_per_code[code_index]) if len(errors_per_code[code_index]) > 0 else ""
+            err_msg = "\n".join(str(err) for err in errors_per_code[code_index]) if len(errors_per_code[code_index]) > 0 else ""
             
             if fitness >= self.fitness:
                 if replace:
