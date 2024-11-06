@@ -370,7 +370,7 @@ class EvolNode:
         return [case[0] for case in self.test_cases]
     
     
-    def _get_evolve_response(self, method: str, parents: Optional[list] = None, feedback: str = ""):
+    def _get_evolve_response_sequential(self, method: str, parents: Optional[list] = None, feedback: str = ""):
         prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
         prompt_content = prompt_method(parents)
         prompt_content += self.relevant_node_desc
@@ -378,25 +378,37 @@ class EvolNode:
      
         response = self.get_response(prompt_content)
         return response 
+    
+    def _get_evolve_response(self, method: str, parents: Optional[list] = None, feedback: str = "", batch_size: int = 5):
+        prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
+        prompt_content = prompt_method(parents)
+        prompt_content += self.relevant_node_desc
+        prompt_content += "\nIdea: " + feedback # External Guidance (perhaps we should reddit / stackoverflow this thingy)
+        
+        prompts = [prompt_content] * batch_size
+        responses = self.get_response(prompts)
+        return responses
 
-    def _evolve(self, method: str, parents: list = None, replace=False, feedback: str = ""):
+    def _evolve(self, method: str, parents: list = None, feedback: str = "", batch_size: int = 5):
         """
         Note: Evolution process will be decoupled with the fitness assignment process
         """
-        response = self._get_evolve_response(method, parents, feedback)
-        print(response)
-        try:
-            reasoning, code = parse_evol_response(response)
-            code = compile_code_with_references(code, self.referrable_function_dict) # deal with node references
-        except Exception as e:
-            print("Parse Response Failed...")
-            return None, None 
+        responses = self._get_evolve_response(method, parents, feedback, batch_size)
         
-        if replace:
-            self.reasoning, self.code = reasoning, code
-        return reasoning, code
+        reasonings, codes = [], []
+
+        for response in responses:
+            try:
+                reasoning, code = parse_evol_response(response)
+                code = compile_code_with_references(code, self.referrable_function_dict) # deal with node references
+                reasonings.append(reasoning)
+                codes.append(code)
+            except Exception as e:
+                continue  
+            
+        return reasonings, codes
     
-    def evolve(self, method: str, parents: list = None, replace=False, feedback: str = "", max_attempts: int = 5, fitness_threshold: float = 0.8, num_runs: int = 5):
+    def evolve(self, method: str, parents: list = None, replace=False, feedback: str = "", batch_size: int = 5, fitness_threshold: float = 0.8, num_runs: int = 5):
         """
         Evolve node and only accept structurally fit solutions
         Attempts multiple evolutions before returning the final output
@@ -407,35 +419,22 @@ class EvolNode:
         self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
         
         # Evolve many times
-        for attempt in range(max_attempts):
-            reasoning, code = self._evolve(method, parents, replace=False) 
-            self.tmp_code = code   
-            fitness, error_msg = self._evaluate_fitness(code=code, max_tries=1, num_runs=num_runs)      
-            structural_fitness = fitness.structural_fitness
-            fitness = fitness()
-            if replace and fitness >= self.fitness:
-                
-                print("--- Replacing with new node") 
-                self.reasoning, self.code = reasoning, code # Always replace worse with better
-                self.fitness = fitness
-                self.error_msg = error_msg
-                
-                if fitness >= fitness_threshold: # Terminate evolution only when fitness threshold is reached
-                    print(f"--- Fitness: {fitness:.2f}")
-                    print("--- Fitness threshold reached")
-                    return reasoning, code
-            elif not replace and structural_fitness == 1.0:
-                offsprings.append({"reasoning": reasoning, "code": code, "fitness": fitness})
-            
-            
-            # If not successful, log the attempt
-            print(f" - Attempt {attempt + 1} failed. Fitness: {fitness:.2f}. Error: {error_msg}")
+        reasonings, codes = self._evolve(method, parents, batch_size=batch_size)
+        fitnesses, err_msgs  = self._evaluate_fitness(codes, batch_size=num_runs)
         
-        # If all attempts fail, return None
+        offspings = []
+        for reasoning, code, fitness, err_msg in zip(reasonings, codes, fitnesses, err_msgs):
+            if fitness >= self.fitness:
+                if replace:
+                    self.reasoning, self.code = reasoning, code
+                    self.fitness = fitness
+                    self.error_msg = err_msg
+            if fitness >= fitness_threshold:
+                offsprings.append({"reasoning": reasoning, "code": code, "fitness": fitness})
+                
         if not replace:
             return offsprings
-        print(f"Evolution failed after {max_attempts} attempts.")
-        return None, None
+        
     
     def _evaluate_structure_fitness(self, test_inputs: List[Dict], code: Optional[str] = None) -> Tuple[float, str]:
         """ 
@@ -554,7 +553,7 @@ class EvolNode:
         functional_fitness = passed_tests / total_tests
         fitness = Fitness(structural_fitness, functional_fitness)
         
-        
+        return fitness, f" {str(fitness)}\n" + issue_summary + "\nError Message:\n" + error_msg
     
     def _evaluate_fitness_sequential(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, code: Optional[str] = None, 
                                         max_tries: int = 3, num_runs: int = 1) -> Fitness:
