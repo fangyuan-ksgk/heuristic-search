@@ -153,10 +153,10 @@ def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str
     for (input_index, input_dict) in enumerate(input_dicts):
         for (code_index, code) in enumerate(codes):
             mod = types.ModuleType('dynamic_module')
-            exec(code, mod.__dict__)
-            func_name = "generate_prompt"
-            prompt_func = mod.__dict__[func_name]
-            try:
+            try: 
+                exec(code, mod.__dict__)
+                func_name = "generate_prompt"
+                prompt_func = mod.__dict__[func_name]
                 prompt = prompt_func(**input_dict)
                 prompts.append(prompt)
                 input_indices.append((input_index, code_index))
