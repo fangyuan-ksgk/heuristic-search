@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import struct
-from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response, spawn_test_cases, spawn_test_cases_parallel
+from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response, spawn_test_cases
 from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT, check_n_rectify_plan_dict
 from .meta_execute import call_func_code, call_func_prompt, compile_code_with_references
 from sentence_transformers import SentenceTransformer
@@ -639,8 +639,8 @@ class PlanNode:
         self.relevant_nodes = None
         self.max_attempts = MAX_ATTEMPTS
         self.plan_dict = plan_dict
+        self.plan_dicts = []
 
-    @property
     def get_response(self, prompt: Union[str, List[str]]) -> Union[str, List[str]]:
         if isinstance(prompt, str):
             prompts = [prompt]
@@ -657,7 +657,7 @@ class PlanNode:
         if n_prompt == 1:
             return responses[0]
         else:
-            return responses        
+            return responses      
     
     def _evolve_plan_dict(self, feedback: str = "", replace: bool = True, method: str = "i1", parents: list = []):
         
@@ -701,6 +701,18 @@ class PlanNode:
             err_msg += f"Plan evolution {i} failed with error message: \n{err_msg_delta}\n"
             
         return {}, err_msg
+    
+    def update_plan_dict(self, plan_dicts: list): 
+        """ 
+        TBD: Better, more sohpisticated approach required (explore all generate plans ... )
+        """
+        if len(plan_dicts) > 0:
+            self.plan_dicts += plan_dicts
+        else:
+            self.plan_dicts = plan_dicts
+
+        plan_dict = min(self.plan_dicts, key=lambda x: len(x.get("nodes", [])))
+        self.plan_dict = plan_dict
     
     def evolve_plan_dict(self, feedback: str = "", method: str = "i1", parents: list = [], replace: bool = True, batch_size: int = 10):
         """ 
@@ -748,13 +760,13 @@ class PlanNode:
             if plan_dict:
                 plan_dicts.append(plan_dict)
                 
-        if len(plan_dicts) > 0:
-            self.plan_dict = plan_dicts[0]
+        self.update_plan_dict(plan_dicts)
+            
         return plan_dicts, err_msg
     
     
     
-    def spawn_test_cases(self, main_test_cases: list) -> tuple[bool, str]: 
+    def spawn_test_cases_sequential(self, main_test_cases: list) -> tuple[bool, str]: # Deprecated
         test_cases_dict, err_msg = spawn_test_cases(self.plan_dict, main_test_cases, self.get_response, SPAWN_TEST_MAX_TRIES)
         if test_cases_dict:
             self.test_cases_dict = test_cases_dict
@@ -764,8 +776,8 @@ class PlanNode:
             print(f"Failed to spawn test cases: {err_msg}")
             return False, err_msg 
         
-    def spawn_test_cases_parallel(self, main_test_cases: list, batch_size: int = 1) -> tuple[bool, str]:
-        test_cases_dict, err_msg = spawn_test_cases_parallel(self.plan_dict, main_test_cases, self.get_response, SPAWN_TEST_MAX_TRIES)
+    def spawn_test_cases(self, main_test_cases: list, batch_size: int = 1) -> tuple[bool, str]:
+        test_cases_dict, err_msg = spawn_test_cases(self.plan_dict, main_test_cases, self.get_response, SPAWN_TEST_MAX_TRIES)
         if test_cases_dict:
             self.test_cases_dict = test_cases_dict
             print(f"Spawned {len(test_cases_dict)} test cases for all sub-nodes")

@@ -586,7 +586,7 @@ def _build_test_cases_dict(spawned_test_cases: list):
     return output_dict 
 
 
-def spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable, max_tries: int = 6) -> tuple[dict, str]:
+def spawn_test_cases_sequential(plan_dict: dict, main_test_cases: list, get_response: Callable, max_tries: int = 6) -> tuple[dict, str]: # Deprecated
     test_case_count = len(main_test_cases)
     test_cases_list = []
     err_msg = []
@@ -607,7 +607,8 @@ def spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Calla
     else:
         return {}, "\n".join(err_msg) if err_msg else ""
     
-def spawn_test_cases_parallel(plan_dict: dict, main_test_cases: list, get_response: Callable, batch_size: int = 1) -> tuple[dict, str]:
+    
+def spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable, batch_size: int = 1) -> tuple[dict, str]:
 
     plan_str = get_plan_str(plan_dict)
     oneshot_prompt = generate_test_cases_template(plan_dict, main_test_cases)
