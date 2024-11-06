@@ -1,19 +1,19 @@
 from abc import ABC, abstractmethod
 import struct
-from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response
+from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response, spawn_test_cases
 from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT, check_n_rectify_plan_dict
 from .meta_execute import call_func_code, call_func_prompt, compile_code_with_references
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
-from typing import List, Dict
 from .llm import get_openai_response
 import re, os, json
 from tqdm import tqdm 
 from collections import defaultdict
-from typing import Optional, Dict, List, Callable, Tuple
+from typing import Optional, Union, Dict, List, Callable, Tuple
 
-MAX_ATTEMPTS = 3
-
+MAX_ATTEMPTS = 6
+SPAWN_TEST_MAX_TRIES = 20
+NODE_EVOLVE_MAX_ATTEMPTS = 5
 
 def map_input_output(test_case_list: List[dict], input_names: List[str], output_names: List[str]) -> List[Tuple[dict, dict]]:
     inputs = []
@@ -66,7 +66,7 @@ def type_to_metric(value) -> Callable:
     elif isinstance(value, float):
         return float_metric
     else:
-        return lambda x, y: True, ""
+        raise ValueError(f"Metric not defined for type: {type(value)}, use LLM-based alignment check instead !")
 
 
 def _check_alignment_with_metric(pred_output: dict, target_output: dict):
@@ -91,9 +91,10 @@ def _check_alignment_with_metric(pred_output: dict, target_output: dict):
     return True, ""
 
 
-def _check_alignment_with_llm(pred_output: dict, target_output: dict, get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
+def _check_alignment_with_llm_sequential(pred_output: dict, target_output: dict, get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
     """ 
     Alignment checking with expected outputs with LLM
+    Deprecated
     """
     error_msg = ""
     prompt = ALIGNMENT_CHECK_PROMPT.format(pred_output=pred_output, target_output=target_output)
@@ -119,7 +120,78 @@ def _check_alignment_with_llm(pred_output: dict, target_output: dict, get_respon
             
     return False, error_msg
 
-def check_alignment(pred_output: dict, target_output: dict, get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
+
+def _check_alignment_with_llm(pred_outputs: List[dict], test_outputs: List[dict], test_inputs: List[dict], test_code_indices: List[int], get_response: Optional[Callable] = get_openai_response, batch_size: int = 3):
+    """ 
+    Batch LLM-based alignment checking.
+    Returns:
+    - scores_per_code: dict mapping test code index to alignment score
+    - error_msg: string describing any errors in the process
+    """
+    error_msg = ""
+    prompts = []
+    test_case_indices = []  # Track which test case each prompt corresponds to
+    issue_summary = ""
+    
+    scores_per_code_n_test = defaultdict(list)
+
+    # Create prompts only for cases that need LLM evaluation
+    for i, (pred_output, target_output) in enumerate(zip(pred_outputs, test_outputs)):
+        # Filter outputs to only include fields requiring LLM evaluation
+        trimmed_pred = {k: v for k, v in pred_output.items() if require_llm_metric(v)}
+        trimmed_target = {k: v for k, v in target_output.items() if require_llm_metric(v)}
+        
+        if len(trimmed_pred) == 0 and len(trimmed_target) == 0:
+            continue
+            
+        prompt = ALIGNMENT_CHECK_PROMPT.format(pred_output=trimmed_pred, target_output=trimmed_target)
+        prompts.append(prompt)
+        test_case_indices.append(i)
+
+    if not prompts:  # No cases require LLM evaluation
+        return 1.0, ""
+
+    # Repeat prompts to match batch_size
+    prompts = prompts * batch_size
+    test_case_indices = test_case_indices * batch_size
+    
+    # Get LLM responses
+    responses = get_response(prompts)
+    
+    # Process responses and track results
+    scores_per_code_n_test = defaultdict(defaultdict(list))  # Maps test case index to list of alignment results
+    
+    for i, response in enumerate(responses):
+        test_idx = test_case_indices[i]
+        try:
+            check_dict = extract_json_from_text(response)
+            align_score = float(check_dict['aligned'])
+            
+            if align_score == 0:
+                issue_summary += f"Input: {test_inputs[test_idx]}, prediction is not aligned with expected output, Expected: {test_outputs[test_idx]} Predicted: {pred_outputs[test_idx]}\n"
+            
+            test_input = test_inputs[test_idx]
+            test_code_index = test_code_indices[test_idx]
+            
+            scores_per_code_n_test[test_code_index][test_input].append(align_score)
+            
+        except Exception as e:
+            error_msg += f"Failed to parse LLM response for test case {test_idx}: {str(e)}\n"
+
+    # Calculate average alignment rate for each test case
+    scores_per_code = defaultdict(list)
+    for test_code_index, scores_per_test_input in scores_per_code_n_test.items():
+        for test_input, results in scores_per_test_input.items():
+            scores_per_code[test_code_index].append(sum(results) / len(results))
+            
+    for test_code_index, scores in scores_per_code.items():
+        scores_per_code[test_code_index] = sum(scores) / len(scores)
+        
+    return scores_per_code, issue_summary if issue_summary != "" else error_msg
+
+
+
+def check_alignment_sequential(pred_output: dict, target_output: dict, get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
     """ 
     Alignment checking with expected outputs with LLM
     - we have two dictionary, need to make sure they are aligned
@@ -146,6 +218,30 @@ def check_alignment(pred_output: dict, target_output: dict, get_response: Option
     else:
         return False, error_msg
     
+    
+def check_alignment(pred_outputs: List[dict], test_outputs: List[dict], test_inputs: List[dict], test_code_indices: List[int], get_response: Optional[Callable] = get_openai_response, batch_size: int = 3):
+    """ 
+    Batch alignment checking with expected outputs with LLM
+    If target output belongs to certain type, use metric-based check only, otherwise use LLM-based check ... 
+    """
+    scores_per_code = defaultdict(list)
+    issue_summary = ""
+    # metric based check has higher substitue llm based alignment check 
+    try: 
+        for pred_output, target_output, test_input, test_code_index in zip(pred_outputs, test_outputs, test_inputs, test_code_indices):
+            is_aligned, error_msg = _check_alignment_with_metric(pred_output, target_output)
+            if not is_aligned:
+                issue_summary += f"Input: {test_input}, Output is missing or of wrong type, Expected: {target_output} Predicted: {pred_output}\n"
+            scores_per_code[test_code_index].append(float(is_aligned))
+            error_msg += error_msg
+            
+        scores_per_code = {k: sum(v) / len(v) for k, v in scores_per_code.items()}
+        return scores_per_code, issue_summary
+    except:
+        scores_per_code, issue_summary = _check_alignment_with_llm(pred_outputs, test_outputs, test_inputs, test_code_indices, get_response, batch_size)
+        return scores_per_code, issue_summary
+    
+        
     
 class Fitness: 
     
@@ -197,7 +293,7 @@ class EvolNode:
         self.fitness = fitness
         self.meta_prompt = meta_prompt
         self.test_cases = []
-        self.get_response = get_response
+        self._get_response = get_response
         self.relevant_nodes = []
         self.error_msg = "" # contains information about encountered error :: TBD :: use LLM to summarize it
         
@@ -207,6 +303,24 @@ class EvolNode:
             self.get_test_cases(3) # generate 3 test cases for new node
             
         
+    def get_response(self, prompt: str):
+        if isinstance(prompt, str):
+            prompts = [prompt]
+            n_prompt = 1
+        else:
+            prompts = prompt
+            n_prompt = len(prompts)
+        try:
+            responses = self._get_response(prompts)
+        except:
+            responses = []
+            for p in prompts:
+                responses.append(self._get_response(p))
+        if n_prompt == 1:
+            return responses[0]
+        else:
+            return responses
+    
     def _get_extend_test_cases_response(self, num_cases: int = 1, feedback: str = ""):
         if feedback != "":
             eval_prompt = self.meta_prompt._get_eval_prompt_with_feedback(num_cases, feedback)
@@ -267,7 +381,7 @@ class EvolNode:
         return [case[0] for case in self.test_cases]
     
     
-    def _get_evolve_response(self, method: str, parents: Optional[list] = None, feedback: str = ""):
+    def _get_evolve_response_sequential(self, method: str, parents: Optional[list] = None, feedback: str = ""):
         prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
         prompt_content = prompt_method(parents)
         prompt_content += self.relevant_node_desc
@@ -275,25 +389,37 @@ class EvolNode:
      
         response = self.get_response(prompt_content)
         return response 
+    
+    def _get_evolve_response(self, method: str, parents: Optional[list] = None, feedback: str = "", batch_size: int = 5):
+        prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
+        prompt_content = prompt_method(parents)
+        prompt_content += self.relevant_node_desc
+        prompt_content += "\nIdea: " + feedback # External Guidance (perhaps we should reddit / stackoverflow this thingy)
+        
+        prompts = [prompt_content] * batch_size
+        responses = self.get_response(prompts)
+        return responses
 
-    def _evolve(self, method: str, parents: list = None, replace=False, feedback: str = ""):
+    def _evolve(self, method: str, parents: list = None, feedback: str = "", batch_size: int = 5):
         """
         Note: Evolution process will be decoupled with the fitness assignment process
         """
-        response = self._get_evolve_response(method, parents, feedback)
-        print(response)
-        try:
-            reasoning, code = parse_evol_response(response)
-            code = compile_code_with_references(code, self.referrable_function_dict) # deal with node references
-        except Exception as e:
-            print("Parse Response Failed...")
-            return None, None 
+        responses = self._get_evolve_response(method, parents, feedback, batch_size)
         
-        if replace:
-            self.reasoning, self.code = reasoning, code
-        return reasoning, code
+        reasonings, codes = [], []
+
+        for response in responses:
+            try:
+                reasoning, code = parse_evol_response(response)
+                code = compile_code_with_references(code, self.referrable_function_dict) # deal with node references
+                reasonings.append(reasoning)
+                codes.append(code)
+            except Exception as e:
+                continue  
+            
+        return reasonings, codes
     
-    def evolve(self, method: str, parents: list = None, replace=False, feedback: str = "", max_attempts: int = 5, fitness_threshold: float = 0.8, num_runs: int = 5):
+    def evolve(self, method: str, parents: list = None, replace=False, feedback: str = "", batch_size: int = 5, fitness_threshold: float = 0.8, num_runs: int = 5):
         """
         Evolve node and only accept structurally fit solutions
         Attempts multiple evolutions before returning the final output
@@ -304,35 +430,22 @@ class EvolNode:
         self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
         
         # Evolve many times
-        for attempt in range(max_attempts):
-            reasoning, code = self._evolve(method, parents, replace=False) 
-            self.tmp_code = code   
-            fitness, error_msg = self._evaluate_fitness(code=code, max_tries=1, num_runs=num_runs)      
-            structural_fitness = fitness.structural_fitness
-            fitness = fitness()
-            if replace and fitness >= self.fitness:
-                
-                print("--- Replacing with new node") 
-                self.reasoning, self.code = reasoning, code # Always replace worse with better
-                self.fitness = fitness
-                self.error_msg = error_msg
-                
-                if fitness >= fitness_threshold: # Terminate evolution only when fitness threshold is reached
-                    print(f"--- Fitness: {fitness:.2f}")
-                    print("--- Fitness threshold reached")
-                    return reasoning, code
-            elif not replace and structural_fitness == 1.0:
-                offsprings.append({"reasoning": reasoning, "code": code, "fitness": fitness})
-            
-            
-            # If not successful, log the attempt
-            print(f" - Attempt {attempt + 1} failed. Fitness: {fitness:.2f}. Error: {error_msg}")
+        reasonings, codes = self._evolve(method, parents, batch_size=batch_size)
+        fitnesses, err_msgs  = self._evaluate_fitness(codes, batch_size=num_runs)
         
-        # If all attempts fail, return None
+        offspings = []
+        for reasoning, code, fitness, err_msg in zip(reasonings, codes, fitnesses, err_msgs):
+            if fitness >= self.fitness:
+                if replace:
+                    self.reasoning, self.code = reasoning, code
+                    self.fitness = fitness
+                    self.error_msg = err_msg
+            if fitness >= fitness_threshold:
+                offsprings.append({"reasoning": reasoning, "code": code, "fitness": fitness})
+                
         if not replace:
             return offsprings
-        print(f"Evolution failed after {max_attempts} attempts.")
-        return None, None
+        
     
     def _evaluate_structure_fitness(self, test_inputs: List[Dict], code: Optional[str] = None) -> Tuple[float, str]:
         """ 
@@ -387,9 +500,88 @@ class EvolNode:
         output_name = self.meta_prompt.outputs[0]
         output_dict = {output_name: output_value}
         return output_dict, error_msg
-        
     
-    def _evaluate_fitness(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, code: Optional[str] = None, 
+    
+    def _evaluate_fitness(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, codes: Optional[List[str]] = None, 
+                           max_tries: int = 3, num_runs: int = 1) -> Fitness:
+        
+        if codes is None:
+            return Fitness(0.0, 0.0), ""
+        
+        if len(codes) == 0: 
+            codes = [self.code] 
+        
+        if test_cases is None:
+            test_cases = self.test_cases
+        
+        if self.meta_prompt.mode == PromptMode.PROMPT:
+            num_runs = min(2, num_runs) # sanity check against stochastic nature of prompt-based node
+                
+        # First multiply test cases by num_runs
+        test_cases = test_cases * num_runs
+
+        # For each code, we want to test against all test cases
+        all_test_cases = []
+        all_test_codes = []
+        test_code_indices = []
+        for i, code in enumerate(codes):
+            all_test_cases.extend(test_cases)  # Add all test cases for this code
+            all_test_codes.extend([code] * len(test_cases))  # Add this code for each test case
+            test_code_indices.extend([i] * len(test_cases))
+        
+        test_cases = all_test_cases
+        test_codes = all_test_codes
+        
+        
+        total_tests = len(test_cases)
+        compiled_tests = 0
+        passed_tests = 0
+
+        error_msg = ""
+        issue_summary = ""
+        
+        pred_outputs, test_outputs, test_inputs = [], [], []
+        compiled_test_code_indices = []
+        passed_test_code_indices = []
+        
+        for test_input, test_output, code, test_code_index in tqdm(zip(test_cases, test_codes, test_code_indices), desc="Evaluating fitness"):
+            if self.meta_prompt.mode == PromptMode.CODE:
+                output_dict, error_msg_delta = self.call_code_function(test_input, code, file_path=None)
+                if error_msg_delta == "":
+                    pred_outputs.append(output_dict)
+                    test_outputs.append(test_output)
+                    test_inputs.append(test_input)
+                    compiled_test_code_indices.append(test_code_index)
+                else:
+                    error_msg += error_msg_delta
+                    
+            elif self.meta_prompt.mode == PromptMode.PROMPT:
+                output_dict, error_msg_delta = self.call_prompt_function(test_input, code, max_tries)
+                if error_msg_delta == "":
+                    pred_outputs.append(output_dict)
+                    test_outputs.append(test_output)
+                    test_inputs.append(test_input)
+                    compiled_test_code_indices.append(test_code_index)
+                else:
+                    error_msg += error_msg_delta
+            else:
+                raise ValueError(f"Unknown mode: {self.meta_prompt.mode}")
+        
+        # alignment checking
+        pass_score_per_code, issue_summary = check_alignment(pred_outputs, test_outputs, test_inputs, test_code_indices, self.get_response)
+        
+        # add overal information
+        global_summary = f"--- Compiled {compiled_tests} out of {total_tests} test cases\n"
+        global_summary += f"--- Passed {functional_fitness:.2f}% of compiled test cases\n"
+        issue_summary = global_summary + issue_summary
+
+        structural_fitness = compiled_tests / total_tests
+        functional_fitness = passed_tests / total_tests
+        fitness = Fitness(structural_fitness, functional_fitness)
+        
+        return fitness, f" {str(fitness)}\n" + issue_summary + "\nError Message:\n" + error_msg
+    
+    def _evaluate_fitness_sequential(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, code: Optional[str] = None, 
                                         max_tries: int = 3, num_runs: int = 1) -> Fitness:
         """ 
         Alignment checking with expected outputs with LLM
@@ -641,18 +833,38 @@ class PlanNode:
     
     def __init__(self, meta_prompt: MetaPlan, 
                  get_response: Optional[Callable] = get_openai_response,
-                 nodes: List[EvolNode] = []):
+                 nodes: List[EvolNode] = [],
+                 plan_dict: dict = {}):
         """ 
         Planning Node for subtask decomposition
         - Spawn helper nodes for better task performance
         """
         self.meta_prompt = meta_prompt 
-        self.get_response = get_response 
+        self._get_response = get_response 
         self.nodes = nodes
         self.relevant_nodes = None
         self.max_attempts = MAX_ATTEMPTS
+        self.plan_dict = plan_dict
+        self.plan_dicts = []
 
-        
+    def get_response(self, prompt: Union[str, List[str]]) -> Union[str, List[str]]:
+        if isinstance(prompt, str):
+            prompts = [prompt]
+            n_prompt = 1
+        else:
+            prompts = prompt 
+            n_prompt = len(prompts)
+        try: 
+            responses = self._get_response(prompts)
+        except: 
+            responses = []
+            for p in prompts:
+                responses.append(self._get_response(p))
+        if n_prompt == 1:
+            return responses[0]
+        else:
+            return responses      
+    
     def _evolve_plan_dict(self, feedback: str = "", replace: bool = True, method: str = "i1", parents: list = []):
         
         err_msg = ""
@@ -685,18 +897,127 @@ class PlanNode:
         
         return plan_dict, err_msg
     
-    def evolve_plan_dict(self, feedback: str = ""):
+    def evolve_plan_dict_sequential(self, feedback: str = "", method: str = "i1"): # Deprecated
         err_msg = ""
         for i in range(self.max_attempts):
-            plan_dict, err_msg_delta = self._evolve_plan_dict(feedback)
+            plan_dict, err_msg_delta = self._evolve_plan_dict(feedback, method=method)
             if err_msg_delta == "":
+                self.plan_dict = plan_dict
                 return plan_dict, ""
             err_msg += f"Plan evolution {i} failed with error message: \n{err_msg_delta}\n"
             
         return {}, err_msg
-        
     
-    def _spawn_nodes(self, plan_dict: Dict):
+    def update_plan_dict(self, plan_dicts: list): 
+        """ 
+        TBD: Better, more sohpisticated approach required (explore all generate plans ... )
+        """
+        if len(plan_dicts) > 0:
+            self.plan_dicts += plan_dicts
+        else:
+            self.plan_dicts = plan_dicts
+
+        plan_dict = min(self.plan_dicts, key=lambda x: len(x.get("nodes", [])))
+        self.plan_dict = plan_dict
+    
+    def evolve_plan_dict(self, feedback: str = "", method: str = "i1", parents: list = [], replace: bool = True, batch_size: int = 10):
+        """ 
+        Handling batch inference or sequential inference
+        """
+        print(f" :: Evolving {batch_size} plans in parallel...")
+
+
+        err_msg = ""
+        prompts = []
+        prompt = getattr(self.meta_prompt, f"_get_prompt_{method}")(feedback, parents)
+        self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
+        prompt += "\n" + self.relevant_node_desc
+        prompts = [prompt] * batch_size
+        
+        responses = self.get_response(prompts) # get pseudo-code for each plan
+        print(" :: Pseudo-code generated for each plan")
+        
+        plan_dicts = []
+        graph_prompts = []
+        for response in responses:
+            code = extract_python_code(response)
+            
+            if code == "":
+                err_msg += "No pseudo-code block found in the planning response: \n {response}\n"
+
+            # Step 2: Generate Planning DAG: Multiple Nodes 
+            graph_prompt = self.meta_prompt._get_plan_graph_prompt(code)
+            graph_prompts.append(graph_prompt)
+            
+        plan_responses = self.get_response(graph_prompts) # get plan_dict for each plan
+        print(" :: Plan_dict generated for each plan")
+        
+        for plan_response in plan_responses:
+            try:
+                plan_dict = extract_json_from_text(plan_response)
+            except ValueError as e:
+                plan_dict = {}
+                err_msg += f"Failed to extract JSON from planning response:\n{e}\nResponse was:\n{plan_response}\n"
+            
+            plan_dict = self._update_plan_dict(plan_dict)
+            plan_dict, err_msg_delta = check_n_rectify_plan_dict(plan_dict, self.meta_prompt)
+            if err_msg_delta:
+                err_msg += err_msg_delta
+            if plan_dict:
+                plan_dicts.append(plan_dict)
+                
+        self.update_plan_dict(plan_dicts)
+            
+        return plan_dicts, err_msg
+    
+    
+    
+    def spawn_test_cases_sequential(self, main_test_cases: list) -> tuple[bool, str]: # Deprecated
+        test_cases_dict, err_msg = spawn_test_cases(self.plan_dict, main_test_cases, self.get_response, SPAWN_TEST_MAX_TRIES)
+        if test_cases_dict:
+            self.test_cases_dict = test_cases_dict
+            print(f"Spawned {len(test_cases_dict)} test cases for all sub-nodes")
+            return True, err_msg
+        else:
+            print(f"Failed to spawn test cases: {err_msg}")
+            return False, err_msg 
+        
+    def spawn_test_cases(self, main_test_cases: list, batch_size: int = 1) -> tuple[bool, str]:
+        test_cases_dict, err_msg = spawn_test_cases(self.plan_dict, main_test_cases, self.get_response, SPAWN_TEST_MAX_TRIES)
+        if test_cases_dict:
+            self.test_cases_dict = test_cases_dict
+            print(f"Spawned {len(test_cases_dict)} test cases for all sub-nodes")
+            return True, err_msg
+        else:
+            print(f"Failed to spawn test cases: {err_msg}")
+            return False, err_msg 
+    
+    def evolve_sub_nodes(self, method: str = "i1"):
+        """
+        Evolve all sub-nodes using their respective test cases
+        """
+        for node_dict in self.plan_dict["nodes"]:
+            meta_prompt = MetaPrompt(
+                task=node_dict["task"],
+                func_name=node_dict["name"],
+                inputs=node_dict["inputs"],
+                outputs=node_dict["outputs"],
+                input_types=node_dict["input_types"],
+                output_types=node_dict["output_types"],
+                mode=PromptMode((node_dict.get("mode", "code")).lower())
+            )
+            test_cases = self.test_cases_dict[node_dict["name"]]
+            node = EvolNode(meta_prompt, None, None, get_response=self.get_response, test_cases=test_cases)
+            node.evolve(method, replace=True, max_attempts=NODE_EVOLVE_MAX_ATTEMPTS, num_runs=2)
+            self.nodes.append(node)
+            
+    def evolve_plan(self, method: str = "i1"):
+        """ 
+        Allocate budget to each plans, ensemble fitness of nodes after budget exhausted and re-allocate more budgets to a selection of plans
+        """
+        raise NotImplementedError
+    
+    def _spawn_nodes(self, plan_dict: Dict): # bad idea since test cases are not grounded ... 
         """ 
         Spawn new nodes based on plan_dict
         - Each node is evolved as CODE and PROMPT, we let evaluation result decides which one to keep
