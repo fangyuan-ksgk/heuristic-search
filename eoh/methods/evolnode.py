@@ -14,6 +14,7 @@ from typing import Optional, Union, Dict, List, Callable, Tuple
 MAX_ATTEMPTS = 6
 SPAWN_TEST_MAX_TRIES = 20
 NODE_EVOLVE_MAX_ATTEMPTS = 5
+NODE_EVOLVE_BATCH_SIZE = 20
 
 def map_input_output(test_case_list: List[dict], input_names: List[str], output_names: List[str]) -> List[Tuple[dict, dict]]:
     inputs = []
@@ -1053,7 +1054,7 @@ class PlanNode:
             print(f"Failed to spawn test cases: {err_msg}")
             return False, err_msg 
     
-    def evolve_sub_nodes(self, method: str = "i1", batch_size: int = 10):
+    def evolve_sub_nodes(self, method: str = "i1", batch_size: int = NODE_EVOLVE_BATCH_SIZE):
         """
         Evolve all sub-nodes using their respective test cases
         """
