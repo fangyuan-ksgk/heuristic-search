@@ -9,6 +9,7 @@ import os
 import asyncio
 import aiohttp
 import time
+from tqdm.asyncio import tqdm_asyncio 
 
 # os.environ["OPENAI_API_KEY"] = "YOUR OPENAI API KEY"
 # os.environ["GROQ_API_KEY"] = "YOUR GROQ API KEY"
@@ -223,35 +224,48 @@ def get_batch_vllm_func(name: str = "") -> Callable:
 
 def get_async_vllm_endpoint(endpoint_id: str, runpod_api_key: str) -> Callable:
     async def get_completion(client, session, query: str, system_prompt: str = "You are a Turing award winner."):
-        return await client.chat.completions.create(
-            model="meta-llama/Llama-3.1-8B-Instruct",
-            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": query}]
-        )
+        try:
+            response = await client.chat.completions.create(
+                model="meta-llama/Llama-3.1-8B-Instruct",
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": query}]
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"Error in completion: {str(e)}")
+            return ""
         
     async def run_parallel_inference(query_list: list, system_prompt: str = "You are a Turing award winner."):
-        client = AsyncOpenAI(
-            base_url=f"https://api.runpod.ai/v2/{endpoint_id}/openai/v1",
-            api_key=runpod_api_key,
-        )
-        
-        async with aiohttp.ClientSession() as session:
-            start_time = time.time()
+        try:
+            client = AsyncOpenAI(
+                base_url=f"https://api.runpod.ai/v2/{endpoint_id}/openai/v1",
+                api_key=runpod_api_key,
+            )
             
-            # Create tasks for parallel execution
-            tasks = [get_completion(client, session, query, system_prompt) for query in query_list]
-            # Run all tasks concurrently and gather results
-            responses = await asyncio.gather(*tasks)
-            
-            elapsed_time = time.time() - start_time
-            
-            return responses
+            async with aiohttp.ClientSession() as session:
+                start_time = time.time()
+                
+                from tqdm.asyncio import tqdm_asyncio
+                # Create tasks for parallel execution
+                tasks = [get_completion(client, session, query, system_prompt) for query in query_list]
+                # Run all tasks concurrently with progress bar
+                responses = await tqdm_asyncio.gather(*tasks, desc="Processing queries")
+                
+                elapsed_time = time.time() - start_time
+                
+                return responses
+        except Exception as e:
+            print(f"Error in parallel inference: {str(e)}")
+            return []
         
     import nest_asyncio
-    nest_asyncio.apply()  # Add this at the top of your notebook or before async code
+    nest_asyncio.apply()
 
     def get_vllm_endpoint_response(prompt: list, system_prompt: str = "You are a Turing award winner.") -> list:
-        responses = asyncio.run(run_parallel_inference(prompt, system_prompt))
-        return [r.choices[0].message.content for r in responses]
+        try:
+            return asyncio.run(run_parallel_inference(prompt, system_prompt))
+        except Exception as e:
+            print(f"Error in endpoint response: {str(e)}")
+            return []
     
     return get_vllm_endpoint_response
 
