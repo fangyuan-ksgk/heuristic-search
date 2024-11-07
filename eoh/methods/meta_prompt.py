@@ -818,8 +818,7 @@ def extract_python_code(response):
         code = code_match.group(1)
         return code 
     else:
-        print("No code block found in the response.")
-        return ""
+        raise ValueError("No code block found in the response.")
     
     
 def extract_imports_and_functions(code_str):
