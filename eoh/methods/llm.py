@@ -248,9 +248,11 @@ def get_async_vllm_endpoint(endpoint_id: str, runpod_api_key: str) -> Callable:
                 # Create tasks for parallel execution
                 tasks = [get_completion(client, session, query, system_prompt) for query in query_list]
                 # Run all tasks concurrently with progress bar
-                responses = await tqdm_asyncio.gather(*tasks, desc="Processing queries")
+                responses = await tqdm_asyncio.gather(*tasks, desc="Processing LLM queries")
                 
                 elapsed_time = time.time() - start_time
+                error_count = responses.count("")
+                print(f" :: Total time elapsed: {elapsed_time:.2f}s, {error_count} errors")
                 
                 return responses
         except Exception as e:
