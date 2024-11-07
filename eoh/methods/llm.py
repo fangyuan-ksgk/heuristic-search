@@ -18,6 +18,8 @@ import time
 # RUNPOD_API_KEY = "YOUR RUNPOD API KEY"
 # RUNPOD_ENDPOINT_ID = "YOUR RUNPOD ENDPOINT ID"
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 oai_client = OpenAI()
 claude_client = anthropic.Anthropic()
 

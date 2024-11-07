@@ -197,7 +197,7 @@ def _check_alignment_with_llm_parallel(output_per_code_per_test: Dict[int, Dict[
         for test_index in scores_per_code_per_test[code_index]:
             score = sum(scores_per_code_per_test[code_index][test_index]) / len(scores_per_code_per_test[code_index][test_index])
             score_per_code_per_test[code_index][test_index] = score
-            if score == 0:
+            if score < 0.8: # print err message | threshold of adding error message
                 error_msg = f"Input: {test_inputs[test_index]}, prediction is not aligned with expected output, Expected: {target_outputs[test_index]} Predicted: {output_per_code_per_test[code_index][test_index]}\n"
                 errors_per_code_per_test[code_index][test_index].append(error_msg)
             
