@@ -210,6 +210,11 @@ def fold_vllm_response_func(name: str = "")->Callable:
     get_vllm_response = lambda query: model.completions([query])[0]
     return get_vllm_response
 
+def get_batch_vllm_func(name: str = "") -> Callable: 
+    model = VLLM(name="meta-llama/Llama-3.1-8B-Instruct" if not name else name)
+    get_vllm_response = lambda query: model.completions(query)
+    return get_vllm_response
+
 #########################
 # RundPod vLLM endpoint #
 #########################
