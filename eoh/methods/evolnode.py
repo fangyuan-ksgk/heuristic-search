@@ -1070,6 +1070,7 @@ class PlanNode:
             )
             test_cases = self.test_cases_dict[node_dict["name"]]
             node = EvolNode(meta_prompt, None, None, get_response=self.get_response, test_cases=test_cases)
+            print(f"🎲 :: Evolving {node.meta_prompt.func_name} ... ({i}/{len(self.plan_dict['nodes'])})")
             node.evolve(method, replace=True, max_tries=NODE_EVOLVE_MAX_ATTEMPTS, num_runs=2, batch_size=batch_size)
             self.nodes.append(node)
             
