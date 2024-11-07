@@ -189,7 +189,7 @@ def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str
         for (code_index, code) in enumerate(codes):
             mod = types.ModuleType('dynamic_module')
             try:
-                with Timeout_(1.5):  # 1.5-second timeout
+                with Timeout_(3):  # 3-second timeout
                     exec(code, mod.__dict__)
                     func_name = "generate_prompt"
                     assert func_name in mod.__dict__, f"Function {func_name} not found in code #{code_index}"
