@@ -253,7 +253,13 @@ def check_alignment_parallel(output_per_code_per_test: Dict[int, Dict[int, Dict]
     
     
     
-    
+def print_individual_info(code_index: int, fitness: float, err_msg: str, reasoning: str, code: str):
+    print("\n" + "="*80)  # Top separator
+    print(f"📊 Code {code_index}: Fitness: {fitness*100:.1f}%")
+    if err_msg.strip():  # Only print error section if there are errors
+        print("-"*80)  # Separator between sections
+        print(f"❌ Error Messages:\n{err_msg}")
+    print("="*80 + "\n")  # Bottom separator
         
     
 class Fitness: 
@@ -456,6 +462,8 @@ class EvolNode:
             reasoning = reasonings[code_index]
             code = codes[code_index]
             err_msg = "\n".join(str(err) for err in errors_per_code[code_index]) if len(errors_per_code[code_index]) > 0 else ""
+            
+            print_individual_info(code_index, fitness, err_msg, reasoning, code)
             
             if fitness >= self.fitness:
                 if replace:
@@ -1038,7 +1046,7 @@ class PlanNode:
             print(f"Failed to spawn test cases: {err_msg}")
             return False, err_msg 
     
-    def evolve_sub_nodes(self, method: str = "i1"):
+    def evolve_sub_nodes(self, method: str = "i1", batch_size: int = 10):
         """
         Evolve all sub-nodes using their respective test cases
         """
@@ -1054,7 +1062,7 @@ class PlanNode:
             )
             test_cases = self.test_cases_dict[node_dict["name"]]
             node = EvolNode(meta_prompt, None, None, get_response=self.get_response, test_cases=test_cases)
-            node.evolve(method, replace=True, max_attempts=NODE_EVOLVE_MAX_ATTEMPTS, num_runs=2)
+            node.evolve(method, replace=True, max_tries=NODE_EVOLVE_MAX_ATTEMPTS, num_runs=2, batch_size=batch_size)
             self.nodes.append(node)
             
     def evolve_plan(self, method: str = "i1"):
