@@ -637,7 +637,7 @@ class EvolNode:
             f"  ⚡ Structural fitness: {best_fitness.structural_fitness:.2f}\n"
             f"  🎯 Functional fitness: {best_fitness.functional_fitness:.2f}\n" 
             f"  ⭐ Global fitness:     {best_fitness():.2f}\n"
-            f"  🔄 Batch size:        {len(codes)}\n"
+            f"  🔄 Compiled solutions:        {len(codes)}\n"
         )
                 
         return fitness_per_code, errors_per_code, global_summary  # TBD: return error messages ...
