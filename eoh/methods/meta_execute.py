@@ -7,6 +7,7 @@ import inspect
 from typing import get_origin, get_args
 import ast 
 import astor 
+import signal
 import re 
 from collections import defaultdict
 
@@ -38,66 +39,78 @@ def check_type(value, expected_type):
             return True
     
 
+class TimeoutError(Exception):
+    pass
+
+def timeout_handler(signum, frame):
+    raise TimeoutError("Function execution timed out (> 3 seconds)")
+
 def _call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_path: str = None) -> Any:
     """ 
-    Dynamic calling function defined in 'code' snippet
-    - with support of external python file from 'file_name'
-    - dynamic module used to cache the code-snippet
-    - supports multiple inputs as keyword arguments
+    Dynamic calling function defined in 'code' snippet with 3-second timeout
     """
-    if file_path:
-        # Load code from external file
-        module_name = f"dynamic_module_{hash(file_path)}"
-        spec = importlib.util.spec_from_file_location(module_name, file_path)
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = mod
-        spec.loader.exec_module(mod)
-    else:
-        # Use the existing code string approach
-        mod = types.ModuleType('dynamic_module')
-        exec(code, mod.__dict__)
+    # Set up the timeout handler
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(3)  # Set timeout to 3 seconds
     
-    # Get the function from the module
-    if func_name not in mod.__dict__:
-        raise ValueError(f"Function '{func_name}' not found in generated code")
-    
-    func = mod.__dict__[func_name]
-    
-    # Check input types
-    type_hints = get_type_hints(func)
-    if 'return' in type_hints:
-        expected_return_type = type_hints['return']
-        del type_hints['return']
-    else:
-        expected_return_type = Any
+    try:
+        if file_path:
+            # Load code from external file
+            module_name = f"dynamic_module_{hash(file_path)}"
+            spec = importlib.util.spec_from_file_location(module_name, file_path)
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = mod
+            spec.loader.exec_module(mod)
+        else:
+            # Use the existing code string approach
+            mod = types.ModuleType('dynamic_module')
+            exec(code, mod.__dict__)
+        
+        # Get the function from the module
+        if func_name not in mod.__dict__:
+            raise ValueError(f"Function '{func_name}' not found in generated code")
+        
+        func = mod.__dict__[func_name]
+        
+        # Check input types
+        type_hints = get_type_hints(func)
+        if 'return' in type_hints:
+            expected_return_type = type_hints['return']
+            del type_hints['return']
+        else:
+            expected_return_type = Any
 
-    # Check if all required parameters are provided
-    sig = inspect.signature(func)
-    required_params = {
-        name: param for name, param in sig.parameters.items()
-        if param.default == inspect.Parameter.empty and param.kind != inspect.Parameter.VAR_KEYWORD
-    }
-    if not all(name in input_data for name in required_params):
-        missing = set(required_params) - set(input_data)
-        raise ValueError(f"Missing required input parameters: {', '.join(missing)}")
+        # Check if all required parameters are provided
+        sig = inspect.signature(func)
+        required_params = {
+            name: param for name, param in sig.parameters.items()
+            if param.default == inspect.Parameter.empty and param.kind != inspect.Parameter.VAR_KEYWORD
+        }
+        if not all(name in input_data for name in required_params):
+            missing = set(required_params) - set(input_data)
+            raise ValueError(f"Missing required input parameters: {', '.join(missing)}")
 
-    # Check input types
-    for param_name, expected_type in type_hints.items():
-        if param_name in input_data:
-            actual_value = input_data[param_name]
-            if not check_type(actual_value, expected_type) and expected_type != Any:
-                raise TypeError(f"Input data type mismatch for parameter '{param_name}'. Expected {expected_type}, got {type(actual_value)}")
+        # Check input types
+        for param_name, expected_type in type_hints.items():
+            if param_name in input_data:
+                actual_value = input_data[param_name]
+                if not check_type(actual_value, expected_type) and expected_type != Any:
+                    raise TypeError(f"Input data type mismatch for parameter '{param_name}'. Expected {expected_type}, got {type(actual_value)}")
 
-    # Call the function with the input data
-    result = func(**input_data)
+        # Call the function with the input data
+        result = func(**input_data)
 
-    # Check output type
-    if expected_return_type != Any and not check_type(result, expected_return_type):
-        raise TypeError(f"Output data type mismatch. Expected {expected_return_type}, got {type(result)}")
+        # Check output type
+        if expected_return_type != Any and not check_type(result, expected_return_type):
+            raise TypeError(f"Output data type mismatch. Expected {expected_return_type}, got {type(result)}")
 
-    # Fold result into a dictionary 
-
-    return result
+        # Disable the alarm
+        signal.alarm(0)
+        return result
+        
+    finally:
+        # Ensure the alarm is disabled even if an error occurs
+        signal.alarm(0)
 
 def call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_path: str = None) -> Any:
     """ 
@@ -114,23 +127,33 @@ def _call_func_prompt(input_data: Dict[str, Any], code: str, get_response: calla
     Prompt EvolNode forward propagation
     - Compile prompt with LLM and return the response
     """
-    mod = types.ModuleType('dynamic_module')
-    exec(code, mod.__dict__)
-    func_name = "generate_prompt"
-    prompt_func = mod.__dict__[func_name]
-    prompt = prompt_func(**input_data)
-    print(prompt)
-    response = get_response(prompt)
-    print(response)
+    # Set up the timeout handler
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(3)  # Set timeout to 3 seconds
+    
     try:
-        output_dict = extract_json_from_text(response)
-        return output_dict
-    
-    except Exception as e:
-        # print(f"Error in parsing LLM response: {e}\nResponse:\n{response}")
-        raise ValueError(f"Failed to parse LLM response: {e}")
-    
-    
+        mod = types.ModuleType('dynamic_module')
+        exec(code, mod.__dict__)
+        func_name = "generate_prompt"
+        prompt_func = mod.__dict__[func_name]
+        prompt = prompt_func(**input_data)
+        print(prompt)
+        response = get_response(prompt)
+        print(response)
+        
+        try:
+            output_dict = extract_json_from_text(response)
+            # Disable the alarm
+            signal.alarm(0)
+            return output_dict
+        
+        except Exception as e:
+            raise ValueError(f"Failed to parse LLM response: {e}")
+            
+    finally:
+        # Ensure the alarm is disabled even if an error occurs
+        signal.alarm(0)
+
 def call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callable):
     """ 
     With Error Message Output
@@ -141,6 +164,18 @@ def call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callab
         return None, str(e)
 
 
+class Timeout_:
+    def __init__(self, seconds):
+        self.seconds = seconds
+
+    def __enter__(self):
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(self.seconds)
+
+    def __exit__(self, *args):
+        signal.alarm(0)
+        
+        
 def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str], max_tries: int, get_response: callable):
     """ 
     Parallel calling of prompt function
@@ -153,14 +188,15 @@ def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str
     for (input_index, input_dict) in enumerate(input_dicts):
         for (code_index, code) in enumerate(codes):
             mod = types.ModuleType('dynamic_module')
-            try: 
-                exec(code, mod.__dict__)
-                func_name = "generate_prompt"
-                assert func_name in mod.__dict__, f"Function {func_name} not found in code #{code_index}"
-                prompt_func = mod.__dict__[func_name]
-                prompt = prompt_func(**input_dict)
-                prompts.append(prompt)
-                input_indices.append((input_index, code_index))
+            try:
+                with Timeout_(1.5):  # 1.5-second timeout
+                    exec(code, mod.__dict__)
+                    func_name = "generate_prompt"
+                    assert func_name in mod.__dict__, f"Function {func_name} not found in code #{code_index}"
+                    prompt_func = mod.__dict__[func_name]
+                    prompt = prompt_func(**input_dict)
+                    prompts.append(prompt)
+                    input_indices.append((input_index, code_index))
             except Exception as e:
                 errors_per_code_per_test[code_index][input_index].append(str(e))
             

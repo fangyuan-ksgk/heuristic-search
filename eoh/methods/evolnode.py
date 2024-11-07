@@ -448,16 +448,30 @@ class EvolNode:
         # Query once
         offsprings = [] 
         self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
+        query_end_time = time.time()
+        query_time = query_end_time - start_time
+        
         
         # Evolve many times
         reasonings, codes = self._evolve(method, parents, batch_size=batch_size)
+        evolve_end_time = time.time()
+        evolve_time = evolve_end_time - query_end_time
+        
         self.reasonings = reasonings
         self.codes = codes
         fitness_per_code, errors_per_code, global_summary = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs)
         end_time = time.time()
+        evaluation_time = end_time - evolve_end_time
         
         if print_summary:
-            print(global_summary + f"  ⏱️ Time taken: {end_time - start_time:.2f} seconds\n")
+            generation_time = evolve_time
+            total_time = end_time - start_time
+            print(global_summary + 
+                  f"  ⏱️ Time breakdown:\n" + 
+                  f"     :: Query time: {query_time:.2f}s\n" +
+                  f"     :: Evolution time: {evolve_time:.2f}s\n" +
+                  f"     :: Evaluation time: {evaluation_time:.2f}s\n" +
+                  f"     :: Total time: {total_time:.2f}s\n")
                 
         offspings = []
         for code_index in fitness_per_code:
@@ -1058,7 +1072,7 @@ class PlanNode:
         """
         Evolve all sub-nodes using their respective test cases
         """
-        for node_dict in self.plan_dict["nodes"]:
+        for i, node_dict in enumerate(self.plan_dict["nodes"]):
             meta_prompt = MetaPrompt(
                 task=node_dict["task"],
                 func_name=node_dict["name"],
