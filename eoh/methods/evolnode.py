@@ -454,6 +454,7 @@ class EvolNode:
         self.codes = codes
         fitness_per_code, errors_per_code, global_summary = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs)
         
+        print(global_summary)
                 
         offspings = []
         for code_index in fitness_per_code:
@@ -627,9 +628,14 @@ class EvolNode:
         
         # Get best fitness
         best_fitness = max(fitness_per_code.values(), key=lambda x: x())
-        global_summary = f"Best code has structural fitness {best_fitness.structural_fitness:.2f}, "
-        global_summary += f"functional fitness {best_fitness.functional_fitness:.2f}, "
-        global_summary += f"global fitness {best_fitness():.2f}"
+        global_summary = (
+            f"🏆 Best Code Performance Summary 🏆\n"
+            f"  ⚡ Structural fitness: {best_fitness.structural_fitness:.2f}\n"
+            f"  🎯 Functional fitness: {best_fitness.functional_fitness:.2f}\n" 
+            f"  ⭐ Global fitness:     {best_fitness():.2f}\n"
+            f"  🔄 Batch size:        {len(codes)}\n"
+            f"{'🌟 ' * 15}"
+        )
                 
         return fitness_per_code, errors_per_code, global_summary  # TBD: return error messages ...
         
