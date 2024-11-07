@@ -454,14 +454,14 @@ class EvolNode:
         self.codes = codes
         fitness_per_code, errors_per_code, global_summary = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs)
         
-        print(global_summary)
-        
+                
         offspings = []
         for code_index in fitness_per_code:
             fitness = fitness_per_code[code_index]()
             reasoning = reasonings[code_index]
             code = codes[code_index]
             err_msg = "\n".join(str(err) for err in errors_per_code[code_index]) if len(errors_per_code[code_index]) > 0 else ""
+            print("Err msg: ", err_msg)
             
             print_individual_info(code_index, fitness, err_msg, reasoning, code)
             
@@ -631,7 +631,7 @@ class EvolNode:
         global_summary = f"Best code has structural fitness {best_fitness.structural_fitness:.2f}, "
         global_summary += f"functional fitness {best_fitness.functional_fitness:.2f}, "
         global_summary += f"global fitness {best_fitness():.2f}"
-        
+                
         return fitness_per_code, errors_per_code, global_summary  # TBD: return error messages ...
         
     

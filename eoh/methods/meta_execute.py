@@ -156,6 +156,7 @@ def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str
             try: 
                 exec(code, mod.__dict__)
                 func_name = "generate_prompt"
+                assert func_name in mod.__dict__, f"Function {func_name} not found in code #{code_index}"
                 prompt_func = mod.__dict__[func_name]
                 prompt = prompt_func(**input_dict)
                 prompts.append(prompt)
@@ -171,7 +172,7 @@ def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str
             outputs_per_code_per_test[code_index][input_index].append(output_dict)
         
         except Exception as e:
-            errors_per_code_per_test[code_index][input_index].append(f"Failed to parse LLM response: {response}\nError: " + str(e))
+            errors_per_code_per_test[code_index][input_index].append(f"Failed to parse LLM response -- " + str(e))
     
     output_per_code_per_test = defaultdict(lambda: defaultdict(dict))
     for code_index in outputs_per_code_per_test:
@@ -286,12 +287,14 @@ def combine_scores(llm_scores, metric_scores):
     
     return combined_score
 
-def combine_errors(errors_per_code_per_test_1, errors_per_code_per_test_2):
-    errors_per_code = defaultdict(lambda: defaultdict(list))
+def combine_errors(dict1, dict2):
+    # Create a new defaultdict with the same nested structure
+    combined = defaultdict(list)
     
-    for k in errors_per_code_per_test_1:
-        for i in errors_per_code_per_test_1[k]:
-            errors_per_code[k][i] += errors_per_code_per_test_1[k][i]
-            errors_per_code[k][i] += errors_per_code_per_test_2[k][i]
-            
-    return errors_per_code
+    # Combine all errors from both dictionaries
+    for dict_to_process in [dict1, dict2]:
+        for code_index in dict_to_process:
+            for test_index in dict_to_process[code_index]:
+                combined[code_index].extend(dict_to_process[code_index][test_index])
+    
+    return combined
