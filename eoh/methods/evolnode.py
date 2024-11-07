@@ -6,7 +6,7 @@ from .meta_execute import call_func_code, call_func_prompt_parallel, call_func_p
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from .llm import get_openai_response
-import re, os, json
+import re, os, json, time
 from tqdm import tqdm 
 from collections import defaultdict
 from typing import Optional, Union, Dict, List, Callable, Tuple
@@ -438,12 +438,12 @@ class EvolNode:
         return reasonings, codes
     
     def evolve(self, method: str, parents: list = None, replace=True, feedback: str = "", batch_size: int = 5, fitness_threshold: float = 0.8, 
-               num_runs: int = 5, max_tries: int = 3):
+               num_runs: int = 5, max_tries: int = 3, print_summary: bool = True):
         """
         Evolve node and only accept structurally fit solutions
         Attempts multiple evolutions before returning the final output
         """
-        
+        start_time = time.time()
         # Query once
         offsprings = [] 
         self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
@@ -453,8 +453,10 @@ class EvolNode:
         self.reasonings = reasonings
         self.codes = codes
         fitness_per_code, errors_per_code, global_summary = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs)
+        end_time = time.time()
         
-        print(global_summary)
+        if print_summary:
+            print(global_summary + f"  ⏱️ Time taken: {end_time - start_time:.2f} seconds\n")
                 
         offspings = []
         for code_index in fitness_per_code:
@@ -463,7 +465,8 @@ class EvolNode:
             code = codes[code_index]
             err_msg = "\n".join(str(err) for err in errors_per_code[code_index]) if len(errors_per_code[code_index]) > 0 else ""
             
-            print_individual_info(code_index, fitness, err_msg, reasoning, code)
+            if print_summary:
+                print_individual_info(code_index, fitness, err_msg, reasoning, code)
             
             if fitness >= self.fitness:
                 if replace:
@@ -634,7 +637,6 @@ class EvolNode:
             f"  🎯 Functional fitness: {best_fitness.functional_fitness:.2f}\n" 
             f"  ⭐ Global fitness:     {best_fitness():.2f}\n"
             f"  🔄 Batch size:        {len(codes)}\n"
-            f"{'🌟 ' * 15}"
         )
                 
         return fitness_per_code, errors_per_code, global_summary  # TBD: return error messages ...
