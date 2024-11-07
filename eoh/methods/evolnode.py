@@ -1016,7 +1016,10 @@ class PlanNode:
         plan_dicts = []
         graph_prompts = []
         for response in responses:
-            code = extract_python_code(response)
+            try:
+                code = extract_python_code(response)
+            except:
+                code = ""
             
             if code == "":
                 err_msg += "No pseudo-code block found in the planning response: \n {response}\n"
