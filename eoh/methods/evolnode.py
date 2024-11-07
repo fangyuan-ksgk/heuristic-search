@@ -452,7 +452,6 @@ class EvolNode:
         reasonings, codes = self._evolve(method, parents, batch_size=batch_size)
         self.reasonings = reasonings
         self.codes = codes
-        print("Length of codes: ", len(codes))
         fitness_per_code, errors_per_code, global_summary = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs)
         
                 
@@ -463,7 +462,7 @@ class EvolNode:
             code = codes[code_index]
             err_msg = "\n".join(str(err) for err in errors_per_code[code_index]) if len(errors_per_code[code_index]) > 0 else ""
             
-            # print_individual_info(code_index, fitness, err_msg, reasoning, code)
+            print_individual_info(code_index, fitness, err_msg, reasoning, code)
             
             if fitness >= self.fitness:
                 if replace:
