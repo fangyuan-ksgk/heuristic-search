@@ -1086,10 +1086,14 @@ class PlanNode:
                 mode=PromptMode((node_dict.get("mode", "code")).lower())
             )
             test_cases = self.test_cases_dict[node_dict["name"]]
-            node = EvolNode(meta_prompt, None, None, get_response=self.get_response, test_cases=test_cases)
-            print(f"🎲 :: Evolving {node.meta_prompt.func_name} ... ({i}/{len(self.plan_dict['nodes'])})")
-            node.evolve(method, replace=True, max_tries=NODE_EVOLVE_MAX_ATTEMPTS, num_runs=2, batch_size=batch_size)
+            if "fitness" in node_dict and "code" in node_dict: 
+                node = EvolNode(meta_prompt, node_dict["code"], node_dict["reasoning"], get_response=self.get_response, test_cases=test_cases, fitness=node_dict["fitness"])
+            else:
+                node = EvolNode(meta_prompt, None, None, get_response=self.get_response, test_cases=test_cases)
+                print(f"🎲 :: Evolving {node.meta_prompt.func_name} ... ({i+1}/{len(self.plan_dict['nodes'])})")
+                node.evolve("i1", replace=True, max_tries=2, num_runs=2, batch_size=20) # It's funny how 30+ sec could elapse before llm inference ... (collecting prompts ?? wtf is taking so long ??)
             self.nodes.append(node)
+            
             
     def evolve_plan(self, method: str = "i1"):
         """ 
