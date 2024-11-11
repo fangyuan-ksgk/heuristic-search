@@ -8,6 +8,8 @@ import networkx as nx
 from dataclasses import dataclass
 from typing import Optional, Union, Callable
 
+import test
+
 class PromptMode(Enum):
     CODE = "code"
     TOOL = "tool"
@@ -533,7 +535,7 @@ def _filter_test_cases_list(test_cases_list, main_test_cases, accept_extra: bool
     return filtered_list, "\n".join(err_msg) if err_msg else ""
 
 
-def combine_test_cases_list(t1, t2):
+def combine_test_cases_list(t1, t2, unique=True):
     # combining test cases list from different runs ...
     combined_t = []
     for (sub_node_cases1, sub_node_cases2) in zip(t1, t2):
@@ -543,19 +545,20 @@ def combine_test_cases_list(t1, t2):
         combined_t.append(combined_cases)
         
     # filter unique inputs ...
-    unique_indices = [] 
-    unique_initial_inputs = []
-    first_step_inputs = combined_t[0]['inputs']
-    for i, input_dict in enumerate(first_step_inputs):
-        if input_dict not in unique_initial_inputs:
-            unique_indices.append(i)
-            unique_initial_inputs.append(input_dict)
-        else:
-            continue
-        
-    for sub_node_cases in combined_t:
-        sub_node_cases["inputs"] = [sub_node_cases["inputs"][i] for i in unique_indices]
-        sub_node_cases["outputs"] = [sub_node_cases["outputs"][i] for i in unique_indices]
+    if unique:
+        unique_indices = [] 
+        unique_initial_inputs = []
+        first_step_inputs = combined_t[0]['inputs']
+        for i, input_dict in enumerate(first_step_inputs):
+            if input_dict not in unique_initial_inputs:
+                unique_indices.append(i)
+                unique_initial_inputs.append(input_dict)
+            else:
+                continue
+            
+        for sub_node_cases in combined_t:
+            sub_node_cases["inputs"] = [sub_node_cases["inputs"][i] for i in unique_indices]
+            sub_node_cases["outputs"] = [sub_node_cases["outputs"][i] for i in unique_indices]
         
     return combined_t
 
@@ -567,7 +570,6 @@ def _spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Call
     oneshot_prompt = generate_test_cases_template(plan_dict, main_test_cases)
 
     spawn_prompt = f"Here is a execution plan for a function: \n{plan_str}\n\n help generate test cases for each sub-function by filling the ... with proper inputs and outputs, output JSON like this: \n{oneshot_prompt}"
-
     response = get_response(spawn_prompt)
 
     try: 
@@ -608,17 +610,16 @@ def spawn_test_cases_sequential(plan_dict: dict, main_test_cases: list, get_resp
         return {}, "\n".join(err_msg) if err_msg else ""
     
     
-def spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable, batch_size: int = 1) -> tuple[dict, str]:
+def spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Callable, batch_size: int = 1, unique=True) -> tuple[dict, str]:
 
     plan_str = get_plan_str(plan_dict)
     oneshot_prompt = generate_test_cases_template(plan_dict, main_test_cases)
-    spawn_prompt = f"Here is a execution plan for a function: \n{plan_str}\n\n help generate test cases for each sub-function by filling the ... with proper inputs and outputs, output JSON like this: \n{oneshot_prompt}"
+    spawn_prompt = f"Here is a execution plan for a function: \n{plan_str}\n\n help generate test cases for each sub-function by filling the ... with proper inputs and outputs, output JSON like this: \n{oneshot_prompt} \nUSE THIS JSON AS A base. ONLY change THE ... and do not change any other values that are set, eventhought they are not diverse or people will die from your mistakes. Fill up the ... based on the already set values, which are the true input and output of the entire of the entire plan. You can imagine it as if you are filling ... based on the intermediate values of the given true inputs/outputs so do not create your own input/output based on anything else or people will die from you"
     spawn_prompts = [spawn_prompt] * batch_size
-
     responses = get_response(spawn_prompts)
-
     test_cases_deltas = []
     err_msgs = []
+    test_cases_list = None
     for response in responses:
         try: 
             test_cases_list = extract_json_from_text(response)
@@ -628,13 +629,12 @@ def spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Calla
             err_msgs.append(err_msg)
         except Exception as e:
             err_msgs.append(f"Error in spawning test cases: {e}")
-    
+        
     for i, test_cases_delta in enumerate(test_cases_deltas):
         if i == 0:
             test_cases_list = test_cases_delta
         else:
-            test_cases_list = combine_test_cases_list(test_cases_list, test_cases_delta)
-
+            test_cases_list = combine_test_cases_list(test_cases_list, test_cases_delta, unique)
     if test_cases_list:
         return _build_test_cases_dict(test_cases_list), "\n".join(err_msgs) if err_msgs else ""
     else:

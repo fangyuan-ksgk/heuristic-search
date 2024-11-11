@@ -28,14 +28,9 @@ class OpenRouterModel:
     BASEURL = "https://openrouter.ai/api/v1"
     MODELS = [
         "anthropic/claude-3.5-sonnet",
-        "qwen/qwen-110b-chat", 
         "mistralai/mistral-large", 
-        "meta-llama/llama-3-70b-instruct:nitro", 
-        "mistralai/mistral-nemo", 
-        "01-ai/yi-large",
-        "cohere/command-r-plus", 
+        "meta-llama/llama-3-70b-instruct:nitro",
         "openai/gpt-4o-mini",
-        "google/gemma-2-27b-it", 
         "microsoft/wizardlm-2-8x22b",
         "deepseek/deepseek-chat"
     ]
@@ -43,6 +38,11 @@ class OpenRouterModel:
     MAX_TOKENS = 400
     def __init__(self):
         self.client = OpenAI(
+            base_url=self.BASEURL,
+            api_key=getenv(self.KEY_ENV_VAR),
+        )
+        
+        self.async_client = AsyncOpenAI(
             base_url=self.BASEURL,
             api_key=getenv(self.KEY_ENV_VAR),
         )
@@ -65,6 +65,26 @@ class OpenRouterModel:
         print(f"{self.MODELS[idx]} response: {completion.choices[0].message.content}")
         return completion.choices[0].message.content
     
+    async def get_async_completion(self, prompt: str, idx: Optional[int] = None) -> str:
+        try:
+            if idx is None:
+                idx = random.randint(0, len(self.MODELS) - 1)
+            completion = await self.async_client.chat.completions.create(
+                model = self.MODELS[idx],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    },
+                ],
+            )
+            print(f"{self.MODELS[idx]} response: {completion.choices[0].message.content}")
+
+            return completion.choices[0].message.content
+        except Exception as e:
+            print(f"Error in completion: {str(e)}")
+            return ""
+    
     
 def get_helper_response(prompt, rand=True):
     if rand:
@@ -74,6 +94,41 @@ def get_helper_response(prompt, rand=True):
     helper_model = OpenRouterModel()
     response = helper_model.get_completion(prompt, helper_model_idx)
     return response
+
+async def run_multiple_model_inference(prompt):
+    try:
+        helper_model = OpenRouterModel()
+        
+        async with aiohttp.ClientSession() as session:
+            start_time = time.time()
+            
+            from tqdm.asyncio import tqdm_asyncio
+            # Create tasks for parallel execution
+            tasks = [helper_model.get_async_completion(prompt, idx) for idx in range(len(helper_model.MODELS))]
+            # Run all tasks concurrently with progress bar
+            responses = await tqdm_asyncio.gather(*tasks, desc="Getting outputs from multiple LLMs")
+            
+            elapsed_time = time.time() - start_time
+            error_count = responses.count("")
+            print(f" :: Total time elapsed: {elapsed_time:.2f}s, {error_count} errors")
+            
+            return responses
+    except Exception as e:
+        print(f"Error in multiple LLMs inference: {str(e)}")
+        return []
+
+    response = helper_model.get_completion(prompt, helper_model_idx)
+    return response
+
+
+def get_multiple_response(prompt: list) -> list:
+    try:
+        import nest_asyncio
+        nest_asyncio.apply()
+        return asyncio.run(run_multiple_model_inference(prompt[0]))
+    except Exception as e:
+        print(f"Error in endpoint response: {str(e)}")
+        return []
 
 
 def get_openai_response(input: Union[str, list], model_name="gpt-4o"):
