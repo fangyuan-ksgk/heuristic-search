@@ -489,7 +489,7 @@ def generate_test_cases_template(plan_dict: dict, main_test_cases: list) -> str:
     return f"```json\n{json.dumps(test_cases_list, indent=4)}\n```"
 
 
-def _filter_test_cases_list(test_cases_list, main_test_cases, accept_extra: bool = False):
+def _filter_test_cases_list(test_cases_list: list, main_test_cases: list, accept_extra: bool = False):
     """Filter and validate test cases against main test cases.
     
     Args:
@@ -623,7 +623,7 @@ def spawn_test_cases(plan_dict: dict, main_test_cases: list, get_response: Calla
     for response in responses:
         try: 
             test_cases_list = extract_json_from_text(response)
-            filtered_list, err_msg = _filter_test_cases_list(test_cases_list, main_test_cases)
+            filtered_list, err_msg = _filter_test_cases_list(test_cases_list, main_test_cases) # add check-up for incomplete test_cases
             if filtered_list:
                 test_cases_deltas.append(filtered_list)
             err_msgs.append(err_msg)
