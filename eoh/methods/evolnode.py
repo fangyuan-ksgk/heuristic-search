@@ -5,11 +5,14 @@ from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, 
 from .meta_execute import call_func_code, call_func_prompt_parallel, call_func_prompt, compile_code_with_references, combine_scores, combine_errors
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
-from .llm import get_openai_response
+from .llm import get_multiple_response, get_openai_response
 import re, os, json, time
 from tqdm import tqdm 
 from collections import defaultdict
 from typing import Optional, Union, Dict, List, Callable, Tuple
+import itertools
+import operator
+
 
 MAX_ATTEMPTS = 6
 SPAWN_TEST_MAX_TRIES = 20
@@ -993,8 +996,8 @@ class PlanNode:
         else:
             self.plan_dicts = plan_dicts
 
-        plan_dict = min(self.plan_dicts, key=lambda x: len(x.get("nodes", [])))
-        self.plan_dict = plan_dict
+        # plan_dict = min(self.plan_dicts, key=lambda x: len(x.get("nodes", [])))
+        # self.plan_dict = plan_dict
     
     def evolve_plan_dict(self, feedback: str = "", method: str = "i1", parents: list = [], replace: bool = True, batch_size: int = 10):
         """ 
@@ -1011,8 +1014,10 @@ class PlanNode:
         prompts = [prompt] * batch_size
         
         responses = self.get_response(prompts) # get pseudo-code for each plan
+   
         print(" :: Pseudo-code generated for each plan")
-        
+        responses = [responses]
+        print(responses)
         plan_dicts = []
         graph_prompts = []
         for response in responses:
@@ -1030,7 +1035,8 @@ class PlanNode:
             
         plan_responses = self.get_response(graph_prompts) # get plan_dict for each plan
         print(" :: Plan_dict generated for each plan")
-        
+        plan_responses = [plan_responses]
+        print(plan_responses)
         for plan_response in plan_responses:
             try:
                 plan_dict = extract_json_from_text(plan_response)
@@ -1050,6 +1056,38 @@ class PlanNode:
         return plan_dicts, err_msg
     
     
+    def spawn_test_cases_majority(self, main_test_cases: list) -> tuple [bool, str]:
+        def most_common(list1):
+            # get an iterable of (item, iterable) pairs
+            sorted_list = [(x, i) for i, x in enumerate(list1)]
+            groups = itertools.groupby(sorted_list, key=operator.itemgetter(0))
+            groups = [(i[0],[j for j in i[1]]) for i in groups]
+            # auxiliary function to get "quality" for an item
+            def _auxfun(g):
+                item, iterable = g
+                count = 0
+                min_index = len(list1)
+                for _, where in iterable:
+                    count += 1
+                    min_index = min(min_index, where)
+                print(f"{g} {count}")
+                return -count, min_index
+            # pick the highest-count/earliest item
+            return sorted(groups, key=lambda x:_auxfun(x))
+                
+        test_cases_dict, err_msg = spawn_test_cases(self.plan_dict, main_test_cases, get_multiple_response, unique=False)
+        if test_cases_dict:
+            for name, io in test_cases_dict.items():
+                inputs, outputs = zip(*io)
+                sub_list_input = inputs[:len(main_test_cases)]
+                sub_list_output = outputs[:len(main_test_cases)]
+                test_cases_dict[name] = list(zip(sub_list_input, sub_list_output))
+            self.test_cases_dict = test_cases_dict
+            print(f"Spawned {len(test_cases_dict)} test cases for all sub-nodes")
+            return True, err_msg
+        else:
+            print(f"Failed to spawn test cases: {err_msg}")
+            return False, err_msg 
     
     def spawn_test_cases_sequential(self, main_test_cases: list) -> tuple[bool, str]: # Deprecated
         test_cases_dict, err_msg = spawn_test_cases(self.plan_dict, main_test_cases, self.get_response, SPAWN_TEST_MAX_TRIES)
