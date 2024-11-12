@@ -1,8 +1,8 @@
 import os
 import json
 import numpy as np
-from .evolnode import EvolNode
-from .meta_prompt import MetaPrompt, PromptMode
+from .evolnode import EvolNode, PlanNode
+from .meta_prompt import MetaPlan, MetaPrompt, PromptMode
 from typing import Callable
 # from joblib import Parallel, delayed
 from typing import List, Optional, Union
@@ -53,20 +53,24 @@ def indiv_to_prompt(indiv: dict, mode: PromptMode) -> str:
 class Evolution: 
     
     def __init__(self, pop_size: int, meta_prompt: MetaPrompt, get_response: Callable, test_cases: Optional[list] = None, 
-                 max_attempts: int = 3, num_eval_runs: int = 1, num_parents: int = 2, filename: str = "default", load: bool = False, mutation_rate: float = 0.1): 
+                 max_attempts: int = 3, num_eval_runs: int = 1, num_parents: int = 2, filename: str = "default", load: bool = False, mutation_rate: float = 0.1, plan: bool = False, plan_threshold: float = 0.7): 
         self.pop_size = pop_size # not used (for capping population size I suppose?)
-        self.meta_prompt = meta_prompt
-        self.evol = EvolNode(meta_prompt, None, None, get_response=get_response, test_cases=test_cases)
-        self.max_attempts = max_attempts
-        self.num_eval_runs = num_eval_runs
-        self.num_parents = num_parents
-        self.population = []
-        self.load = load
-        if load:
-            self.population = self.load_population(filename)
-        self.mutation_rate = mutation_rate
         self.get_response = get_response
         self.strategy_trace = "Initial Population information: " + self.population_info
+        self.meta_prompt = meta_prompt
+        self.max_attempts = max_attempts
+        self.num_eval_runs = num_eval_runs
+        self.load = load
+        self.test_cases = test_cases
+        if not plan:
+            self.evol = EvolNode(meta_prompt, None, None, get_response=get_response, test_cases=test_cases)
+            self.num_parents = num_parents
+            self.population = []
+            if load:
+                self.population = self.load_population(filename)
+            self.mutation_rate = mutation_rate
+        else:
+            pass
 
     def check_duplicate(self, population, code):
         return any(code == ind['code'] for ind in population)
@@ -124,7 +128,9 @@ class Evolution:
                 self.strategy_trace += offspring_info
 
                 pop.append(offspring)
-                if offspring["fitness"] == 1.0: break
+                if offspring["fitness"] == 1.0: 
+                    self.evol = EvolNode(self.meta_prompt, offspring['code'], offspring['reasoning'], get_response=self.get_response, test_cases=self.test_cases, fitness=offspring['fitness'])
+                    break
             return pop
         
         # Evolution Info Tracing
@@ -137,12 +143,19 @@ class Evolution:
             
         return pop
     
-    def get_offspring(self, method: Union[str, List[str]] = "default"):
+    def get_offspring(self, method: Union[str, List[str]] = "default", convert_to_plan: bool=False, batch_size: int=100):
         if isinstance(method, str):
             self.population = self._get_offspring(method, self.population)
         elif isinstance(method, list):
             for m in method:
                 self.population = self._get_offspring(m, self.population)
+        
+        if convert_to_plan and max(self.population, key=lambda x: x['fitness'])['fitness'] < self.plan_threshold:
+            meta_plan = MetaPlan(self.meta_prompt.task, self.meta_prompt.func_name, self.meta_prompt.inputs, self.meta_prompt.outputs, self.meta_prompt.input_types, self.meta_prompt.output_types)
+            self.plan_node = PlanNode(meta_plan, self.get_response)
+            self.plan_node.evolve_plan_dict(batch_size=batch_size)
+            self.plan_node.spawn_test_cases_majority(self.test_cases)
+            self.plan_node.evolve_sub_nodes()
         
     def save_population(self, pop: list, filename: str = "default", population_dir: str = "methods/population"):
         population_folder = f"{population_dir}/{self.meta_prompt.func_name}/"
