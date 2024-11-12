@@ -10,8 +10,7 @@ import re, os, json, time
 from tqdm import tqdm 
 from collections import defaultdict
 from typing import Optional, Union, Dict, List, Callable, Tuple
-import itertools
-import operator
+from collections import Counter
 
 
 MAX_ATTEMPTS = 6
@@ -427,9 +426,7 @@ class EvolNode:
         Note: Evolution process will be decoupled with the fitness assignment process
         """
         responses = self._get_evolve_response(method, parents, feedback, batch_size)
-        
         reasonings, codes = [], []
-
         for response in responses:
             try:
                 reasoning, code = parse_evol_response(response)
@@ -465,7 +462,6 @@ class EvolNode:
         fitness_per_code, errors_per_code, global_summary = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs)
         end_time = time.time()
         evaluation_time = end_time - evolve_end_time
-        
         if print_summary:
             generation_time = evolve_time
             total_time = end_time - start_time
@@ -1013,7 +1009,6 @@ class PlanNode:
         prompts = [prompt] * batch_size
         
         responses = self.get_response(prompts) # get pseudo-code for each plan
-   
         print(" :: Pseudo-code generated for each plan")
         plan_dicts = []
         graph_prompts = []
@@ -1052,30 +1047,20 @@ class PlanNode:
     
     
     def spawn_test_cases_majority(self, main_test_cases: list) -> tuple [bool, str]:
-        def most_common(list1):
-            # get an iterable of (item, iterable) pairs
-            sorted_list = [(x, i) for i, x in enumerate(list1)]
-            groups = itertools.groupby(sorted_list, key=operator.itemgetter(0))
-            groups = [(i[0],[j for j in i[1]]) for i in groups]
-            # auxiliary function to get "quality" for an item
-            def _auxfun(g):
-                item, iterable = g
-                count = 0
-                min_index = len(list1)
-                for _, where in iterable:
-                    count += 1
-                    min_index = min(min_index, where)
-                print(f"{g} {count}")
-                return -count, min_index
+        def most_common(list_of_dicts):
+            dict_tuples = [tuple(sorted(d.items())) for d in list_of_dicts]
+            counter = Counter(dict_tuples)
+            sorted_dicts_by_frequency = sorted(counter.items(), key=lambda x: x[1], reverse=True)
+            sorted_unique_dicts = [{k: v for k, v in dict_tuple} for dict_tuple, _ in sorted_dicts_by_frequency]
             # pick the highest-count/earliest item
-            return sorted(groups, key=lambda x:_auxfun(x))
+            return sorted_unique_dicts
                 
         test_cases_dict, err_msg = spawn_test_cases(self.plan_dict, main_test_cases, get_multiple_response, unique=False)
         if test_cases_dict:
             for name, io in test_cases_dict.items():
                 inputs, outputs = zip(*io)
-                sub_list_input = [i[0] for i in most_common(inputs)[:len(main_test_cases)]]
-                sub_list_output = [outputs[i[1][0][0]] for i in sub_list_input]
+                sub_list_input = most_common(inputs)[:len(main_test_cases)]
+                sub_list_output = most_common(outputs)[:len(main_test_cases)]
                 test_cases_dict[name] = list(zip(sub_list_input, sub_list_output))
             self.test_cases_dict = test_cases_dict
             print(f"Spawned {len(test_cases_dict)} test cases for all sub-nodes")
