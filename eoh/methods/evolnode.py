@@ -476,7 +476,6 @@ class EvolNode:
                   f"     :: Evaluation time: {evaluation_time:.2f}s\n" +
                   f"     :: Total time: {total_time:.2f}s\n")
                 
-        offspings = []
         for code_index in fitness_per_code:
             fitness = fitness_per_code[code_index]()
             reasoning = reasonings[code_index]
@@ -1016,8 +1015,6 @@ class PlanNode:
         responses = self.get_response(prompts) # get pseudo-code for each plan
    
         print(" :: Pseudo-code generated for each plan")
-        responses = [responses]
-        print(responses)
         plan_dicts = []
         graph_prompts = []
         for response in responses:
@@ -1035,8 +1032,6 @@ class PlanNode:
             
         plan_responses = self.get_response(graph_prompts) # get plan_dict for each plan
         print(" :: Plan_dict generated for each plan")
-        plan_responses = [plan_responses]
-        print(plan_responses)
         for plan_response in plan_responses:
             try:
                 plan_dict = extract_json_from_text(plan_response)
@@ -1079,8 +1074,8 @@ class PlanNode:
         if test_cases_dict:
             for name, io in test_cases_dict.items():
                 inputs, outputs = zip(*io)
-                sub_list_input = inputs[:len(main_test_cases)]
-                sub_list_output = outputs[:len(main_test_cases)]
+                sub_list_input = [i[0] for i in most_common(inputs)[:len(main_test_cases)]]
+                sub_list_output = [outputs[i[1][0][0]] for i in sub_list_input]
                 test_cases_dict[name] = list(zip(sub_list_input, sub_list_output))
             self.test_cases_dict = test_cases_dict
             print(f"Spawned {len(test_cases_dict)} test cases for all sub-nodes")
