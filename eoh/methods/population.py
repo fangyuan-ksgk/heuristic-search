@@ -56,10 +56,10 @@ class Evolution:
                  max_attempts: int = 3, num_eval_runs: int = 1, num_parents: int = 2, filename: str = "default", load: bool = False, mutation_rate: float = 0.1, plan: bool = False, plan_threshold: float = 0.7): 
         self.pop_size = pop_size # not used (for capping population size I suppose?)
         self.get_response = get_response
-        self.strategy_trace = "Initial Population information: " + self.population_info
         self.meta_prompt = meta_prompt
         self.max_attempts = max_attempts
         self.num_eval_runs = num_eval_runs
+        self.plan_threshold = plan_threshold
         self.load = load
         self.test_cases = test_cases
         if not plan:
@@ -69,6 +69,7 @@ class Evolution:
             if load:
                 self.population = self.load_population(filename)
             self.mutation_rate = mutation_rate
+            self.strategy_trace = "Initial Population information: " + self.population_info
         else:
             pass
 
@@ -143,17 +144,17 @@ class Evolution:
             
         return pop
     
-    def get_offspring(self, method: Union[str, List[str]] = "default", convert_to_plan: bool=False, batch_size: int=100):
+    def get_offspring(self, method: Union[str, List[str]] = "default", convert_to_plan: bool=False):
         if isinstance(method, str):
             self.population = self._get_offspring(method, self.population)
         elif isinstance(method, list):
             for m in method:
                 self.population = self._get_offspring(m, self.population)
-        
-        if convert_to_plan and max(self.population, key=lambda x: x['fitness'])['fitness'] < self.plan_threshold:
+        if convert_to_plan and ((len(self.population) == 0) or (max(self.population, key=lambda x: x['fitness'])['fitness'] < self.plan_threshold)):
+            print('Converting to Plan')
             meta_plan = MetaPlan(self.meta_prompt.task, self.meta_prompt.func_name, self.meta_prompt.inputs, self.meta_prompt.outputs, self.meta_prompt.input_types, self.meta_prompt.output_types)
             self.plan_node = PlanNode(meta_plan, self.get_response)
-            self.plan_node.evolve_plan_dict(batch_size=batch_size)
+            self.plan_node.evolve_plan_dict_sequential()
             self.plan_node.spawn_test_cases_majority(self.test_cases)
             self.plan_node.evolve_sub_nodes()
         
