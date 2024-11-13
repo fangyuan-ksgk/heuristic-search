@@ -46,3 +46,14 @@ GROQ_API_KEY="xxxxxxxxxxxxx"
 ```
 
 Make sure to never commit the `.env` file to version control, as it contains sensitive information.
+
+
+## Branching and Pushing Code to Repository
+
+When working on an improvement or feature, please create a new branch with a prefix denoting your name and surname, and then the branch name. For example: `fy/improving_node_evolution`. This way, when you do `git branch -r`, you can see who has what branches open.
+
+When the branch is ready for review, then make a Pull Request (PR) into GitHub and set someone to review it. If it's something trivial, then review it yourself and merge it. Please don't push directly into `main` (this will be blocked soon).
+
+We will add some tests for core module functionality so that we won't be able to push to `main` without passing tests. This is an effort to prevent introducing breaking changes.
+
+I also want to introduce automatic benchmark running so we always know the current score of the `main` branch.
