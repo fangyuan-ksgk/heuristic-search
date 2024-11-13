@@ -1,0 +1,94 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+.venv/
+.env/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# VSCode settings and environments
+.vscode/
+
+# Python environment files
+*.env
+*.venv
+*.virtualenv
+
+# Data files and datasets
+data/
+datasets/
+*.csv
+*.tsv
+*.data
+*.dat
+*.db
+*.log
+
+# Model files
+models/
+*.ckpt
+*.pth
+*.pt
+*.h5
+*.joblib
+*.pb
+
+# TensorFlow and Keras checkpoints and logs
+checkpoint
+*.ckpt.*
+logs/
+
+# PyTorch Lightning logs
+lightning_logs/
+
+# Machine Learning cache
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# PyInstaller
+*.spec
+dist/
+build/
+
+# Coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+*.cover
+coverage.xml
+
+# Jupyter Notebook metadata
+.ipynb_checkpoints
+
+# Python profiling
+*.prof
+
+# mypy
+.mypy_cache/
+.dmypy.json
+.dmypy.json.*/
+
+# Pyre type checker
+.pyre/
+
+# Cython debug symbols
+cython_debug/
+
+# IDE and editor specific files
+.idea/
+
+#TODO:  Add cursor specific files here as well
+
+# MacOS system files
+.DS_Store
+
+# Thumbnails
+Thumbs.db
