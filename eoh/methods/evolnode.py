@@ -991,8 +991,9 @@ class PlanNode:
         else:
             self.plan_dicts = plan_dicts
 
-        # plan_dict = min(self.plan_dicts, key=lambda x: len(x.get("nodes", [])))
-        # self.plan_dict = plan_dict
+        # Makeshift plan dict selection heuristic
+        plan_dict = min(self.plan_dicts, key=lambda x: len(x.get("nodes", [])))
+        self.plan_dict = plan_dict
     
     def evolve_plan_dict(self, feedback: str = "", method: str = "i1", parents: list = [], replace: bool = True, batch_size: int = 10):
         """ 
