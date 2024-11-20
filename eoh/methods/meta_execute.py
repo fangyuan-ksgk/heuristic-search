@@ -220,6 +220,26 @@ def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str
     return output_per_code_per_test, errors_per_code_per_test
 
 
+def _clean_up_duplicate_functions_in_ast_tree(tree):
+    # Keep track of function names we've seen
+    seen_functions = set()
+    
+    # New list to store unique functions
+    unique_functions = []
+    
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            if node.name not in seen_functions:
+                seen_functions.add(node.name)
+                unique_functions.append(node)
+        else:
+            unique_functions.append(node)
+    
+    # Create a new Module with unique functions
+    new_tree = ast.Module(body=unique_functions, type_ignores=[])
+    
+    return new_tree
+
 
 def clean_up_ast_tree(new_tree):
     # Sort imports and remove duplicates
@@ -238,6 +258,8 @@ def clean_up_ast_tree(new_tree):
     
     # Reconstruct the AST with sorted imports at the top
     new_tree.body = import_nodes + other_nodes
+
+    new_tree = _clean_up_duplicate_functions_in_ast_tree(new_tree)
     
     return new_tree
 
@@ -255,7 +277,7 @@ def include_func_check(original_code, referrable_function_dict):
     return need_include_func
 
 
-def compile_code_with_references(node_code, referrable_function_dict):
+def _compile_code_with_references(node_code, referrable_function_dict):
     """ 
     Compile code with references to other functions
     """
@@ -299,6 +321,78 @@ def compile_code_with_references(node_code, referrable_function_dict):
             new_func_tree = ast.parse(referrable_function_dict[func_name])
             new_tree.body = new_func_tree.body + new_tree.body
 
+    new_tree = clean_up_ast_tree(new_tree)
+
+    new_code = astor.to_source(new_tree)
+    return new_code
+
+
+def compile_code_with_references(node_code, referrable_function_dict):
+    """ 
+    Compile code with references to other functions
+    """
+    tree = ast.parse(node_code)
+    
+    added_functions = set()
+    
+    class ReferenceReplacer(ast.NodeTransformer):
+        def visit_Import(self, node):
+            new_names = []
+            for alias in node.names:
+                if alias.name in referrable_function_dict:
+                    added_functions.add(alias.name)
+                else:
+                    new_names.append(alias)
+            
+            if new_names:
+                return ast.Import(names=new_names)
+            else:
+                return None
+        
+        def visit_ImportFrom(self, node):
+            if node.module in referrable_function_dict:
+                added_functions.add(node.module)
+                return None 
+            else:
+                return node
+            
+        def visit_FunctionDef(self, node):
+            if node.name in added_functions:
+                return None 
+            elif node.name in referrable_function_dict:
+                new_func = ast.parse(referrable_function_dict[node.name]).body[0]
+                added_functions.add(node.name)
+                return new_func
+            else:
+                return node
+        
+        def visit_Call(self, node):
+            if isinstance(node.func, ast.Name):
+                func_name = node.func.id
+                if func_name in referrable_function_dict and func_name not in added_functions:
+                    added_functions.add(func_name)
+            return node
+
+        def generic_visit(self, node):
+            return super().generic_visit(node)
+
+    new_tree = ReferenceReplacer().visit(tree)
+    
+    # Add all referenced functions to the beginning of the tree
+    new_functions = []
+    for func_name in added_functions:
+        new_func_tree = ast.parse(referrable_function_dict[func_name])
+        new_functions.extend(new_func_tree.body)
+    
+    # Patch
+    patch_functions = include_func_check(node_code, referrable_function_dict)
+    for func_name in patch_functions:
+        if func_name not in added_functions:
+            added_functions.add(func_name)
+            new_func_tree = ast.parse(referrable_function_dict[func_name])
+            new_functions.extend(new_func_tree.body)
+
+    new_tree.body = new_functions + new_tree.body
     new_tree = clean_up_ast_tree(new_tree)
 
     new_code = astor.to_source(new_tree)
