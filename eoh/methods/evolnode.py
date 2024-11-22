@@ -133,8 +133,14 @@ def _check_alignment_with_metric_parallel(output_per_code_per_test: Dict[int, Di
     for code_index in output_per_code_per_test:
         for test_index in output_per_code_per_test[code_index]:
             pred_output, target_output = output_per_code_per_test[code_index][test_index], target_outputs[test_index]
-            trimmed_pred = {k: v for k, v in pred_output.items() if not require_llm_metric(v)}
-            trimmed_target = {k: v for k, v in target_output.items() if not require_llm_metric(v)}            
+            
+            trimmed_pred = {}
+            trimmed_target = {}
+            
+            if isinstance(pred_output, dict) and isinstance(target_output, dict):
+                trimmed_pred = {k: v for k, v in pred_output.items() if not require_llm_metric(v)}
+                trimmed_target = {k: v for k, v in target_output.items() if not require_llm_metric(v)}            
+            
             if len(trimmed_pred) == 0 and len(trimmed_target) == 0:
                 continue
             
