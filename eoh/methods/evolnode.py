@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import struct
 from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response, spawn_test_cases
 from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT, check_n_rectify_plan_dict
-from .meta_execute import call_func_code, call_func_prompt_parallel, call_func_prompt, compile_code_with_references, combine_scores, combine_errors
+from .meta_execute import call_func_code, call_func_prompt_parallel, call_func_prompt, call_func_prompts, compile_code_with_references, combine_scores, combine_errors
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from .llm import get_multiple_response, get_openai_response
@@ -537,8 +537,22 @@ class EvolNode:
             else:
                 error_msg.add(error_msg_delta)
         error_msg = "--- Calling Prompt Function Error:\n" + "\n".join(list(error_msg))
-        return None, error_msg
+        return None, error_msg    
     
+    
+    def call_prompt_functions(self, test_input: Dict, code: Optional[str] = None, max_tries: int = 3):
+        if code is None:
+            code = self.code 
+            
+        error_msg = set()
+        output_dict, error_msg_delta = call_func_prompts(test_input, code, self.get_response, max_tries)
+        if error_msg_delta == "":
+            return output_dict, ""
+        else:
+            error_msg.add(error_msg_delta)
+        error_msg = "--- Calling Prompt Function Error:\n" + "\n".join(list(error_msg))
+        return None, error_msg     
+        
     
     def call_code_function(self, test_input: Dict, code: Optional[str] = None, file_path: Optional[str] = None):
         if code is None:
@@ -773,19 +787,12 @@ class EvolNode:
         
         elif self.meta_prompt.mode == PromptMode.PROMPT:
             output_name = self.meta_prompt.outputs[0]
-            
-            errors = []
-            for _ in range(max_attempts):
-                output_dict, err_msg = self.call_prompt_function(inputs, self.code, max_tries=1)
-                if output_dict is None or output_name not in output_dict:
-                    value_error_msg = f"Output value for {output_name} is None. Output dict: {output_dict} with error message: {err_msg}"
-                    errors.append(value_error_msg)
-                    continue            
-                else:
-                    return output_dict 
-                
-            error_str = "\n".join(errors)
-            raise ValueError(error_str)
+                        
+            output_dict, err_msg = self.call_prompt_functions(inputs, self.code, max_tries=max_attempts)
+            if output_dict is None or output_name not in output_dict:
+                raise ValueError(err_msg)
+            else:
+                return {output_name: output_dict[output_name]}
     
     def save(self, library_dir: str = "methods/nodes/") -> None:
         node_data = {
