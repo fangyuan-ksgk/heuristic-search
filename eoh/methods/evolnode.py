@@ -525,7 +525,7 @@ class EvolNode:
 
         return passed_tests / total_tests, error_msg
     
-    def call_prompt_function(self, test_input: Dict, code: Optional[str] = None, max_tries: int = 3):
+    def call_prompt_function(self, test_input: Dict, code: Optional[str] = None, max_tries: int = 3): # TBD: Batch inference and pick the one which works
         if code is None:
             code = self.code
         

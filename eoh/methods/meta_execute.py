@@ -122,6 +122,50 @@ def call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_p
         return None, str(e)
 
 
+def _call_func_prompts(input_data: Dict[str, Any], code: str, get_response: callable, max_tries: int = 3):
+    """ 
+    Like _call_func_prompt, but with batch inference (get_response on batch of prompts, repeat multiple times = max_tries)
+    """
+    prompts = []
+    mod = types.ModuleType('dynamic_module')
+    
+    try:
+        with Timeout_(3):  # 3-second timeout
+            exec(code, mod.__dict__)
+            func_name = "generate_prompt"
+            assert func_name in mod.__dict__, f"Function {func_name} not found in code"
+            prompt_func = mod.__dict__[func_name]
+            # Generate the same prompt multiple times for max_tries attempts
+            prompts = [prompt_func(**input_data) for _ in range(max_tries)]
+    except Exception as e:
+        raise ValueError(f"Failed to generate prompts: {str(e)}")
+    
+    # Get batch responses
+    responses = get_response(prompts)
+    
+    # Try to parse each response until we get a valid one
+    for response in responses:
+        try:
+            output_dict = extract_json_from_text(response)
+            if output_dict:  # If we get a valid non-empty dictionary
+                return output_dict
+        except Exception:
+            continue
+    
+    # If we get here, all attempts failed
+    raise ValueError("Failed to get valid response after maximum attempts")
+
+
+def call_func_prompts(input_data: Dict[str, Any], code: str, get_response: callable, max_tries: int = 3):
+    """ 
+    With Error Message Output
+    """
+    try:
+        return _call_func_prompts(input_data, code, get_response, max_tries), ""
+    except Exception as e:
+        return None, str(e)
+    
+
 def _call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callable):
     """ 
     Prompt EvolNode forward propagation
@@ -137,9 +181,9 @@ def _call_func_prompt(input_data: Dict[str, Any], code: str, get_response: calla
         func_name = "generate_prompt"
         prompt_func = mod.__dict__[func_name]
         prompt = prompt_func(**input_data)
-        print(prompt)
+        # print(prompt)
         response = get_response(prompt)
-        print(response)
+        # print(response)
         
         try:
             output_dict = extract_json_from_text(response)
