@@ -761,7 +761,7 @@ class EvolNode:
     def m2(self, parents: list):
         return self._evolve('m2', parents)
     
-    def __call__(self, inputs, max_attempts: int = 3):
+    def __call__(self, inputs, max_attempts: int = 3, batch_inference: bool = True):
         """ 
         TBD: Inheritance to accumulated codebase with 'file_path' | Graph Topology naturally enables inheritance
         TBD: Stricter input / output type checking to ensure composibility
@@ -780,6 +780,7 @@ class EvolNode:
                         if type(value).__name__ == type_hint:
                             new_input[param_names[idx]] = value
             inputs = new_input
+            
         if self.meta_prompt.mode == PromptMode.CODE:
             output_value, err_msg = call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None) # TODO: extend to multiple outputs ...
             output_name = self.meta_prompt.outputs[0]
@@ -787,8 +788,12 @@ class EvolNode:
         
         elif self.meta_prompt.mode == PromptMode.PROMPT:
             output_name = self.meta_prompt.outputs[0]
-                        
-            output_dict, err_msg = self.call_prompt_functions(inputs, self.code, max_tries=max_attempts)
+            
+            if batch_inference:
+                output_dict, err_msg = self.call_prompt_functions(inputs, self.code, max_tries=max_attempts)
+            else:
+                output_dict, err_msg = self.call_prompt_function(inputs, self.code, max_tries=max_attempts)
+            
             if output_dict is None or output_name not in output_dict:
                 raise ValueError(err_msg)
             else:
