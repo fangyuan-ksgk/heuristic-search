@@ -445,7 +445,7 @@ class EvolNode:
         return reasonings, codes
     
     def evolve(self, method: str, parents: list = None, replace=True, feedback: str = "", batch_size: int = 5, fitness_threshold: float = 0.8, 
-               num_runs: int = 5, max_tries: int = 3, print_summary: bool = True):
+               num_runs: int = 5, max_tries: int = 3, print_summary: bool = True, query_node: bool = True):
         """
         Evolve node and only accept structurally fit solutions
         Attempts multiple evolutions before returning the final output
@@ -453,7 +453,8 @@ class EvolNode:
         start_time = time.time()
         # Query once
         offsprings = [] 
-        self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
+        if query_node:
+            self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
         query_end_time = time.time()
         query_time = query_end_time - start_time
         
