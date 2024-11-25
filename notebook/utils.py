@@ -234,6 +234,41 @@ def keyword_extraction_with_llm(comment_counts: dict[str, int], neg_comment: boo
             continue 
         
     return extracted_keywords
+
+
+def calculate_metrics(data, predict_key, label_key):
+    true_no = 0    # Actually No
+    pred_no = 0    # Predicted No
+    correct_no = 0 # Correctly predicted No
+    
+    for key, entry in data.items():
+        true_label = entry[label_key]
+        pred_label = entry[predict_key]
+        
+        # Convert labels to standardized format
+        true_is_no = true_label in no_label_list
+        pred_is_no = pred_label in no_label_list
+        
+        if true_is_no:
+            true_no += 1
+        if pred_is_no:
+            pred_no += 1
+        if true_is_no and pred_is_no:
+            correct_no += 1
+    
+    # Calculate metrics
+    recall = correct_no / true_no if true_no > 0 else 0    # Correct No / Total actual No
+    precision = correct_no / pred_no if pred_no > 0 else 0  # Correct No / Total predicted No
+    false_discovery_rate = 1 - precision  # Incorrect No / Total predicted No
+    
+    return {
+        'recall': recall,
+        'precision': precision,
+        'false_discovery_rate': false_discovery_rate,  # Added this metric
+        'true_no': true_no,
+        'pred_no': pred_no,
+        'correct_no': correct_no
+    }
     
     
 def get_dict_entry(entry: dict, key: str) -> str:
