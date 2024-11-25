@@ -23,16 +23,25 @@ import pandas as pd
 import seaborn as sns
 
 nltk.download('punkt') # set up for n-grams
+INVALID_COMMENTS = ["hello world", "dsd", "", "Testing if leaving the comments work"]
+
 
 def fix_label(label: str) -> str:
     if label == "No ":
         return "No"
     else:
         return label
+    
+def fix_comment(comment: str) -> str: 
+    if comment in INVALID_COMMENTS:
+        return ""
+    else:
+        return comment
 
 def filter_data_with_label(data: dict, label_key: str, valid_label_list: list[str]) -> dict:
     for k, v in data.items():
         v[label_key] = fix_label(v[label_key])
+        v[comment_key] = fix_comment(v[comment_key])
     return {k: v for k, v in data.items() if v[label_key] in valid_label_list}
 
 def get_unique_value_count(data: dict, key: str, filter_key: Optional[str] = None, filter_value_list: Optional[list[str]] = None) -> dict:
@@ -196,7 +205,6 @@ NEG_COMMENT_KEYWORD_PROMPT = "Extract no more than 3 key words/phrases for the r
 NEG_EXAMPLE = "Comment: This project is not disruptive. Response: ```json ['not disruptive']```"
 POS_EXAMPLE = "Comment: Developed a new method that reduces production cost of activated carbon by up to 60%. Response: ```json ['production cost', 'activated carbon', '60% reduction']```"
 
-INVALID_COMMENTS = ["hello world", "dsd", "", "Testing if leaving the comments work"]
 BAD_KEYWORDS = ["no", "not", "Not", "No"]
 
 
@@ -376,9 +384,8 @@ def convert_entry_to_prompt(grant_entry: dict) -> str:
 
 def make_training_example(entry: dict) -> tuple[str, str]:
     prompt = convert_entry_to_prompt(entry)
-    if entry[label_key] in yes_label_list:
-        return prompt, "Yes"
-    elif entry[label_key] in no_label_list:
-        return prompt, "No"
-    else:
-        return None
+    assert label_key in entry, "Label not found in data dictionary"
+    label = "Yes" if entry[label_key] in yes_label_list else "No"
+    assert comment_key in entry, "Comment not found in data dictionary"
+    comment = entry[comment_key]
+    return prompt, label, comment
