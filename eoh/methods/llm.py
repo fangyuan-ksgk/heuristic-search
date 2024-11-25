@@ -328,6 +328,84 @@ def get_async_vllm_endpoint(endpoint_id: str, runpod_api_key: str) -> Callable:
 
 
 
+def get_async_vllm_endpoint_(endpoint_id: str, runpod_api_key: str, batch_size_limit: int = 500) -> Callable:
+    """ 
+    Process queries in batches for endpoint inference to avoid overwhelming the server
+    """
+    async def get_completion(client, session, query: str, system_prompt: str = "You are a Turing award winner."):
+        try:
+            response = await client.chat.completions.create(
+                model="meta-llama/Llama-3.1-8B-Instruct",
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": query}]
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            # print(f"Error in completion: {str(e)}")
+            return ""
+        
+    async def process_batch(client, session, batch_queries: list, system_prompt: str):
+        # Add timeout for each completion request
+        async def get_completion_with_timeout(query):
+            try:
+                # Set 30-second timeout for each individual request
+                async with asyncio.timeout(30):
+                    return await get_completion(client, session, query, system_prompt)
+            except asyncio.TimeoutError:
+                # print(f"Request timed out")
+                return ""
+            except Exception as e:
+                # print(f"Error in completion: {str(e)}")
+                return ""
+
+        tasks = [get_completion_with_timeout(query) for query in batch_queries]
+        return await tqdm_asyncio.gather(*tasks, desc=f"Processing batch of {len(batch_queries)} queries")
+
+    async def run_parallel_inference(query_list: list, system_prompt: str = "You are a Turing award winner."):
+        try:
+            client = AsyncOpenAI(
+                base_url=f"https://api.runpod.ai/v2/{endpoint_id}/openai/v1",
+                api_key=runpod_api_key,
+            )
+            
+            async with aiohttp.ClientSession() as session:
+                start_time = time.time()
+                all_responses = []
+                
+                # Process queries in batches with overall timeout
+                for i in range(0, len(query_list), batch_size_limit):
+                    try:
+                        # Set 5-minute timeout for each batch
+                        async with asyncio.timeout(300):
+                            batch = query_list[i:i + batch_size_limit]
+                            batch_responses = await process_batch(client, session, batch, system_prompt)
+                            all_responses.extend(batch_responses)
+                    except asyncio.TimeoutError:
+                        print(f"Batch {i//batch_size_limit + 1} timed out, moving to next batch")
+                        # Fill in empty responses for the failed batch
+                        all_responses.extend([""] * len(batch))
+                        continue
+                    
+                elapsed_time = time.time() - start_time
+                error_count = all_responses.count("")
+                print(f" :: Total time elapsed: {elapsed_time:.2f}s, {error_count} errors")
+                
+                return all_responses
+        except Exception as e:
+            print(f"Error in parallel inference: {str(e)}")
+            return []
+        
+    import nest_asyncio
+    nest_asyncio.apply()
+
+    def get_vllm_endpoint_response(prompt: list, system_prompt: str = "You are a Turing award winner.") -> list:
+        try:
+            return asyncio.run(run_parallel_inference(prompt, system_prompt))
+        except Exception as e:
+            print(f"Error in endpoint response: {str(e)}")
+            return []
+    
+    return get_vllm_endpoint_response
+
     
 try:
     import groq

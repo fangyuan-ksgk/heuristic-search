@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 from typing import Optional
 from collections import Counter
+from typing import Callable
 from nltk.util import ngrams
 import nltk
 import pandas as pd
@@ -23,7 +24,15 @@ import seaborn as sns
 
 nltk.download('punkt') # set up for n-grams
 
+def fix_label(label: str) -> str:
+    if label == "No ":
+        return "No"
+    else:
+        return label
+
 def filter_data_with_label(data: dict, label_key: str, valid_label_list: list[str]) -> dict:
+    for k, v in data.items():
+        v[label_key] = fix_label(v[label_key])
     return {k: v for k, v in data.items() if v[label_key] in valid_label_list}
 
 def get_unique_value_count(data: dict, key: str, filter_key: Optional[str] = None, filter_value_list: Optional[list[str]] = None) -> dict:
@@ -49,9 +58,43 @@ def get_unique_value_count(data: dict, key: str, filter_key: Optional[str] = Non
     return value_counts
 
 
+def plot_pie_chart(labeled_ratio, label_counts):
+    sns.set_style("whitegrid")
+    sns.set_palette("husl")
+
+    # Create a figure with two subplots side by side
+    plt.figure(figsize=(20, 8))
+
+    # First subplot - Labeled vs Unlabeled ratio
+    plt.subplot(1, 2, 1)
+    plt.pie([labeled_ratio, 1-labeled_ratio], 
+            labels=['Labeled', 'Unlabeled'],
+            autopct='%1.1f%%',
+            colors=sns.color_palette("Set3")[0:2],
+            wedgeprops={'edgecolor': 'white', 'linewidth': 2},
+            textprops={'fontsize': 24, 'fontweight': 'bold'},
+            shadow=True)
+
+    # Second subplot - Label distribution
+    plt.subplot(1, 2, 2)
+    plt.pie(label_counts.values(), 
+            labels=label_counts.keys(),
+            autopct='%1.1f%%',
+            colors=sns.color_palette("Set3"),
+            wedgeprops={'edgecolor': 'white', 'linewidth': 2},
+            textprops={'fontsize': 24, 'fontweight': 'bold'},
+            shadow=True)
+
+    # Add a clean look with a slight zoom
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_word_counts(data: dict):
     comments = []
     for entry in data:
+        if not isinstance(entry, str):
+            continue
         comments.append(entry)
 
     # Combine all rejection comments into one string
@@ -69,6 +112,34 @@ def plot_word_counts(data: dict):
     plt.imshow(wordcloud_rejections, interpolation='bilinear')
     plt.axis('off')
     plt.title('Word Cloud of Rejection Comments')
+    plt.show()
+    
+    
+def plot_phrases(data: list[str], title_str: str = "Phrase Cloud of Comments"):
+    # Filter out non-string entries and create frequency dict
+    phrase_freq = {}
+    for phrase in data:
+        if isinstance(phrase, str):
+            phrase = phrase.strip()
+            phrase_freq[phrase] = phrase_freq.get(phrase, 0) + 1
+
+    if not phrase_freq:
+        return
+
+    # Create word cloud using the frequency dictionary directly
+    plt.figure(figsize=(10, 5))
+    wordcloud_phrases = WordCloud(
+        width=800,
+        height=400,
+        background_color='white',
+        max_words=100,
+        collocations=False,  # Disable internal collocation detection
+        prefer_horizontal=0.7
+    ).generate_from_frequencies(phrase_freq)
+
+    plt.imshow(wordcloud_phrases, interpolation='bilinear')
+    plt.axis('off')
+    plt.title(title_str)
     plt.show()
     
 
@@ -94,27 +165,75 @@ def get_ngrams(text_list, n: int, neg_filter: bool = False):
     return ngram_counts
 
 
-def get_ngram_plots(text_list: list[str], n: int, neg_filter: bool = False):
+def get_ngram_plots(text_list: list[str], n: int, neg_filter: bool = False, top_k: int = 15):
     
     ngram_counts = get_ngrams(text_list, n, neg_filter)
 
     # Convert to dataframe for plotting
     ngram_df = pd.DataFrame([
         {'ngram': ' '.join(k), 'count': v} 
-        for k, v in ngram_counts.most_common(15)
+        for k, v in ngram_counts.most_common(top_k)
     ])
 
     # Create the plot
     plt.figure(figsize=(12, 6))
+    
     sns.barplot(data=ngram_df, x='count', y='ngram')
+    
     if neg_filter:
-        plt.title(f'Top 15 Negative {n}-grams in Rejection Comments')
+        plt.title(f'Top {top_k} Negative {n}-grams in Rejection Comments')
     else:
-        plt.title(f'Top 15 Positive {n}-grams in Acceptance Comments')
+        plt.title(f'Top {top_k} Positive {n}-grams in Acceptance Comments')
     plt.xlabel('Count')
     plt.ylabel('N-gram')
     plt.tight_layout()
     plt.show()
+    
+    
+POS_COMMENT_KEYWORD_PROMPT = "Extract no more than 3 key words/phrases for the acceptance from the comments. Comments: {comments}. Respond in JSON format, for instance: ```json ['word1', 'phrase2', ...]``` Example: {example}"
+NEG_COMMENT_KEYWORD_PROMPT = "Extract no more than 3 key words/phrases for the rejection from the comments. Comments: {comments}. Respond in JSON format, for instance: ```json ['word1', 'phrase2', ...]``` Example: {example}"
+
+NEG_EXAMPLE = "Comment: This project is not disruptive. Response: ```json ['not disruptive']```"
+POS_EXAMPLE = "Comment: Developed a new method that reduces production cost of activated carbon by up to 60%. Response: ```json ['production cost', 'activated carbon', '60% reduction']```"
+
+INVALID_COMMENTS = ["hello world", "dsd", "", "Testing if leaving the comments work"]
+BAD_KEYWORDS = ["no", "not", "Not", "No"]
+
+
+def get_keyword_prompt(comment: str, neg_example: str, pos_example: str, is_neg: bool):
+    if is_neg:
+        return NEG_COMMENT_KEYWORD_PROMPT.replace("{comments}", comment).replace("{example}", neg_example)
+    else:
+        return POS_COMMENT_KEYWORD_PROMPT.replace("{comments}", comment).replace("{example}", pos_example)
+    
+# Keyword extraction gadget out-performs N-Gram by large margin
+
+
+
+def keyword_extraction_with_llm(comment_counts: dict[str, int], neg_comment: bool, get_response: Callable, extract_json_from_text: Callable):
+    
+    extract_prompts = []
+    for comment, count in comment_counts.items():
+        if comment in INVALID_COMMENTS:
+            continue
+        prompt = get_keyword_prompt(comment, NEG_EXAMPLE, POS_EXAMPLE, neg_comment)
+        extract_prompts.append(prompt)
+        
+    responses = get_response(extract_prompts, system_prompt="Analyze the comments.")
+    
+        
+    extracted_keywords = []
+    for response in responses:
+        try: 
+            keywords = extract_json_from_text(response)
+            for keyword in keywords:
+                if keyword in BAD_KEYWORDS:
+                    continue
+                extracted_keywords.append(keyword)
+        except:
+            continue 
+        
+    return extracted_keywords
     
     
 def get_dict_entry(entry: dict, key: str) -> str:
