@@ -271,6 +271,71 @@ def calculate_metrics(data, predict_key, label_key):
     }
     
     
+def plot_metrics(metric_dict):
+    # Set style
+    plt.style.use('seaborn-v0_8')
+    
+    # Create figure with higher DPI for sharper rendering
+    plt.figure(figsize=(12, 6), dpi=100)
+    
+    # Prepare data
+    metrics = ['Recall', 'Precision', 'False Discovery Rate']
+    values = [
+        metric_dict['recall'],
+        metric_dict['precision'],
+        metric_dict['false_discovery_rate']
+    ]
+    
+    # Custom colors with gradient
+    colors = ['#3498db', '#2ecc71', '#e74c3c']
+    
+    # Create bars with alpha for transparency
+    bars = plt.bar(metrics, values, color=colors, alpha=0.8, width=0.6)
+    
+    # Customize title and layout
+    plt.title('Classification Metrics for "No" Class', pad=20, fontsize=20, fontweight='bold')
+    plt.ylim(0, 1.1)  # Increased ylim to make room for percentage labels
+    
+    # Add grid for better readability
+    plt.grid(axis='y', linestyle='--', alpha=0.3)
+    
+    # Add percentage labels on top of bars
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                f'{height:.1%}',
+                ha='center', va='bottom',
+                fontsize=20,
+                fontweight='bold')
+    
+    # Add count annotations inside the bars
+    counts_text = [
+        f'Correct: {metric_dict["correct_no"]}\nTotal: {metric_dict["true_no"]}',
+        f'Correct: {metric_dict["correct_no"]}\nPred: {metric_dict["pred_no"]}',
+        f'Wrong: {metric_dict["pred_no"] - metric_dict["correct_no"]}\nPred: {metric_dict["pred_no"]}'
+    ]
+    
+    for bar, text in zip(bars, counts_text):
+        plt.text(bar.get_x() + bar.get_width()/2., bar.get_height()/2,
+                text,
+                ha='center', va='center',
+                color='white',
+                fontsize=16,
+                fontweight='bold')
+    
+    # Customize spines
+    ax = plt.gca()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    
+    # Add subtle shadow effect to bars
+    for bar in bars:
+        bar.set_edgecolor('none')
+        
+    plt.tight_layout()
+    return plt
+    
+    
 def get_dict_entry(entry: dict, key: str) -> str:
     if key in entry:
         return entry[key]
