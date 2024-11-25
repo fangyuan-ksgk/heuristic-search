@@ -50,13 +50,12 @@ def get_unique_value_count(data: dict, key: str, filter_key: Optional[str] = Non
 
 
 def plot_word_counts(data: dict):
-    rejection_comments = []
-    for entry in data.values():
-        if entry[label_key] in no_label_list and entry.get(comment_key):
-            rejection_comments.append(entry[comment_key])
+    comments = []
+    for entry in data:
+        comments.append(entry)
 
     # Combine all rejection comments into one string
-    combined_rejection_text = ' '.join(rejection_comments)
+    combined_text = ' '.join(comments)
 
     # Create word cloud specifically for rejection comments
     plt.figure(figsize=(10, 5))
@@ -65,7 +64,7 @@ def plot_word_counts(data: dict):
         height=400,
         background_color='white',
         max_words=100
-    ).generate(combined_rejection_text)
+    ).generate(combined_text)
 
     plt.imshow(wordcloud_rejections, interpolation='bilinear')
     plt.axis('off')
@@ -108,7 +107,10 @@ def get_ngram_plots(text_list: list[str], n: int, neg_filter: bool = False):
     # Create the plot
     plt.figure(figsize=(12, 6))
     sns.barplot(data=ngram_df, x='count', y='ngram')
-    plt.title(f'Top 15 Negative {n}-grams in Rejection Comments')
+    if neg_filter:
+        plt.title(f'Top 15 Negative {n}-grams in Rejection Comments')
+    else:
+        plt.title(f'Top 15 Positive {n}-grams in Acceptance Comments')
     plt.xlabel('Count')
     plt.ylabel('N-gram')
     plt.tight_layout()
