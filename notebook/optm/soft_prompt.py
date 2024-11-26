@@ -225,12 +225,12 @@ class SoftPromptLLM(nn.Module):
         
         # Adjust attention mask if provided
         if attention_mask is not None:
-            prefix_mask = torch.ones(batch_size, self.n_learnable_tokens).to(attention_mask.device)
+            prefix_mask = torch.ones(batch_size, self.n_learnable_tokens, device=attention_mask.device)
             attention_mask = torch.cat([prefix_mask, attention_mask], dim=1)
             
         # Adjust labels if provided
         if labels is not None: 
-            prefix_labels = torch.full((batch_size, self.n_learnable_tokens), -100, dtype=labels.dtype).to(labels.device)
+            prefix_labels = torch.full((batch_size, self.n_learnable_tokens), -100, dtype=labels.dtype, device=labels.device)
             labels = torch.cat([prefix_labels, labels], dim=1)
         
         # Forward pass through model
