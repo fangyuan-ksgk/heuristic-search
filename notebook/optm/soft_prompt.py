@@ -5,25 +5,37 @@ import torch
 import json 
 import numpy as np 
 import torch.nn as nn
+from sklearn.model_selection import train_test_split
 
 
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+def load_hf_model(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct"):
+    """ 
+    Load Huggingface model and tokenizer
+    """    
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float32,  # Change to float32 instead of "auto"
+        device_map="auto"
+    )
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    
+    return model, tokenizer
 
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    torch_dtype=torch.float32,  # Change to float32 instead of "auto"
-    device_map="auto"
-)
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-
-# Dataset loading 
-with open('../data/processed_data.json', 'r') as f:
-    processed_data = json.load(f)
-
-# Train model and get predictions
-X = processed_data['prompt']
-y = np.array(processed_data['label'])
+def load_data(data_path: str = "../data/processed_data.json", split_ratio: float = 0.8):
+    """ 
+    Load processed data
+    """
+    with open(data_path, 'r') as f:
+        processed_data = json.load(f)
+        
+    # Train model and get predictions
+    X = processed_data['prompt']
+    y = np.array(processed_data['label'])
+    
+    # Split data into train and test
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=1-split_ratio, random_state=42)
+        
+    return X_train, X_test, y_train, y_test
 
 
 # Soft Prompt Wrapper 
