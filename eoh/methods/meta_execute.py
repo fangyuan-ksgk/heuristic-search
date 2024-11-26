@@ -308,14 +308,13 @@ def combine_scores(llm_scores, metric_scores):
     # Initialize combined scores dictionary
     combined_scores = defaultdict(lambda: defaultdict(list))
     combined_score = defaultdict(lambda: defaultdict(float))
-        
     # For each code index in metric scores
     for k in metric_scores: 
         for i in metric_scores[k]: 
             combined_scores[k][i] += metric_scores[k][i]
     for k in llm_scores: 
         for i in llm_scores[k]: 
-            combined_scores[k][i] += llm_scores[k][i]
+            combined_scores[k][i] += llm_scores[k][i] if type(llm_scores[k][i]) == list else [llm_scores[k][i]]
     
     for k in combined_scores: 
         for i in combined_scores[k]: 
