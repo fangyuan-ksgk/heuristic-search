@@ -6,7 +6,8 @@ import torch, json, random
 import numpy as np 
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
-
+from torch.utils.data import Dataset, DataLoader
+from typing import Callable
 
 def load_hf_model(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct"):
     """ 
@@ -88,6 +89,80 @@ def format_prompt_instruction_tuned(prompt: str, comment: str, label: str, token
     response_prompt = response_str + suffix_prompt
     
     return query_prompt, response_prompt 
+
+
+class ClsCommentDataset(Dataset): 
+    
+    """Dataset for Temasek prompt-based language model training.
+    
+    Args:
+        prompts (list): List of input prompts
+        labels (list): List of corresponding labels
+        tokenizer: Tokenizer instance
+        comments (list, optional): List of comments. Defaults to empty list
+        max_length (int, optional): Maximum sequence length. Defaults to 512
+    """
+    
+    def __init__(self, load_data_func: Callable, tokenizer: AutoTokenizer, max_length: int = 512, train: bool = True):
+        
+        train_data, test_data = load_data_func()
+        if train:
+            prompts = train_data['prompt']
+            labels = train_data['label']
+            comments = train_data['comment']
+        else:
+            prompts = test_data['prompt']
+            labels = test_data['label']
+            comments = test_data['comment']
+            
+        if len(prompts) != len(labels):
+            raise ValueError("Length of prompts and labels must match")
+        self.prompts = prompts
+        self.labels = labels
+        self.comments = comments
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        
+    def __len__(self):
+        return len(self.prompts)
+    
+    def __getitem__(self, idx):
+        prompt = self.prompts[idx]
+        label = self.labels[idx]
+        comment = self.comments[idx]
+        
+        # Query and response prompt
+        query_prompt, response_prompt = format_prompt_instruction_tuned(prompt, comment, label, self.tokenizer, previous_messages = [])
+        
+        full_prompt = query_prompt + response_prompt
+        
+        # Tokenize the full sequence
+        tokenized = self.tokenizer(full_prompt, 
+                                 return_tensors="pt",
+                                 max_length=self.max_length,
+                                 truncation=True,
+                                 padding="max_length")
+        
+        # The padding mask (1s for real tokens, 0s for padding) | note for dataset preparation we don't do causal masking, that happen within the model
+        attention_mask = tokenized.attention_mask[0]
+        
+        # Create labels by shifting input_ids right (-100 for query tokens)
+        query_length = len(self.tokenizer(query_prompt)['input_ids'])
+        labels = tokenized.input_ids.clone()
+        labels[0, :query_length] = -100  # Mask out the query portion
+        
+        # Shift labels right by 1 and add -100 padding
+        labels = torch.roll(labels, shifts=1, dims=1)
+        labels[0, 0] = -100  # First token has no previous token to predict it
+        
+        # Set labels for padding tokens to -100
+        labels[0, attention_mask == 0] = -100
+        
+        return {
+            'input_ids': tokenized.input_ids[0],
+            'attention_mask': attention_mask,
+            'labels': labels[0]
+        }
 
 
 # Soft Prompt Wrapper 
