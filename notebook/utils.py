@@ -23,7 +23,7 @@ import pandas as pd
 import seaborn as sns
 
 nltk.download('punkt') # set up for n-grams
-INVALID_COMMENTS = ["hello world", "dsd", "", "Testing if leaving the comments work"]
+INVALID_COMMENTS = ["hello world", "dsd", "", "Testing if leaving the comments work", "nan"]
 
 
 def fix_label(label: str) -> str:
@@ -354,12 +354,16 @@ def get_dict_entry(entry: dict, key: str) -> str:
 
 
 def convert_entry_to_prompt(grant_entry: dict) -> str:
+    """ 
+    This is quite important, we want diversity out of this one, too. 
+    """
+    
     # Generating the prompt with the data
     prompt = f"""
     Given the following details of a grant application, determine the likelihood of acceptance. 
     Assess how well the project aligns with the challenge theme, its viability, its potential impact, and any competitive advantage. 
     Consider the stage of development, the proof of concept status, and existing partnerships. 
-    Classify the likelihood of acceptance as 'High', 'Medium', or 'Low', and briefly explain your rationale.
+    Provide your decision (Yes, No, Maybe) and a brief comment explanating your decision on why this project is likely to be accepted or rejected.
 
     Grant Application Summary:
     - **Project Theme:** {get_dict_entry(grant_entry, 'Theme')}
@@ -376,7 +380,13 @@ def convert_entry_to_prompt(grant_entry: dict) -> str:
 
     Proposed project's scope of work: {get_dict_entry(grant_entry, "Proposed project's scope of work")}
 
-    Classify the likelihood of acceptance and briefly explain why this project meets or does not meet the challenge's acceptance criteria.
+    Please provide your response in the following JSON format:
+    ```json
+    {{
+        "decision": "Yes/No/Maybe",
+        "comment": "Your detailed assessment explaining the decision"
+    }}
+    ```
     """
 
     return prompt
