@@ -243,5 +243,5 @@ class SoftPromptLLM(nn.Module):
 
         if return_pred_n_label:
             return outputs, pred_logits, labels
-        elseß:
+        else:
             return outputs
