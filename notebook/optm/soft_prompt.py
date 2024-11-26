@@ -1,8 +1,8 @@
 # Trainable token on top of a LLM (Qwen-0.5B) in this case
+# Temasek Foundation Dataset used here :: Binary + Comment type of data format
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-import torch 
-import json 
+import torch, json, random
 import numpy as np 
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
@@ -21,21 +21,73 @@ def load_hf_model(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct"):
     
     return model, tokenizer
 
-def load_data(data_path: str = "../data/processed_data.json", split_ratio: float = 0.8):
+
+def load_tf_data(data_path: str = "../data/processed_data.json", split_ratio: float = 0.8):
     """ 
     Load processed data
     """
     with open(data_path, 'r') as f:
-        processed_data = json.load(f)
+        data = json.load(f)
         
-    # Train model and get predictions
-    X = processed_data['prompt']
-    y = np.array(processed_data['label'])
+    # train-test split with fixed seed
+    train_indices, test_indices = train_test_split(range(len(data['prompt'])), test_size=0.2, random_state=42)
+    train_data = {k: [v[i] for i in train_indices] for k, v in data.items()}
+    test_data = {k: [v[i] for i in test_indices] for k, v in data.items()}
+        
+    return train_data, test_data 
+
+
+# Worth including diversity in response template
+RESPONSE_TEMPLATES = [
+    "Decision: {label}\n\nComment: {comment}",
+    "Comment: {comment}\n\nDecision: {label}",
+    "Reasoning: {comment}\n\nDecision: {label}",
+    "Decision: {label}\n\nReasoning: {comment}",
+    "Comment on the proposal: {comment}\n\nDecision: {label}",
+    "Decision: {label}\n\nComment on the proposal: {comment}",
+]
+
+SYSTEM_PROMPTS = [
+    "You are a grant reviewer for Temasek Foundation. Your task is to review grant applications and provide a decision.",
+    "As an expert grant evaluator at Temasek Foundation, assess the following application and provide your decision with supporting comments.",
+    "You are an experienced grant assessor for Temasek Foundation. Review this application carefully and determine if it should be approved or rejected.",
+    "Working as a Temasek Foundation grant reviewer, evaluate this proposal and provide your professional assessment and final decision."
+]
+
+def _form_query(prompt: str) -> str:
+    query = prompt
+    return query 
+
+def _form_response(label: str, comment: str) -> str:
+    template = random.choice(RESPONSE_TEMPLATES)
+    response = template.replace("{label}", label).replace("{comment}", comment)
+    return response
+ 
+def _form_system_prompt() -> str: 
+    system_prompt = random.choice(SYSTEM_PROMPTS)
+    return system_prompt 
+
+
+def format_prompt_instruction_tuned(prompt: str, comment: str, label: str, tokenizer, previous_messages: list = []):
+    """ 
+    Format single-turn response tuning -- not realistic yet, practical usage should involves multi-turn conversation
     
-    # Split data into train and test
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=1-split_ratio, random_state=42)
-        
-    return X_train, X_test, y_train, y_test
+    Format prompt - response for instruction-tuned LLM 
+    """ 
+    system_prompt = _form_system_prompt()
+    query_str = _form_query(prompt)
+    response_str = _form_response(label, comment)    
+    
+    fillin_response = "####Response####"
+    fillin_messages = previous_messages + [{"role": "user", "content": query_str}, 
+                                                {"role": "assistant", "content": fillin_response}]
+    messages = [{"role": "system", "content": system_prompt}] + fillin_messages
+    
+    complete_prompt = tokenizer.apply_chat_template(messages, tokenize=False)
+    query_prompt, suffix_prompt = complete_prompt.split(fillin_response)
+    response_prompt = response_str + suffix_prompt
+    
+    return query_prompt, response_prompt 
 
 
 # Soft Prompt Wrapper 
