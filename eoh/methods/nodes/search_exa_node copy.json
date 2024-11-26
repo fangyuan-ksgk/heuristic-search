@@ -1,0 +1,64 @@
+{
+  "code": "\nfrom exa_py import Exa\nimport os\nfrom typing import Dict, Any\n\ndef _search_exa(query: str) -> str:\n    \"\"\"\n    Use Exa API to search for information\n    \n    Args:\n        query (str): The search query\n    \n    Returns:\n        str: Search results from Exa\n    \"\"\"\n    try:\n        exa = Exa(os.getenv('EXA_API_KEY'))\n        result = exa.search_and_contents(\n            query,\n            type=\"neural\", \n            use_autoprompt=True,\n            num_results=5,\n            text=True\n        )\n        return str(result)\n    except Exception as e:\n        print(f\"Error occurred during API request: {str(e)}\")\n        return \"\"\n        \ndef search_exa(query: str) -> str: \n    \"\"\" \n    Input query, return search result string from Exa\n    \"\"\"\n    if not query:\n        return \"Error: Query cannot be empty\"\n    if query is None:\n        return \"Error: Query cannot be null\"\n        \n    result = _search_exa(query.strip())\n    return result\n",
+  "reasoning": "Search exa for top search results",
+  "meta_prompt": {
+    "task": "Search Exa for result", 
+    "func_name": "search_exa",
+    "inputs": [
+      "query"
+    ],
+    "outputs": [
+      "result"  
+    ],
+    "input_types": [
+      "str"
+    ],
+    "output_types": [
+      "str"
+    ],
+    "mode": "code"
+  },
+  "test_cases": [
+    {
+      "input": {
+        "query": "Python programming"
+      },
+      "expected_output": {
+        "result": "...example search results for Python programming..."
+      }
+    },
+    {
+      "input": {
+        "query": ""
+      },
+      "expected_output": {
+        "result": "Error: Query cannot be empty"
+      }
+    },
+    {
+      "input": {
+        "query": null
+      },
+      "expected_output": {
+        "result": "Error: Query cannot be null" 
+      }
+    },
+    {
+      "input": {
+        "query": " abc def"
+      },
+      "expected_output": {
+        "result": "...resultados de búsqueda para abc def..."
+      }
+    },
+    {
+      "input": {
+        "query": "  Multiple  Space  Query  "
+      },
+      "expected_output": {
+        "result": "...example search results for Multiple Space Query..."
+      }
+    }
+  ],
+  "fitness": 1.0
+}
