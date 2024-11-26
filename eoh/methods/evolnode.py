@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import struct
-from .meta_prompt import MetaPrompt, PromptMode, parse_evol_response, spawn_test_cases
+from .meta_prompt import GENERATE_NODES_FROM_API, MetaPrompt, PromptMode, parse_evol_response, spawn_test_cases
 from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT, check_n_rectify_plan_dict
 from .meta_execute import call_func_code, call_func_prompt_parallel, call_func_prompt, compile_code_with_references, combine_scores, combine_errors
 from sentence_transformers import SentenceTransformer
@@ -11,6 +11,8 @@ from tqdm import tqdm
 from collections import defaultdict
 from typing import Optional, Union, Dict, List, Callable, Tuple
 from collections import Counter
+import requests
+import re
 
 
 MAX_ATTEMPTS = 6
@@ -305,7 +307,8 @@ class EvolNode:
                  reasoning: Optional[str] = None,
                  get_response: Optional[Callable] = get_openai_response, 
                  test_cases: Optional[List[Tuple[Dict, Dict]]] = None,
-                 fitness: float = 0.0):
+                 fitness: float = 0.0,
+                 libary_dir: str = "methods/nodes/"):
         """ 
         Executable Task
         """
@@ -315,6 +318,7 @@ class EvolNode:
         self.meta_prompt = meta_prompt
         self.test_cases = []
         self._get_response = get_response
+        self.library_dir = libary_dir
         self.relevant_nodes = []
         self.error_msg = "" # contains information about encountered error :: TBD :: use LLM to summarize it
         
@@ -487,11 +491,14 @@ class EvolNode:
                     self.fitness = fitness
                     self.error_msg = err_msg
 
-            if fitness > fitness_threshold:
-                offsprings.append({"reasoning": reasoning, "code": code, "fitness": fitness, "err_msg": err_msg})
+            # if fitness > fitness_threshold:
+            offsprings.append({"reasoning": reasoning, "code": code, "fitness": fitness, "err_msg": err_msg})
                 
-            if not replace: 
-                return offsprings
+            if fitness >= 1.0:
+                self.save(self.library_dir)
+            
+        if not replace: 
+            return offsprings
         
     
     def _evaluate_structure_fitness(self, test_inputs: List[Dict], code: Optional[str] = None) -> Tuple[float, str]:
@@ -643,7 +650,7 @@ class EvolNode:
         fitness_per_code = self.summarize_fitness(codes, score_per_code_per_test, output_per_code_per_test, test_inputs, max_tries)
         
         # Get best fitness
-        best_fitness = max(fitness_per_code.values(), key=lambda x: x())
+        best_fitness = max(fitness_per_code.values(), key=lambda x: x(), default=Fitness(0.0, 0.0))
         global_summary = (
             f"🏆 Best Code Performance Summary 🏆\n"
             f"  ⚡ Structural fitness: {best_fitness.structural_fitness:.2f}\n"
@@ -787,7 +794,7 @@ class EvolNode:
             error_str = "\n".join(errors)
             raise ValueError(error_str)
     
-    def save(self, library_dir: str = "methods/nodes/") -> None:
+    def save(self, library_dir: str = "methods/nodes/", overwrite=False) -> None:
         node_data = {
             "code": self.code,
             "reasoning": self.reasoning,
@@ -797,8 +804,9 @@ class EvolNode:
         }
         node_path = os.path.join(library_dir, f"{self.meta_prompt.func_name}_node.json")
         os.makedirs(os.path.dirname(node_path), exist_ok=True)
-        with open(node_path, 'w') as f:
-            json.dump(node_data, f, indent=2)
+        if overwrite or not os.path.exists(node_path):
+            with open(node_path, 'w') as f:
+                json.dump(node_data, f, indent=2)
 
     @classmethod 
     def load(cls, node_name: str, library_dir: str = "methods/nodes/", get_response: Optional[Callable] = get_openai_response) -> 'EvolNode':
@@ -1215,7 +1223,7 @@ class PlanNode:
         if plan_dict == {}:
             return {}
         for node in self.relevant_nodes:
-            for sub_node in plan_dict["nodes"]:
+            for sub_node in plan_dict.get("nodes", []):
                 if node.meta_prompt.func_name == sub_node["name"]:
                     for k in ["inputs", "input_types", "outputs", "output_types"]:
                         sub_node[k] = getattr(node.meta_prompt, k)
@@ -1233,3 +1241,45 @@ class PlanNode:
     def referrable_function_dict(self):
         referrable_function_dict = {node.meta_prompt.func_name: node.code for node in self.relevant_nodes} # name to code of referrable functions 
         return referrable_function_dict
+    
+def nodes_from_api(link: str, clean: bool = True, get_response: Optional[Callable] = get_openai_response, evol_method: str = "i1", max_attempts: int = 3):
+    from .population import Evolution
+
+    resp = requests.get(link)
+    if resp.status_code != 200:
+        return "Error: Unable to fetch API documentation"
+    content = resp.text.split("<body>")[1].split("</body>")[0].strip()
+    qe = QueryEngine()
+    nodes = qe.meta_prompts
+    if clean:
+        content = re.sub(r'<(/?)(\w+)[^>]*>', r'<\1\2>', content)
+        content = re.sub(r'</?span>', '', content)
+    prompt = content + "\nAvailable functions for use:\n" + "\n".join([node.__repr__() for node in nodes]) + "\nYou are a Turing Prize winner programmer." + GENERATE_NODES_FROM_API
+    nodes = []
+    for i in range(max_attempts):
+        response = get_response(prompt)
+        response = response if type(response) == str else response[0]
+        print(response)
+        try:
+            node_dict = extract_json_from_text(response)['nodes']
+            for node in node_dict:
+                meta_prompt = MetaPrompt(
+                    task=node.get("task"),
+                    func_name=node.get("name"),
+                    inputs=node.get("inputs"),
+                    outputs=node.get("outputs"),
+                    input_types=node.get("input_types"),
+                    output_types=node.get("output_types"),
+                    mode = PromptMode((node.get("mode", "code")).lower())
+                )
+                nodes.append((Evolution(pop_size=1, meta_prompt=meta_prompt, get_response=get_response), node.get("relevant_docs")))
+            break
+        except ValueError as e:
+            print(f"Failed to extract JSON from API plan response: {e}")
+        except KeyError as e:
+            nodes = []
+            print(f"Failed to extract fully formed nodes from API plan response: {e}")
+    
+    for node in nodes:
+        node[0].get_offspring(evol_method, feedback=node[1])
+    

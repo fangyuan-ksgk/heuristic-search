@@ -7,7 +7,6 @@ import ast
 import networkx as nx
 from dataclasses import dataclass
 from typing import Optional, Union, Callable
-
 import test
 
 class PromptMode(Enum):
@@ -904,4 +903,52 @@ Respond in this format:
   "aligned": true/false,
   "comment": "Whatever you want to say on the prediction, be concise."
 }}
+"""
+
+GENERATE_NODES_FROM_API = """Generate a JSON-style list representing new nodes based on the API documentation, which can be resuable for more nodes. These nodes have to be general but are not one liners (make them slightly complex/useful). The list should include:
+- **Nodes**: Each node represents a key action or step and must contain the following attributes:
+- `task`: Description of the task. MAKE SURE THE TASK IS NOT JUST A ONE LINER BUT ALSO VERY USEFUL
+- `name`: Concise name used for the task function.
+- `inputs`: List of input parameters needed to perform the action.
+- `input_types`: List of corresponding types for each input parameter.
+- `outputs`: List of output parameters produced by the action.
+- `output_types`: List of corresponding types for each output parameter.
+- `target`: The purpose or goal that the action contributes to.
+- `mode`: The execution mode for this task ("CODE" or "PROMPT").
+- 'relevant_docs': Relevant documentation for the task, can be something like how to call the function or the parameeters for it. Importnant: GIVE BASED ON THE PROVIDED DOCUMENTATION. Make sure this is verbose and contains how to call used api functions such as the available parameters, their types and their meaning. THIS IS THE MOST IMPORTANT PARAMETER SO WRITE AS MUCH AS OU WANT FOR THIS
+
+**Output Format:**
+
+Provide the output in the following JSON structure:
+
+```json
+{
+"nodes": [
+    {
+    "task": "Task 1",
+    "name": "task_1"
+    "inputs": inputs_str,
+    "input_types": input_types_str,
+    "outputs": ["output_11", "output_12"],
+    "output_types": ["str", "str"],
+    "target": "Purpose of Action 1"
+    "mode": "CODE",
+    "relevant_docs": "The function xyz takes in the following parameters and returns the following output."
+    },
+    {
+    "task": "Task 2",
+    "name": "task_2",
+    "inputs": ["input_21", "input_22"],
+    "input_types": input_types_str,
+    "outputs": outputs_str,
+    "output_types": output_types_str,
+    "target": "Purpose of Action 2",
+    "mode": "PROMPT",
+    "relevant_docs": "The function abc does this and that."
+    }
+    // Add more nodes as needed
+]
+}
+```\n
+If no json is given people will die. Make sure the nodes are somewhat complex/ not one-liners of calling the api function\n
 """
