@@ -208,7 +208,7 @@ class SoftPromptLLM(nn.Module):
         for param in self.model.parameters():
             param.requires_grad = False 
     
-    def forward(self, input_ids, attention_mask=None, labels=None, **kwargs):
+    def forward(self, input_ids, attention_mask=None, labels=None, return_pred_n_label=False, **kwargs):
         
         batch_size = input_ids.shape[0]
         
@@ -238,5 +238,10 @@ class SoftPromptLLM(nn.Module):
             labels=labels,
             **kwargs
         )
-        
-        return outputs
+
+        pred_logits = outputs.logits
+
+        if return_pred_n_label:
+            return outputs, pred_logits, labels
+        elseß:
+            return outputs
