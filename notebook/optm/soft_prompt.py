@@ -8,6 +8,8 @@ import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
 from typing import Callable
+from tqdm import tqdm as tqdm 
+
 
 def load_hf_model(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct"):
     """ 
@@ -245,3 +247,36 @@ class SoftPromptLLM(nn.Module):
             return outputs, pred_logits, labels
         else:
             return outputs
+        
+
+def train_soft_prompt(model, dataloader, num_epochs=5, learning_rate=1e-3):
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    
+    for epoch in range(num_epochs):
+        model.train()
+        total_loss = 0
+        
+        for batch in tqdm(dataloader, desc=f"Epoch {epoch+1}/{num_epochs}"):
+            optimizer.zero_grad()
+            
+            # Move batch to device
+            input_ids = batch['input_ids'].to(model.device)
+            attention_mask = batch['attention_mask'].to(model.device)
+            labels = batch['labels'].to(model.device)
+            
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                labels=labels
+            )
+            
+            loss = outputs.loss
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+        
+        avg_loss = total_loss / len(dataloader)
+        print(f"Epoch {epoch+1}/{num_epochs}, Average loss: {avg_loss:.4f}")
+    
+    return model
