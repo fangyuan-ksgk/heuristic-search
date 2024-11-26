@@ -13,10 +13,18 @@ def load_hf_model(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct"):
     """ 
     Load Huggingface model and tokenizer
     """    
+    # if on mps device use float32
+    if torch.backends.mps.is_available():
+        torch_dtype = torch.float32
+        device_map = "mps"
+    else:
+        torch_dtype = torch.float16
+        device_map = "cuda"
+        
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch.float32,  # Change to float32 instead of "auto"
-        device_map="auto"
+        torch_dtype=torch_dtype,  # Change to float32 instead of "auto"
+        device_map=device_map
     )
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     
