@@ -389,3 +389,18 @@ def make_training_example(entry: dict) -> tuple[str, str]:
     assert comment_key in entry, "Comment not found in data dictionary"
     comment = entry[comment_key]
     return prompt, label, comment
+
+
+
+def process_data(data: dict, save_path: str = "../data/processed_data.json"):
+    processed_data = {"prompt": [], "label": [], "comment": []}
+    for i, d in enumerate(data.values()): # comment is probably more important than the decision
+        te = make_training_example(d)
+        if te is not None:
+            processed_data["prompt"].append(te[0].strip())
+            processed_data["label"].append(te[1])
+            processed_data["comment"].append(te[2].strip())      
+            
+    import json
+    with open(save_path, 'w') as f:
+        json.dump(processed_data, f)
