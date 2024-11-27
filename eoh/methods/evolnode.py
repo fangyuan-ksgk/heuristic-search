@@ -33,7 +33,12 @@ def map_input_output(test_case_list: List[dict], input_names: List[str], output_
 
 def clean_str(s: str) -> str:
     def clean_line(line: str) -> str:
-        return line.split("//")[0].split("#")[0] # Remove comments 
+        url_pattern = r'https?://[^\s]+'
+        urls = re.findall(url_pattern, line)
+        if not urls:
+            return line.split("//")[0].split("#")[0] # Remove comments 
+        else:
+            return line
     return ('\n').join(map(clean_line, s.split('\n')))
 
 
@@ -351,7 +356,6 @@ class EvolNode:
             eval_prompt = self.meta_prompt._get_eval_prompt_with_feedback(num_cases, feedback)
         else:
             eval_prompt = self.meta_prompt._get_eval_prompt(num_cases)
-        
         response = self.get_response(eval_prompt)
         self.temp_response = response # added info for debugging
         response = clean_str(response) # extra cleaning to enhance robustness
@@ -364,8 +368,9 @@ class EvolNode:
             test_case_list = extract_json_from_text(response)
             self.test_cases.extend(map_input_output(test_case_list, self.meta_prompt.inputs, self.meta_prompt.outputs))
             self._filter_test_cases()
-        except:
-            pass # alas, response parsing failed
+        except Exception as e:
+            print("TEST CASE PARSING ERROR")
+            print(e, e.__traceback__)# alas, response parsing failed
         
     def _filter_test_cases(self):
         seen_values = defaultdict(set)
@@ -438,7 +443,7 @@ class EvolNode:
                 reasonings.append(reasoning)
                 codes.append(code)
             except Exception as e:
-                continue  
+                print('ERROR PARSING CODE')  
             
         return reasonings, codes
     
@@ -481,7 +486,6 @@ class EvolNode:
             reasoning = reasonings[code_index]
             code = codes[code_index]
             err_msg = "\n".join(str(err) for err in errors_per_code[code_index]) if len(errors_per_code[code_index]) > 0 else ""
-            
             if print_summary:
                 print_individual_info(code_index, fitness, err_msg, reasoning, code)
             
@@ -712,7 +716,6 @@ class EvolNode:
             elif self.meta_prompt.mode == PromptMode.PROMPT:
                 
                 output_dict, error_msg_delta = self.call_prompt_function(test_input, code, max_tries)
-                print(code)
                 if error_msg_delta == "":
                     compiled_tests += 1
                     is_aligned = check_alignment_sequential(output_dict, test_output, self.get_response)
@@ -1282,4 +1285,5 @@ def nodes_from_api(link: str, clean: bool = True, get_response: Optional[Callabl
     
     for node in nodes:
         node[0].get_offspring(evol_method, feedback=node[1])
+    return nodes
     
