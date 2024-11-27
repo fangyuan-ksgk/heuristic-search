@@ -1041,6 +1041,7 @@ class PlanNode:
         for plan_response in plan_responses:
             try:
                 plan_dict = extract_json_from_text(plan_response)
+                print(plan_dict)
             except ValueError as e:
                 plan_dict = {}
                 err_msg += f"Failed to extract JSON from planning response:\n{e}\nResponse was:\n{plan_response}\n"
@@ -1058,11 +1059,27 @@ class PlanNode:
     
     
     def spawn_test_cases_majority(self, main_test_cases: list) -> tuple [bool, str]:
+        def convert_unhash_to_hash(data):
+            if isinstance(data, list):
+                return tuple(convert_unhash_to_hash(item) for item in data)
+            elif isinstance(data, dict):
+                return frozenset((key, convert_unhash_to_hash(value)) for key, value in data.items())
+            else:
+                return data
+            
+        def convert_hash_to_unhash(data):
+            if isinstance(data, tuple):
+                return [convert_hash_to_unhash(item) for item in data]
+            elif isinstance(data, frozenset):
+                return {key: convert_hash_to_unhash(value) for key, value in data}
+            else:
+                return data
+            
         def most_common(list_of_dicts):
-            dict_tuples = [tuple(sorted(d.items())) for d in list_of_dicts]
-            counter = Counter(dict_tuples)
+            list_of_dicts = [convert_unhash_to_hash(d) for d in list_of_dicts]
+            counter = Counter(list_of_dicts)
             sorted_dicts_by_frequency = sorted(counter.items(), key=lambda x: x[1], reverse=True)
-            sorted_unique_dicts = [{k: v for k, v in dict_tuple} for dict_tuple, _ in sorted_dicts_by_frequency]
+            sorted_unique_dicts = [convert_hash_to_unhash(d) for d, _ in sorted_dicts_by_frequency]
             # pick the highest-count/earliest item
             return sorted_unique_dicts
                 
