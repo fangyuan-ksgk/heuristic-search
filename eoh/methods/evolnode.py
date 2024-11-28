@@ -354,7 +354,7 @@ class EvolNode:
             self.get_test_cases(3) # generate 3 test cases for new node
             
         
-    def get_response(self, prompt: str):
+    def get_response(self, prompt: str, desc: str = ""):
         if isinstance(prompt, str):
             prompts = [prompt]
             n_prompt = 1
@@ -362,7 +362,7 @@ class EvolNode:
             prompts = prompt
             n_prompt = len(prompts)
         try:
-            responses = self._get_response(prompts)
+            responses = self._get_response(prompts, desc)
         except:
             responses = []
             for p in prompts:
