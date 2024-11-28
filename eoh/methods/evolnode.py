@@ -76,13 +76,13 @@ def _require_llm_metric(value) -> bool:
     
 def require_llm_metric(name: str, value: str, custom_metric_map: Optional[Dict[str, Callable]] = None) -> bool: 
     if custom_metric_map is not None and name in custom_metric_map:
-        return True
+        return False
     else:
         return _require_llm_metric(value)
     
 
 
-def _check_alignment_with_metric(pred_output: dict, target_output: dict):
+def _check_alignment_with_metric(pred_output: dict, target_output: dict, custom_metric_map: Optional[Dict[str, Callable]] = None):
     """ 
     Input prediction & target dictionary, design algorithm for specific output value types' matching
     """
@@ -93,7 +93,10 @@ def _check_alignment_with_metric(pred_output: dict, target_output: dict):
             return False, error_msg
         
         pred_value = pred_output[key]
-        metric = type_to_metric(target_value)
+        if custom_metric_map is not None and key in custom_metric_map:
+            metric = custom_metric_map[key]
+        else:
+            metric = type_to_metric(target_value)
         
         is_aligned, error_msg_delta = metric(pred_value, target_value)
         if not is_aligned:
@@ -157,7 +160,7 @@ def _check_alignment_with_metric_parallel(output_per_code_per_test: Dict[int, Di
             if len(trimmed_pred) == 0 and len(trimmed_target) == 0:
                 continue
             
-            is_aligned, error_msg = _check_alignment_with_metric(pred_output, target_output)
+            is_aligned, error_msg = _check_alignment_with_metric(pred_output, target_output, custom_metric_map)
             scores_per_code_per_test[code_index][test_index].append(float(is_aligned))
             
             if not is_aligned:
@@ -264,7 +267,7 @@ def check_alignment_parallel(output_per_code_per_test: Dict[int, Dict[int, Dict]
     errors_per_code_per_test = defaultdict(lambda: defaultdict(list))
     
     # Get scores from metric-based alignment check
-    metric_scores, errors_per_code_per_test = _check_alignment_with_metric_parallel(output_per_code_per_test, errors_per_code_per_test, test_inputs, target_outputs)
+    metric_scores, errors_per_code_per_test = _check_alignment_with_metric_parallel(output_per_code_per_test, errors_per_code_per_test, test_inputs, target_outputs, custom_metric_map)
     
     # Get scores from LLM-based alignment check 
     llm_scores, errors_per_code_per_test = _check_alignment_with_llm_parallel(output_per_code_per_test, errors_per_code_per_test, test_inputs, target_outputs,
@@ -670,6 +673,13 @@ class EvolNode:
         else:
             raise ValueError(f"Unknown mode: {self.meta_prompt.mode}")
         
+        # Print info about outputs and errors per code
+        for code_index in output_per_code_per_test:
+            print(f"\nCode {code_index} outputs:")
+            for test_index in output_per_code_per_test[code_index]:
+                print(f"Test {test_index}: {output_per_code_per_test[code_index][test_index]}")
+                if errors_per_code_per_test[code_index][test_index]:
+                    print(f"Errors: {errors_per_code_per_test[code_index][test_index]}")
         
         # alignment checking
         test_inputs = [case[0] for case in test_cases]

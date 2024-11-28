@@ -223,6 +223,7 @@ class Timeout_:
 def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str], max_tries: int, get_response: callable):
     """ 
     Parallel calling of prompt function
+    TBD: paralleize per-test input inferences 
     """
     outputs_per_code_per_test = defaultdict(lambda: defaultdict(list))
     errors_per_code_per_test = defaultdict(lambda: defaultdict(list))
