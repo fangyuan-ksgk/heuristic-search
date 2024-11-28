@@ -353,17 +353,26 @@ def get_dict_entry(entry: dict, key: str) -> str:
         return "None"
 
 
-def convert_entry_to_prompt(grant_entry: dict) -> str:
+PREFIX_PROMPT = """Given the following details of a grant application, make a decision (Yes, No, Maybe) on whether to accept it or not, and a brief comment explanating your decision. 
+    Assess how well the project aligns with the challenge theme, its viability, its potential impact, and any competitive advantage. 
+    Consider the stage of development, the proof of concept status, and existing partnerships.
+    """
+    
+SUFFIX_PROMPT = """Please provide your response in the following JSON format:
+    ```json
+    {{
+        "decision": "Yes/No/Maybe",
+        "comment": "Your detailed assessment explaining the decision"
+    }}
+    ```"""
+
+def convert_entry_to_prompt(grant_entry: dict, use_prefix_n_suffix: bool = True) -> str:
     """ 
     This is quite important, we want diversity out of this one, too. 
     """
     
-    # Generating the prompt with the data
-    prompt = f"""
-    Given the following details of a grant application, determine the likelihood of acceptance. 
-    Assess how well the project aligns with the challenge theme, its viability, its potential impact, and any competitive advantage. 
-    Consider the stage of development, the proof of concept status, and existing partnerships. 
-    Provide your decision (Yes, No, Maybe) and a brief comment explanating your decision on why this project is likely to be accepted or rejected.
+    base_prompt = f"""
+    Grant Application Summary:
 
     Grant Application Summary:
     - **Project Theme:** {get_dict_entry(grant_entry, 'Theme')}
@@ -379,21 +388,20 @@ def convert_entry_to_prompt(grant_entry: dict) -> str:
     Proposed solution: {get_dict_entry(grant_entry, 'Proposed solution')}
 
     Proposed project's scope of work: {get_dict_entry(grant_entry, "Proposed project's scope of work")}
-
-    Please provide your response in the following JSON format:
-    ```json
-    {{
-        "decision": "Yes/No/Maybe",
-        "comment": "Your detailed assessment explaining the decision"
-    }}
-    ```
     """
-
+    
+    if use_prefix_n_suffix:
+        prompt = f"""{PREFIX_PROMPT}
+        {base_prompt}
+        {SUFFIX_PROMPT}
+        """
+    else:
+        prompt = base_prompt
     return prompt
 
 
-def make_training_example(entry: dict) -> tuple[str, str]:
-    prompt = convert_entry_to_prompt(entry)
+def make_training_example(entry: dict, use_prefix_n_suffix: bool = True) -> tuple[str, str]:
+    prompt = convert_entry_to_prompt(entry, use_prefix_n_suffix)
     assert label_key in entry, "Label not found in data dictionary"
     label = "Yes" if entry[label_key] in yes_label_list else "No"
     assert comment_key in entry, "Comment not found in data dictionary"
@@ -402,10 +410,10 @@ def make_training_example(entry: dict) -> tuple[str, str]:
 
 
 
-def process_data(data: dict, save_path: str = "../data/processed_data.json"):
+def process_data(data: dict, save_path: str = "../data/processed_data.json", use_prefix_n_suffix: bool = True):
     processed_data = {"prompt": [], "label": [], "comment": []}
     for i, d in enumerate(data.values()): # comment is probably more important than the decision
-        te = make_training_example(d)
+        te = make_training_example(d, use_prefix_n_suffix)
         if te is not None:
             processed_data["prompt"].append(te[0].strip())
             processed_data["label"].append(te[1])
