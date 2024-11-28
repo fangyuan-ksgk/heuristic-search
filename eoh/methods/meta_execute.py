@@ -356,7 +356,7 @@ def process_all_inputs(codes, input_dicts, max_tries, timeout: int = 3):
             for code_index, code, input_index, input_dict in tasks
         }
         
-        with tqdm(total=total_iterations, desc="Processing LLM queries") as pbar:
+        with tqdm(total=total_iterations, desc=f"Concurrent Execution of {total_iterations} Node functions to generate prompts ...") as pbar:
             for future in as_completed(futures):
                 code_index, input_index = futures[future]
                 try:
