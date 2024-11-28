@@ -35,13 +35,7 @@ def clean_str(s: str) -> str:
     return ('\n').join(map(clean_line, s.split('\n')))
 
 
-def require_llm_metric(value) -> bool:
-    if isinstance(value, int): 
-        return False
-    elif isinstance(value, float):
-        return False
-    else:
-        return True
+
 
 def type_to_metric(value) -> Callable:
     
@@ -72,6 +66,22 @@ def type_to_metric(value) -> Callable:
         raise ValueError(f"Metric not defined for type: {type(value)}, use LLM-based alignment check instead !")
 
 
+def _require_llm_metric(value) -> bool:
+    if isinstance(value, int): 
+        return False
+    elif isinstance(value, float):
+        return False
+    else:
+        return True
+    
+def require_llm_metric(name: str, value: str, custom_metric_map: Optional[Dict[str, Callable]] = None) -> bool: 
+    if custom_metric_map is not None and name in custom_metric_map:
+        return True
+    else:
+        return _require_llm_metric(value)
+    
+
+
 def _check_alignment_with_metric(pred_output: dict, target_output: dict):
     """ 
     Input prediction & target dictionary, design algorithm for specific output value types' matching
@@ -94,7 +104,8 @@ def _check_alignment_with_metric(pred_output: dict, target_output: dict):
     return True, ""
 
 
-def _check_alignment_with_llm_sequential(pred_output: dict, target_output: dict, get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
+def _check_alignment_with_llm_sequential(pred_output: dict, target_output: dict, custom_metric_map: Optional[Dict[str, Callable]] = None,
+                                          get_response: Optional[Callable] = get_openai_response, max_tries: int = 3):
     """ 
     Alignment checking with expected outputs with LLM
     Deprecated
@@ -102,8 +113,8 @@ def _check_alignment_with_llm_sequential(pred_output: dict, target_output: dict,
     error_msg = ""
     prompt = ALIGNMENT_CHECK_PROMPT.format(pred_output=pred_output, target_output=target_output)
 
-    trimmed_pred_output = {k: v for k, v in pred_output.items() if require_llm_metric(v)}
-    trimmed_target_output = {k: v for k, v in target_output.items() if require_llm_metric(v)}
+    trimmed_pred_output = {k: v for k, v in pred_output.items() if require_llm_metric(k, v, custom_metric_map)}
+    trimmed_target_output = {k: v for k, v in target_output.items() if require_llm_metric(k, v, custom_metric_map)}
     
     if len(trimmed_pred_output) == 0 and len(trimmed_target_output) == 0:
         return True, ""
@@ -124,10 +135,18 @@ def _check_alignment_with_llm_sequential(pred_output: dict, target_output: dict,
     return False, error_msg
 
 
+def _require_llm_metric(name: str, value: str, custom_metric_map: Optional[Dict[str, Callable]] = None) -> bool: 
+    if custom_metric_map is not None and name in custom_metric_map:
+        return True
+    else:
+        return require_llm_metric(value)
+
+
 def _check_alignment_with_metric_parallel(output_per_code_per_test: Dict[int, Dict[int, Dict]],
                                           errors_per_code_per_test: Dict[int, Dict[int, List[str]]],
                                           test_inputs: List[Dict], 
-                                          target_outputs: List[Dict]):
+                                          target_outputs: List[Dict],
+                                          custom_metric_map: Optional[Dict[str, Callable]] = None):
     
     scores_per_code_per_test = defaultdict(lambda: defaultdict(list))
     for code_index in output_per_code_per_test:
@@ -138,8 +157,8 @@ def _check_alignment_with_metric_parallel(output_per_code_per_test: Dict[int, Di
             trimmed_target = {}
             
             if isinstance(pred_output, dict) and isinstance(target_output, dict):
-                trimmed_pred = {k: v for k, v in pred_output.items() if not require_llm_metric(v)}
-                trimmed_target = {k: v for k, v in target_output.items() if not require_llm_metric(v)}            
+                trimmed_pred = {k: v for k, v in pred_output.items() if not require_llm_metric(k, v, custom_metric_map)}
+                trimmed_target = {k: v for k, v in target_output.items() if not require_llm_metric(k, v, custom_metric_map)}            
             
             if len(trimmed_pred) == 0 and len(trimmed_target) == 0:
                 continue
@@ -159,7 +178,8 @@ def _check_alignment_with_llm_parallel(output_per_code_per_test: Dict[int, Dict[
                                        test_inputs: List[Dict], 
                                        target_outputs: List[Dict], 
                                        get_response: Optional[Callable] = get_openai_response, 
-                                       batch_size: int = 3):
+                                       batch_size: int = 3,
+                                       custom_metric_map: Optional[Dict[str, Callable]] = None):
     
     # Unpack output dictionary into prompts
     prompts = []
@@ -171,7 +191,7 @@ def _check_alignment_with_llm_parallel(output_per_code_per_test: Dict[int, Dict[
             trimmed_pred = {}
             trimmed_target = {}
             for target_name, target_value in target_output.items():
-                if require_llm_metric(target_value) and target_name in pred_output:
+                if require_llm_metric(target_name, target_value, custom_metric_map) and target_name in pred_output:
                     trimmed_target[target_name] = target_value
                     trimmed_pred[target_name] = pred_output[target_name]
     
@@ -236,6 +256,7 @@ def check_alignment_sequential(pred_output: dict, target_output: dict, get_respo
     _, error_msg_delta = _check_alignment_with_llm_sequential(pred_output, target_output, get_response, max_tries)
     error_msg += error_msg_delta
     
+    
     if error_msg == "":
         return True, ""
     else:
@@ -243,7 +264,7 @@ def check_alignment_sequential(pred_output: dict, target_output: dict, get_respo
     
     
 def check_alignment_parallel(output_per_code_per_test: Dict[int, Dict[int, Dict]], test_inputs: List[Dict], target_outputs: List[Dict], get_response: Optional[Callable] = get_openai_response, 
-                             batch_size: int = 3):
+                             batch_size: int = 3, custom_metric_map: Optional[Dict[str, Callable]] = None):
     
     # make sure to combined score obtained from both steps (average of both)
     errors_per_code_per_test = defaultdict(lambda: defaultdict(list))
@@ -311,6 +332,7 @@ class EvolNode:
                  reasoning: Optional[str] = None,
                  get_response: Optional[Callable] = get_openai_response, 
                  test_cases: Optional[List[Tuple[Dict, Dict]]] = None,
+                 custom_metric_map: Optional[Dict[str, Callable]] = None,
                  fitness: float = 0.0):
         """ 
         Executable Task
@@ -323,6 +345,7 @@ class EvolNode:
         self._get_response = get_response
         self.relevant_nodes = []
         self.error_msg = "" # contains information about encountered error :: TBD :: use LLM to summarize it
+        self.custom_metric_map = custom_metric_map
         
         if test_cases is not None:
             self.test_cases = test_cases
@@ -466,7 +489,7 @@ class EvolNode:
         
         self.reasonings = reasonings
         self.codes = codes
-        fitness_per_code, errors_per_code, global_summary = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs)
+        fitness_per_code, errors_per_code, global_summary = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs, custom_metric_map=self.custom_metric_map)
         end_time = time.time()
         evaluation_time = end_time - evolve_end_time
         if print_summary:
@@ -633,7 +656,7 @@ class EvolNode:
     
     
     def _evaluate_fitness(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, codes: Optional[List[str]] = [], 
-                           max_tries: int = 3, num_runs: int = 1) -> Fitness:
+                           max_tries: int = 3, num_runs: int = 1, custom_metric_map: Optional[Dict[str, Callable]] = None) -> Fitness:
         
         if len(codes) == 0: 
             codes = [self.code] 
@@ -658,7 +681,7 @@ class EvolNode:
         test_inputs = [case[0] for case in test_cases]
         target_outputs = [case[1] for case in test_cases]
         score_per_code_per_test, evaluate_errors_per_code_per_test = check_alignment_parallel(output_per_code_per_test, test_inputs, target_outputs, 
-                                                                                              self.get_response, batch_size=num_runs)
+                                                                                              self.get_response, batch_size=num_runs, custom_metric_map=custom_metric_map)
         errors_per_code = combine_errors(evaluate_errors_per_code_per_test, errors_per_code_per_test)
         
         fitness_per_code = self.summarize_fitness(codes, score_per_code_per_test, output_per_code_per_test, test_inputs, max_tries)
