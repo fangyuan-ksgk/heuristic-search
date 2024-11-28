@@ -833,7 +833,14 @@ def extract_imports_and_functions(code_str):
             names = ", ".join(alias.name for alias in node.names)
             imports.append(f"from {node.module} import {names}")
         elif isinstance(node, ast.FunctionDef):
-            functions.append(ast.unparse(node))
+            if not hasattr(node, "parent"): functions.append(ast.unparse(node))
+            for child in node.body:
+                if isinstance(child, ast.FunctionDef):
+                    child.parent = node
+        elif isinstance(node, ast.ClassDef):
+            for child in node.body:
+                if isinstance(child, ast.FunctionDef):
+                    child.parent = node
     
     return imports, functions
 
@@ -905,7 +912,7 @@ Respond in this format:
 }}
 """
 
-GENERATE_NODES_FROM_API = """Generate a JSON-style list representing new nodes based on the API documentation, which can be resuable for more nodes. These nodes have to be general but are not one liners (make them slightly complex/useful). The list should include:
+GENERATE_NODES_FROM_API = """Generate a JSON-style list representing new nodes based on the API documentation, which can be resuable for more nodes. These nodes have to be general but are not one liners (make them slightly complex/useful). You can also make nodes which are just examples in the documentation (recommended to have some as they are most likely error free). The list should include:
 - **Nodes**: Each node represents a key action or step and must contain the following attributes:
 - `task`: Description of the task. MAKE SURE THE TASK IS NOT JUST A ONE LINER BUT ALSO VERY USEFUL
 - `name`: Concise name used for the task function.
@@ -915,9 +922,10 @@ GENERATE_NODES_FROM_API = """Generate a JSON-style list representing new nodes b
 - `output_types`: List of corresponding types for each output parameter.
 - `target`: The purpose or goal that the action contributes to.
 - `mode`: The execution mode for this task ("CODE" or "PROMPT").
-- 'relevant_docs': Relevant documentation for the task, can be something like how to call the function or the parameeters for it. Importnant: GIVE BASED ON THE PROVIDED DOCUMENTATION. Make sure this is verbose and contains how to call used api functions such as the available parameters, their types and their meaning. THIS IS THE MOST IMPORTANT PARAMETER SO WRITE AS MUCH AS OU WANT FOR THIS
-
+- 'relevant_docs': Relevant documentation for the task based on the given documentation. Make sure this is very verbose, stating what library you are using, suggest the functions and give its signatures and meaning or anything that a developer would need to code out/use the library without checking the internet. For example, give example function calls which could be useful as well as how to import the function
 **Output Format:**
+
+To be direct, have 2 nodes which are copy pasted from the documentation if possible which can be use widely. Have more nodes which are more complex and can be build on the first 2 nodes
 
 Provide the output in the following JSON structure:
 

@@ -1,0 +1,58 @@
+{
+  "code": "import brotli\nfrom concurrent.futures import ThreadPoolExecutor\nimport gzip\nfrom pathlib import Path\nimport requests\nfrom requests import Session\nfrom requests.adapters import HTTPAdapter\nimport time\nfrom tqdm import tqdm\nfrom typing import Tuple\nfrom typing import List, Dict, Any\nfrom urllib3.util.retry import Retry\nimport zlib\n\n\ndef download_large_file(url: str, output_path: str, chunk_size: int=8192,\n    timeout: int=30) ->Tuple[bool, int, float, str]:\n    try:\n        start_time = time.time()\n        headers = {'User-Agent': 'Mozilla/5.0'}\n        head_response = requests.head(url, headers=headers, timeout=timeout)\n        file_size = int(head_response.headers.get('content-length', 0))\n        content_encoding = head_response.headers.get('content-encoding',\n            'identity')\n        progress = tqdm(total=file_size, unit='iB', unit_scale=True)\n        with requests.get(url, headers=headers, stream=True, timeout=timeout\n            ) as response:\n            response.raise_for_status()\n            with open(output_path, 'wb') as f:\n                decompressor = None\n                if content_encoding == 'gzip':\n                    decompressor = gzip.decompress\n                elif content_encoding == 'br':\n                    decompressor = brotli.decompress\n                elif content_encoding == 'deflate':\n                    decompressor = zlib.decompress\n                for chunk in response.iter_content(chunk_size=chunk_size):\n                    if chunk:\n                        if decompressor:\n                            chunk = decompressor(chunk)\n                        f.write(chunk)\n                        progress.update(len(chunk))\n        progress.close()\n        download_time = time.time() - start_time\n        if file_size > 0:\n            actual_size = os.path.getsize(output_path)\n            if actual_size != file_size and content_encoding == 'identity':\n                return False, file_size, download_time, content_encoding\n        return True, file_size, download_time, content_encoding\n    except Exception as e:\n        print(f'Error downloading file: {str(e)}')\n        return False, 0, 0.0, ''\n\n\ndef parallel_download_with_retry(urls: List[str], output_dir: str,\n    max_retries: int=3, timeout: int=30, max_workers: int=5) ->tuple[List[\n    str], Dict[str, str], Dict[str, Any]]:\n    successful_downloads: List[str] = []\n    failed_downloads: Dict[str, str] = {}\n    download_stats: Dict[str, Any] = {'total_files': len(urls),\n        'total_size': 0, 'total_time': 0, 'success_rate': 0}\n    Path(output_dir).mkdir(parents=True, exist_ok=True)\n    session = Session()\n    retry_strategy = Retry(total=max_retries, backoff_factor=0.1,\n        status_forcelist=[500, 502, 503, 504])\n    adapter = HTTPAdapter(max_retries=retry_strategy)\n    session.mount('http://', adapter)\n    session.mount('https://', adapter)\n    start_time = time.time()\n\n    def download_single_file(url: str) ->tuple[bool, str, Dict[str, Any]]:\n        try:\n            filename = url.split('/')[-1]\n            output_path = str(Path(output_dir) / filename)\n            success, file_size, download_time, _ = download_large_file(url=\n                url, output_path=output_path, chunk_size=8192, timeout=timeout)\n            if success:\n                return True, url, {'file_size': file_size, 'download_time':\n                    download_time}\n            return False, url, {'error': 'Download failed'}\n        except Exception as e:\n            return False, url, {'error': str(e)}\n    with ThreadPoolExecutor(max_workers=max_workers) as executor:\n        futures = [executor.submit(download_single_file, url) for url in urls]\n        for future in tqdm(futures, total=len(urls), desc='Downloading files'):\n            success, url, stats = future.result()\n            if success:\n                successful_downloads.append(url)\n                download_stats['total_size'] += stats['file_size']\n                download_stats['total_time'] += stats['download_time']\n            else:\n                failed_downloads[url] = stats['error']\n    download_stats['success_rate'] = len(successful_downloads) / len(urls\n        ) * 100\n    download_stats['total_time'] = time.time() - start_time\n    return successful_downloads, failed_downloads, download_stats",
+  "reasoning": "Downloads multiple files in parallel using Session objects with custom retry logic, progress tracking via tqdm, and error handling while collecting download statistics for successful and failed downloads.",
+  "meta_prompt": {
+    "task": "Download multiple files in parallel with custom retry logic, progress tracking, and error handling using Session objects",
+    "func_name": "parallel_download_with_retry",
+    "inputs": [
+      "urls",
+      "output_dir",
+      "max_retries",
+      "timeout",
+      "max_workers"
+    ],
+    "outputs": [
+      "successful_downloads",
+      "failed_downloads",
+      "download_stats"
+    ],
+    "input_types": [
+      "List[str]",
+      "str",
+      "int",
+      "int",
+      "int"
+    ],
+    "output_types": [
+      "List[str]",
+      "Dict[str,str]",
+      "Dict[str,Any]"
+    ],
+    "mode": "code"
+  },
+  "test_cases": [
+    {
+      "input": {
+        "urls": [
+          "http://ipv4.download.thinkbroadband.com/10MB.zip",
+          "http://ipv4.download.thinkbroadband.com/5MB.zip"
+        ],
+        "output_dir": "tmp"
+      },
+      "expected_output": {
+        "successful_downloads": [
+          "http://ipv4.download.thinkbroadband.com/10MB.zip",
+          "http://ipv4.download.thinkbroadband.com/5MB.zip"
+        ],
+        "failed_downloads": {},
+        "download_stats": {
+          "total_files": 2,
+          "total_size": 15728640,
+          "total_time": 10.818475008010864,
+          "success_rate": 100.0
+        }
+      }
+    }
+  ],
+  "fitness": 1.0
+}
