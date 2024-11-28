@@ -1,0 +1,35 @@
+{
+  "code": "import arxiv\nimport brotli\nfrom concurrent.futures import ThreadPoolExecutor\nimport gzip\nimport os\nimport requests\nimport time\nfrom tqdm import tqdm\nfrom typing import Tuple\nfrom typing import List, Dict\nimport zlib\n\n\ndef download_large_file(url: str, output_path: str, chunk_size: int=8192,\n    timeout: int=30) ->Tuple[bool, int, float, str]:\n    try:\n        start_time = time.time()\n        headers = {'User-Agent': 'Mozilla/5.0'}\n        head_response = requests.head(url, headers=headers, timeout=timeout)\n        file_size = int(head_response.headers.get('content-length', 0))\n        content_encoding = head_response.headers.get('content-encoding',\n            'identity')\n        progress = tqdm(total=file_size, unit='iB', unit_scale=True)\n        with requests.get(url, headers=headers, stream=True, timeout=timeout\n            ) as response:\n            response.raise_for_status()\n            with open(output_path, 'wb') as f:\n                decompressor = None\n                if content_encoding == 'gzip':\n                    decompressor = gzip.decompress\n                elif content_encoding == 'br':\n                    decompressor = brotli.decompress\n                elif content_encoding == 'deflate':\n                    decompressor = zlib.decompress\n                for chunk in response.iter_content(chunk_size=chunk_size):\n                    if chunk:\n                        if decompressor:\n                            chunk = decompressor(chunk)\n                        f.write(chunk)\n                        progress.update(len(chunk))\n        progress.close()\n        download_time = time.time() - start_time\n        if file_size > 0:\n            actual_size = os.path.getsize(output_path)\n            if actual_size != file_size and content_encoding == 'identity':\n                return False, file_size, download_time, content_encoding\n        return True, file_size, download_time, content_encoding\n    except Exception as e:\n        print(f'Error downloading file: {str(e)}')\n        return False, 0, 0.0, ''\n\n\ndef batch_arxiv_download(query: str, max_papers: int, output_dir: str,\n    categories: List[str], date_order: bool) ->tuple[List[str], List[Dict],\n    List[str]]:\n    downloaded_papers = []\n    metadata_list = []\n    failed_downloads = []\n    os.makedirs(output_dir, exist_ok=True)\n    sort_criterion = (arxiv.SortCriterion.SubmittedDate if date_order else\n        arxiv.SortCriterion.Relevance)\n    if categories:\n        query = query + ' AND (' + ' OR '.join(f'cat:{cat}' for cat in\n            categories) + ')'\n    client = arxiv.Client(page_size=100, delay_seconds=3.0)\n    search = arxiv.Search(query=query, max_results=max_papers, sort_by=\n        sort_criterion)\n\n    def download_paper(result):\n        try:\n            metadata = {'title': result.title, 'authors': [str(author) for\n                author in result.authors], 'published': str(result.\n                published), 'summary': result.summary, 'doi': result.doi,\n                'primary_category': result.primary_category}\n            filename = f'{result.get_short_id()}.pdf'\n            filepath = os.path.join(output_dir, filename)\n            success, _, _, _ = download_large_file(url=result.pdf_url,\n                output_path=filepath, chunk_size=8192, timeout=30)\n            if success:\n                downloaded_papers.append(filename)\n                metadata_list.append(metadata)\n            else:\n                failed_downloads.append(result.get_short_id())\n        except Exception as e:\n            failed_downloads.append(result.get_short_id())\n    with ThreadPoolExecutor(max_workers=5) as executor:\n        executor.map(download_paper, client.results(search))\n    return downloaded_papers, metadata_list, failed_downloads\n",
+  "reasoning": "Downloads multiple arXiv papers based on a query with automatic PDF download and metadata extraction, allowing for filtering by categories and sorting by date or relevance.",
+  "meta_prompt": {
+    "task": "Search and download multiple arXiv papers based on a query, with automatic PDF download and metadata extraction",
+    "func_name": "batch_arxiv_download",
+    "inputs": [
+      "query",
+      "max_papers",
+      "output_dir",
+      "categories",
+      "date_order"
+    ],
+    "outputs": [
+      "downloaded_papers",
+      "metadata_list",
+      "failed_downloads"
+    ],
+    "input_types": [
+      "str",
+      "int",
+      "str",
+      "List[str]",
+      "bool"
+    ],
+    "output_types": [
+      "List[str]",
+      "List[Dict]",
+      "List[str]"
+    ],
+    "mode": "code"
+  },
+  "test_cases": [],
+  "fitness": 1.0
+}

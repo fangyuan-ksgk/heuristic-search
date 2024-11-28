@@ -462,7 +462,7 @@ class EvolNode:
         
         
         # Evolve many times
-        reasonings, codes = self._evolve(method, parents, batch_size=batch_size)
+        reasonings, codes = self._evolve(method, parents, batch_size=batch_size, feedback=feedback)
         evolve_end_time = time.time()
         evolve_time = evolve_end_time - query_end_time
         
@@ -1041,13 +1041,13 @@ class PlanNode:
         for plan_response in plan_responses:
             try:
                 plan_dict = extract_json_from_text(plan_response)
-                print(plan_dict)
             except ValueError as e:
                 plan_dict = {}
                 err_msg += f"Failed to extract JSON from planning response:\n{e}\nResponse was:\n{plan_response}\n"
             
             plan_dict = self._update_plan_dict(plan_dict)
             plan_dict, err_msg_delta = check_n_rectify_plan_dict(plan_dict, self.meta_prompt)
+
             if err_msg_delta:
                 err_msg += err_msg_delta
             if plan_dict:

@@ -88,7 +88,6 @@ class Evolution:
         offspring = {"reasoning": None, "code": None, "fitness": None}
                 
         if operator == "i1": # initialization operator 
-            print('A')
             self.evol.evolve("i1", replace=True, max_tries=max_attempts, num_runs=self.num_eval_runs, batch_size=self.pop_size, feedback=feedback)
             offspring["reasoning"], offspring["code"], offspring["fitness"] = self.evol.reasoning, self.evol.code, self.evol.fitness
         
