@@ -334,7 +334,8 @@ def process_single_input_with_timeout(code, input_tuple, max_tries, timeout: int
 
 
 def process_all_inputs(codes, input_dicts, max_tries, timeout: int = 3):
-    outputs_per_code_per_test = defaultdict(lambda: defaultdict(list))
+    input_indices = []
+    full_prompts = []
     errors_per_code_per_test = defaultdict(lambda: defaultdict(list))
     
     total_iterations = len(codes) * len(input_dicts)
@@ -355,13 +356,14 @@ def process_all_inputs(codes, input_dicts, max_tries, timeout: int = 3):
             for code_index, code, input_index, input_dict in tasks
         }
         
-        with tqdm(total=total_iterations, desc=f"Executing {total_iterations} Node functions to generate prompts ...") as pbar:
+        with tqdm(total=total_iterations, desc="Processing LLM queries") as pbar:
             for future in as_completed(futures):
                 code_index, input_index = futures[future]
                 try:
                     # Add timeout here
                     input_index, prompts, errors = future.result(timeout=timeout)
-                    outputs_per_code_per_test[code_index][input_index].extend(prompts)
+                    input_indices.extend([input_index] * len(prompts))
+                    full_prompts.extend(prompts)                    
                     errors_per_code_per_test[code_index][input_index].extend(errors)
                 except concurrent.futures.TimeoutError:
                     errors_per_code_per_test[code_index][input_index].append(f"Execution timed out after {timeout} seconds")
@@ -369,13 +371,13 @@ def process_all_inputs(codes, input_dicts, max_tries, timeout: int = 3):
                     errors_per_code_per_test[code_index][input_index].append(str(e))
                 pbar.update(1)
     
-    return outputs_per_code_per_test, errors_per_code_per_test
+    return input_indices, full_prompts, errors_per_code_per_test
 
         
 def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str], max_tries: int, get_response: callable):
     """ 
     Parallel calling of prompt function
-    TBD: paralleize per-test input inferences 
+    To be checked ...
     """
     outputs_per_code_per_test = defaultdict(lambda: defaultdict(list))
     errors_per_code_per_test = defaultdict(lambda: defaultdict(list))
@@ -384,7 +386,7 @@ def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str
     input_indices = []
     
     # Multi-thread execution (I love GPU parallelism better now ... this is just frustratingly slow)    
-    outputs_per_code_per_test_concurrent, errors_per_code_per_test_concurrent = process_all_inputs(codes, input_dicts, max_tries)
+    input_indices, full_prompts, errors_per_code_per_test = process_all_inputs(codes, input_dicts, max_tries)
     
     # total_iterations = len(input_dicts) * len(codes)
     # with tqdm(total=total_iterations, desc="Executing Node to generate prompts ...") as pbar:
@@ -411,7 +413,7 @@ def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str
     #             pbar.update(1)
             
     desc_str = f"Executing prompt node with LLM in parallel with batch size {len(prompts)}"
-    responses = get_response(prompts, desc=desc_str)
+    responses = get_response(full_prompts, desc=desc_str)
     
     for (response, (input_index, code_index)) in zip(responses, input_indices):
         try:
