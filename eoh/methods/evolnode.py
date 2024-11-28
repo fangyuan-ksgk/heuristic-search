@@ -135,12 +135,6 @@ def _check_alignment_with_llm_sequential(pred_output: dict, target_output: dict,
     return False, error_msg
 
 
-def _require_llm_metric(name: str, value: str, custom_metric_map: Optional[Dict[str, Callable]] = None) -> bool: 
-    if custom_metric_map is not None and name in custom_metric_map:
-        return True
-    else:
-        return require_llm_metric(value)
-
 
 def _check_alignment_with_metric_parallel(output_per_code_per_test: Dict[int, Dict[int, Dict]],
                                           errors_per_code_per_test: Dict[int, Dict[int, List[str]]],
