@@ -2,7 +2,7 @@ import types
 import importlib.util
 import sys
 from .meta_prompt import extract_json_from_text
-from typing import Any, get_type_hints, Dict, List
+from typing import Any, get_type_hints, Dict, List, Union
 import inspect
 from typing import get_origin, get_args
 import ast 
@@ -197,15 +197,74 @@ def _call_func_prompt(input_data: Dict[str, Any], code: str, get_response: calla
     finally:
         # Ensure the alarm is disabled even if an error occurs
         signal.alarm(0)
+        
+
+def _call_func_prompt_batch(input_datas: Union[list, dict], code: str, get_response: callable, max_tries: int = 3):
+    """ 
+    Batch prompt forward propagation
+    - Returns a dictionary with indices as keys to maintain input-output correspondence
+    """
+    if isinstance(input_datas, dict):
+        input_datas = [input_datas] 
+        
+    input_datas = input_datas * max_tries
+    input_indices = [idx for idx, _ in enumerate(input_datas)] * max_tries
+    error_messages = ["" for _ in range(len(input_indices))]
+
+    valid_prompt_indices, valid_prompts = [], []
+    for idx, input_data in zip(input_indices, input_datas):
+        # Set up the timeout handler
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(3)  # Set timeout to 3 seconds
+        try:
+            mod = types.ModuleType('dynamic_module')
+            exec(code, mod.__dict__)
+            func_name = "generate_prompt" 
+            prompt_func = mod.__dict__[func_name]
+            prompt = prompt_func(project_description=input_data['project_description'])
+            if prompt and isinstance(prompt, str):
+                valid_prompt_indices.append(idx)
+                valid_prompts.append(prompt)
+        except Exception as e:
+            error_messages[idx] += str(e)
+            continue
+        finally:
+            signal.alarm(0)
+            
+    print("Valid Prompts: ", len(valid_prompts))
+    # print(valid_prompts[1])
+    
+    responses = get_response(valid_prompts)
+    
+    valid_response_indices, valid_output_dicts = [], []
+    for (idx, response) in zip(valid_prompt_indices, responses):
+        try:
+            output_dict = extract_json_from_text(response)
+            if output_dict:
+                valid_response_indices.append(idx)
+                valid_output_dicts.append(output_dict)
+        except Exception:
+            error_messages[idx] += "Error extracting JSON from response"
+            continue
+         
+    output_dicts = [{} for _ in range(len(input_indices) // max_tries)]
+    for idx, output_dict in zip(valid_response_indices, valid_output_dicts):
+        output_dicts[idx // max_tries] = output_dict # does not matter which one we use, anything output is fine
+        
+    return output_dicts, "\n".join(error_messages)
+
 
 def call_func_prompt(input_data: Dict[str, Any], code: str, get_response: callable):
     """ 
     With Error Message Output
+    To be replaced by _call_func_prompt_batch 
     """
     try:
         return _call_func_prompt(input_data, code, get_response), ""
     except Exception as e:
         return None, str(e)
+    
+    
 
 
 class Timeout_:
@@ -230,6 +289,7 @@ def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str
     
     prompts = []
     input_indices = []
+    
     for (input_index, input_dict) in enumerate(input_dicts):
         for (code_index, code) in enumerate(codes):
             mod = types.ModuleType('dynamic_module')
@@ -240,8 +300,13 @@ def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str
                     assert func_name in mod.__dict__, f"Function {func_name} not found in code #{code_index}"
                     prompt_func = mod.__dict__[func_name]
                     prompt = prompt_func(**input_dict)
-                    prompts.append(prompt)
-                    input_indices.append((input_index, code_index))
+                    
+                    for _ in range(max_tries): # number of trials
+                        prompts.append(prompt)
+                        input_indices.append((input_index, code_index))
+                        
+                errors_per_code_per_test[code_index][input_index] = [] # empty error when one trial works 
+                        
             except Exception as e:
                 errors_per_code_per_test[code_index][input_index].append(str(e))
             
