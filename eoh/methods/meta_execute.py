@@ -2,7 +2,7 @@ import types
 import importlib.util
 import sys
 from .meta_prompt import extract_json_from_text
-from typing import Any, get_type_hints, Dict, List, Union
+from typing import Any, get_type_hints, Dict, List, Union, Optional
 import inspect
 from typing import get_origin, get_args
 import ast 
@@ -11,6 +11,8 @@ import signal
 from tqdm import tqdm
 import re 
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import concurrent.futures
 
 
 def check_type(value, expected_type):
@@ -280,6 +282,96 @@ class Timeout_:
         signal.alarm(0)
         
         
+
+def process_single_input(code, input_tuple, max_tries):
+    input_index, input_dict = input_tuple
+    prompts = []
+    errors = []
+    
+    mod = types.ModuleType('dynamic_module')
+    try:
+        # Remove the Timeout_ wrapper
+        exec(code, mod.__dict__)
+        func_name = "generate_prompt"
+        assert func_name in mod.__dict__, f"Function {func_name} not found in code"
+        prompt_func = mod.__dict__[func_name]
+      
+        prompt = prompt_func(**input_dict)               
+        for _ in range(max_tries):
+            prompts.append(prompt)
+        errors = []
+    except Exception as e:
+        errors.append(str(e))
+        prompts = []
+        
+    return input_index, prompts, errors
+
+
+def process_single_input_with_timeout(code, input_tuple, max_tries, timeout: int = 3):
+    input_index, input_dict = input_tuple
+    prompts = []
+    errors = []
+    
+    mod = types.ModuleType('dynamic_module')
+    try:
+        # Remove the Timeout_ wrapper
+        exec(code, mod.__dict__)
+        func_name = "generate_prompt"
+        assert func_name in mod.__dict__, f"Function {func_name} not found in code"
+        prompt_func = mod.__dict__[func_name]
+        
+        with Timeout_(seconds=timeout):
+            prompt = prompt_func(**input_dict)               
+        
+        for _ in range(max_tries):
+            prompts.append(prompt)
+        errors = []
+    except Exception as e:
+        errors.append(str(e))
+        prompts = []
+        
+    return input_index, prompts, errors
+
+
+def process_all_inputs(codes, input_dicts, max_tries, timeout: int = 3):
+    outputs_per_code_per_test = defaultdict(lambda: defaultdict(list))
+    errors_per_code_per_test = defaultdict(lambda: defaultdict(list))
+    
+    total_iterations = len(codes) * len(input_dicts)
+    tasks = [
+        (code_index, code, input_index, input_dict) 
+        for code_index, code in enumerate(codes)
+        for input_index, input_dict in enumerate(input_dicts)
+    ]
+    
+    with ThreadPoolExecutor(max_workers=min(32, total_iterations)) as executor:
+        futures = {
+            executor.submit(
+                process_single_input, 
+                code, 
+                (input_index, input_dict), 
+                max_tries
+            ): (code_index, input_index)
+            for code_index, code, input_index, input_dict in tasks
+        }
+        
+        with tqdm(total=total_iterations, desc=f"Executing {total_iterations} Node functions to generate prompts ...") as pbar:
+            for future in as_completed(futures):
+                code_index, input_index = futures[future]
+                try:
+                    # Add timeout here
+                    input_index, prompts, errors = future.result(timeout=timeout)
+                    outputs_per_code_per_test[code_index][input_index].extend(prompts)
+                    errors_per_code_per_test[code_index][input_index].extend(errors)
+                except concurrent.futures.TimeoutError:
+                    errors_per_code_per_test[code_index][input_index].append(f"Execution timed out after {timeout} seconds")
+                except Exception as e:
+                    errors_per_code_per_test[code_index][input_index].append(str(e))
+                pbar.update(1)
+    
+    return outputs_per_code_per_test, errors_per_code_per_test
+
+        
 def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str], max_tries: int, get_response: callable):
     """ 
     Parallel calling of prompt function
@@ -291,31 +383,32 @@ def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str
     prompts = []
     input_indices = []
     
-    # add a progress bar for the execution here, I suspect this is quite slow ...
+    # Multi-thread execution (I love GPU parallelism better now ... this is just frustratingly slow)    
+    outputs_per_code_per_test_concurrent, errors_per_code_per_test_concurrent = process_all_inputs(codes, input_dicts, max_tries)
     
-    total_iterations = len(input_dicts) * len(codes)
-    with tqdm(total=total_iterations, desc="Executing Node to generate prompts ...") as pbar:
-        for (input_index, input_dict) in enumerate(input_dicts):
-            for (code_index, code) in enumerate(codes):
-                mod = types.ModuleType('dynamic_module')
-                try:
-                    with Timeout_(3):  # 3-second timeout
-                        exec(code, mod.__dict__)
-                        func_name = "generate_prompt"
-                        assert func_name in mod.__dict__, f"Function {func_name} not found in code #{code_index}"
-                        prompt_func = mod.__dict__[func_name]
-                        prompt = prompt_func(**input_dict)
+    # total_iterations = len(input_dicts) * len(codes)
+    # with tqdm(total=total_iterations, desc="Executing Node to generate prompts ...") as pbar:
+    #     for (input_index, input_dict) in enumerate(input_dicts):
+    #         for (code_index, code) in enumerate(codes):
+    #             mod = types.ModuleType('dynamic_module')
+    #             try:
+    #                 with Timeout_(3):  # 3-second timeout
+    #                     exec(code, mod.__dict__)
+    #                     func_name = "generate_prompt"
+    #                     assert func_name in mod.__dict__, f"Function {func_name} not found in code #{code_index}"
+    #                     prompt_func = mod.__dict__[func_name]
+    #                     prompt = prompt_func(**input_dict)
                         
-                        for _ in range(max_tries): # number of trials
-                            prompts.append(prompt)
-                            input_indices.append((input_index, code_index))
+    #                     for _ in range(max_tries): # number of trials
+    #                         prompts.append(prompt)
+    #                         input_indices.append((input_index, code_index))
                             
-                    errors_per_code_per_test[code_index][input_index] = [] # empty error when one trial works 
+    #                 errors_per_code_per_test[code_index][input_index] = [] # empty error when one trial works 
                             
-                except Exception as e:
-                    errors_per_code_per_test[code_index][input_index].append(str(e))
+    #             except Exception as e:
+    #                 errors_per_code_per_test[code_index][input_index].append(str(e))
                 
-                pbar.update(1)
+    #             pbar.update(1)
             
     desc_str = f"Executing prompt node with LLM in parallel with batch size {len(prompts)}"
     responses = get_response(prompts, desc=desc_str)
