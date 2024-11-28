@@ -207,7 +207,8 @@ def _check_alignment_with_llm_parallel(output_per_code_per_test: Dict[int, Dict[
     indices = indices * batch_size
             
     # Get LLM responses
-    responses = get_response(prompts)
+    desc_str = f"Running LLM-based alignment check in parallel with batch size {len(prompts)}"
+    responses = get_response(prompts, desc=desc_str)
 
     # Pack response into scores dictionary
     scores_per_code_per_test = defaultdict(lambda: defaultdict(list))
@@ -447,7 +448,9 @@ class EvolNode:
         prompt_content += "\nIdea: " + feedback # External Guidance (perhaps we should reddit / stackoverflow this thingy)
         
         prompts = [prompt_content] * batch_size
-        responses = self.get_response(prompts)
+        
+        desc_str = f"Running evolution strategy {method} in parallel with batch size {batch_size}" # Added description string for progress bar
+        responses = self.get_response(prompts, desc=desc_str)
         return responses
 
     def _evolve(self, method: str, parents: list = None, feedback: str = "", batch_size: int = 5):
@@ -480,12 +483,14 @@ class EvolNode:
             self.query_nodes(ignore_self=replace, self_func_name=self.meta_prompt.func_name)
         query_end_time = time.time()
         query_time = query_end_time - start_time
+        print(f"     :: Query time: {query_time:.2f}s")
         
         
         # Evolve many times
-        reasonings, codes = self._evolve(method, parents, batch_size=batch_size)
+        reasonings, codes = self._evolve(method, parents, feedback=feedback, batch_size=batch_size)
         evolve_end_time = time.time()
         evolve_time = evolve_end_time - query_end_time
+        print(f"     :: Evolution time: {evolve_time:.2f}s")
         
         self.reasonings = reasonings
         self.codes = codes
@@ -660,6 +665,10 @@ class EvolNode:
     def _evaluate_fitness(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, codes: Optional[List[str]] = [], 
                            max_tries: int = 3, num_runs: int = 1, custom_metric_map: Optional[Dict[str, Callable]] = None) -> Fitness:
         
+        """ 
+        TBD: Parallel evaluation of all test cases
+        """
+        
         if len(codes) == 0: 
             codes = [self.code] 
         
@@ -691,6 +700,7 @@ class EvolNode:
         target_outputs = [case[1] for case in test_cases]
         score_per_code_per_test, evaluate_errors_per_code_per_test = check_alignment_parallel(output_per_code_per_test, test_inputs, target_outputs, 
                                                                                               self.get_response, batch_size=num_runs, custom_metric_map=custom_metric_map)
+        
         errors_per_code = combine_errors(evaluate_errors_per_code_per_test, errors_per_code_per_test)
         
         fitness_per_code = self.summarize_fitness(codes, score_per_code_per_test, output_per_code_per_test, test_inputs, max_tries)

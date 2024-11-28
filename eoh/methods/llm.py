@@ -277,7 +277,7 @@ def get_batch_vllm_func(name: str = "") -> Callable:
 # RundPod vLLM endpoint #
 #########################
 
-def get_async_vllm_endpoint(endpoint_id: str, runpod_api_key: str) -> Callable:
+def get_async_vllm_endpoint(endpoint_id: str, runpod_api_key: str, desc: str = "Processing LLM queries") -> Callable:
     async def get_completion(client, session, query: str, system_prompt: str = "You are a Turing award winner."):
         try:
             response = await client.chat.completions.create(
@@ -303,7 +303,7 @@ def get_async_vllm_endpoint(endpoint_id: str, runpod_api_key: str) -> Callable:
                 # Create tasks for parallel execution
                 tasks = [get_completion(client, session, query, system_prompt) for query in query_list]
                 # Run all tasks concurrently with progress bar
-                responses = await tqdm_asyncio.gather(*tasks, desc="Processing LLM queries")
+                responses = await tqdm_asyncio.gather(*tasks, desc=desc)
                 
                 elapsed_time = time.time() - start_time
                 error_count = responses.count("")

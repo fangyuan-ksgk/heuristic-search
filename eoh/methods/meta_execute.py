@@ -310,7 +310,8 @@ def call_func_prompt_parallel(input_dicts: List[Dict[str, Any]], codes: List[str
             except Exception as e:
                 errors_per_code_per_test[code_index][input_index].append(str(e))
             
-    responses = get_response(prompts)
+    desc_str = f"Executing prompt node with LLM in parallel with batch size {len(prompts)}"
+    responses = get_response(prompts, desc=desc_str)
     
     for (response, (input_index, code_index)) in zip(responses, input_indices):
         try:
