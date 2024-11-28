@@ -48,6 +48,51 @@ def load_tf_data(data_path: str = "../data/processed_data.json", split_ratio: fl
     return train_data, test_data 
 
 
+from typing import Union, Callable
+
+
+def tf_label_metric(target_labels: Union[str, list], pred_labels: Union[str, list],
+                    beta: float = 5):
+    """ 
+    "No" prediction > "Yes" prediction 
+    Recall > Precision
+    Weighted score (recall + precision) with beta : 1 as weights 
+    """
+    if isinstance(target_labels, str):
+        target_labels = [target_labels]
+    if isinstance(pred_labels, str): 
+        pred_labels = [pred_labels]
+        
+    # Convert labels to lowercase for case-insensitive comparison
+    target_labels = [label.lower() for label in target_labels]
+    pred_labels = [label.lower() for label in pred_labels]
+    
+    # For single label comparison, we can simplify:
+    # true positive: target is "no" and prediction is "no"
+    true_pos = sum(1 for t, p in zip(target_labels, pred_labels) if t == "no" and p == "no")
+    
+    # Calculate precision and recall
+    # If target is "no", recall denominator is 1, else 0
+    # If pred is "no", precision denominator is 1, else 0
+    no_targets = sum(1 for t in target_labels if t == "no")
+    no_preds = sum(1 for p in pred_labels if p == "no")
+    
+    no_precision = true_pos / no_preds if no_preds > 0 else 0
+    no_recall = true_pos / no_targets if no_targets > 0 else 0
+    
+    # Simple weighted score using beta
+    weighted_score = ((1 / (1 + beta)) * no_precision + (beta / (1 + beta)) * no_recall) if (no_precision + no_recall) > 0 else 0.0
+    
+    err_msg = []
+    for t, p in zip(target_labels, pred_labels):
+        if t != p: 
+            err_msg.append(f"Target is '{t}', but prediction is '{p}'") 
+        
+    return weighted_score, "\n".join(err_msg) if err_msg else ""
+
+tf_metric_map = {"label": tf_label_metric}
+
+
 # Worth including diversity in response template
 RESPONSE_TEMPLATES = [
     "Decision: {label}\n\nComment: {comment}",

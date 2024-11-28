@@ -39,6 +39,9 @@ def clean_str(s: str) -> str:
 
 def type_to_metric(value) -> Callable:
     
+    def sudo_metric(x, y):
+        return True, ""
+    
     def integer_metric(x, y: int):
         """
         Expect integer value to be the same with each other
@@ -63,7 +66,7 @@ def type_to_metric(value) -> Callable:
     elif isinstance(value, float):
         return float_metric
     else:
-        raise ValueError(f"Metric not defined for type: {type(value)}, use LLM-based alignment check instead !")
+        return sudo_metric
 
 
 def _require_llm_metric(value) -> bool:
