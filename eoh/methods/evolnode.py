@@ -594,7 +594,9 @@ class EvolNode:
         return output_dict, error_msg
     
     
-    def call_prompt_function_parallel(self, test_inputs: List[Dict], codes: Optional[List[str]], max_tries: int = 3):
+    def call_prompt_function_parallel(self, test_inputs: List[Dict], codes: Optional[List[str]] = None, max_tries: int = 3):
+        if codes is None:
+            codes = [self.code]
         return call_func_prompt_parallel(test_inputs, codes, max_tries, self.get_response)
     
     
@@ -798,25 +800,56 @@ class EvolNode:
     def m2(self, parents: list):
         return self._evolve('m2', parents)
     
-    def __call__(self, inputs, max_attempts: int = 3, batch_inference: bool = True):
-        """ 
-        TBD: Inheritance to accumulated codebase with 'file_path' | Graph Topology naturally enables inheritance
-        TBD: Stricter input / output type checking to ensure composibility
-        """
-            
+    def _rectify_input_dict_names(self, input_dict: dict):
         input_types = self.meta_prompt.input_types
-        
         if (len(input_types) == len(list(set(input_types)))):
             new_input = {}
             param_names = self.meta_prompt.inputs
-            for param_name, value in inputs.items():
+            for param_name, value in input_dict.items():
                 if param_name in param_names:
                     new_input[param_name] = value
                 else:
                     for idx, type_hint in enumerate(input_types):
                         if type(value).__name__ == type_hint:
                             new_input[param_names[idx]] = value
-            inputs = new_input
+            input_dict = new_input    
+        return input_dict
+    
+    def _rectify_input_names(self, inputs: Union[dict, list]):
+        if isinstance(inputs, dict):
+            return self._rectify_input_dict_names(inputs)
+        elif isinstance(inputs, list):
+            return [self._rectify_input_dict_names(input_dict) for input_dict in inputs]
+    
+    def batch_inference(self, inputs: list, codes: Optional[List[str]] = None, max_tries: int = 3):
+        """ 
+        Should be used in Batch Evaluation
+        """
+
+        # Input name rectification        
+        inputs = self._rectify_input_names(inputs)
+        
+        if codes is None:
+            codes = [self.code]
+
+        # Batch inference 
+        if self.meta_prompt.mode == PromptMode.CODE:
+            output_per_code_per_test, errors_per_code_per_test = self.call_code_function_parallel(inputs, codes)
+        elif self.meta_prompt.mode == PromptMode.PROMPT:
+            output_per_code_per_test, errors_per_code_per_test = self.call_prompt_function_parallel(inputs, codes, max_tries)
+        else:
+            raise ValueError(f"Unknown mode: {self.meta_prompt.mode}")
+        
+        return output_per_code_per_test, errors_per_code_per_test
+        
+    
+    def __call__(self, inputs, max_attempts: int = 3, batch_inference: bool = True):
+        """ 
+        TBD: Inheritance to accumulated codebase with 'file_path' | Graph Topology naturally enables inheritance
+        TBD: Stricter input / output type checking to ensure composibility
+        """
+            
+        inputs = self._rectify_input_names(inputs)
             
         if self.meta_prompt.mode == PromptMode.CODE:
             output_value, err_msg = call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None) # TODO: extend to multiple outputs ...
