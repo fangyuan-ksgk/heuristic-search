@@ -250,6 +250,7 @@ const SimpleDag = () => {
       reasoning: '',
       inputTypes: [],
       outputTypes: [],
+      fitness: 0.0,
     };
     
     // Add new node and create connection
@@ -285,11 +286,17 @@ const SimpleDag = () => {
       
       setStartPan({ x: e.clientX, y: e.clientY });
     }
+    handleConnectionMove(e);
   };
 
   const handleSvgMouseUp = () => {
     setIsPanning(false);
     handleMouseUp();
+    if (isDrawingConnection) {
+      setIsDrawingConnection(false);
+      setConnectionStart(null);
+      setHoveredNode(null);
+    }
   };
 
   // Add zoom handler
@@ -324,6 +331,54 @@ const SimpleDag = () => {
         height: newHeight
       };
     });
+  };
+
+  // Add new state for connection drawing
+  const [isDrawingConnection, setIsDrawingConnection] = useState(false);
+  const [connectionStart, setConnectionStart] = useState(null);
+  const [tempConnectionEnd, setTempConnectionEnd] = useState({ x: 0, y: 0 });
+
+  // Add new handler for removing nodes
+  const handleRemoveNode = (nodeId) => {
+    setNodes(nodes.filter(node => node.id !== nodeId));
+    setConnections(connections.filter(conn => 
+      conn.source !== nodeId && conn.target !== nodeId
+    ));
+  };
+
+  // Add connection drawing handlers
+  const handleConnectionMove = (e) => {
+    if (isDrawingConnection) {
+      const svgRect = svgRef.current.getBoundingClientRect();
+      const scale = svgRect.width / viewBox.width;
+      const x = (e.clientX - svgRect.left) / scale + viewBox.x;
+      const y = (e.clientY - svgRect.top) / scale + viewBox.y;
+      setTempConnectionEnd({ x, y });
+
+      // Find node under cursor
+      const point = { x, y };
+      const nodeUnderCursor = nodes.find(node => 
+        node.id !== connectionStart.id && // Ignore source node
+        isPointInNodeBounds(point, node)
+      );
+      
+      if (nodeUnderCursor) {
+        setHoveredNode(nodeUnderCursor.id);
+      } else {
+        setHoveredNode(null);
+      }
+    }
+  };
+
+  // Add a small buffer constant for hit detection
+  const HIT_DETECTION_BUFFER = 20; // pixels
+
+  // Add helper function to check if point is inside node bounds
+  const isPointInNodeBounds = (point, node) => {
+    return point.x >= (node.x - nodeWidth/2 - HIT_DETECTION_BUFFER) &&
+           point.x <= (node.x + nodeWidth/2 + HIT_DETECTION_BUFFER) &&
+           point.y >= (node.y - nodeHeight/2 - HIT_DETECTION_BUFFER) &&
+           point.y <= (node.y + nodeHeight/2 + HIT_DETECTION_BUFFER);
   };
 
   return (
@@ -378,17 +433,35 @@ const SimpleDag = () => {
             key={node.id}
             onMouseDown={(e) => handleMouseDown(e, node)}
             onClick={(e) => handleNodeClick(e, node)}
-            onMouseEnter={() => setHoveredNode(node.id)}
-            onMouseLeave={() => setHoveredNode(null)}
+            onMouseEnter={() => !isDrawingConnection && setHoveredNode(node.id)}
+            onMouseLeave={() => !isDrawingConnection && setHoveredNode(null)}
+            onMouseUp={(e) => {
+              if (isDrawingConnection && hoveredNode === node.id && connectionStart) {
+                e.stopPropagation();
+                // Create connection from source to target
+                const newConnection = {
+                  source: connectionStart.id,  // Node where → was clicked
+                  target: node.id             // Node where we dropped
+                };
+                setConnections(prevConnections => [...prevConnections, newConnection]);
+                
+                // Clean up
+                setIsDrawingConnection(false);
+                setConnectionStart(null);
+                setHoveredNode(null);
+              }
+            }}
           >
-            {/* Node rectangle */}
+            {/* Node rectangle with highlight when hovered during connection */}
             <rect
               x={node.x - nodeWidth/2}
               y={node.y - nodeHeight/2}
               width={nodeWidth}
               height={nodeHeight}
               rx={cornerRadius}
-              className="fill-white stroke-gray-300"
+              className={`fill-white stroke-gray-300 ${
+                isDrawingConnection && hoveredNode === node.id ? 'stroke-blue-500 stroke-2' : ''
+              }`}
             />
             
             {/* Node name */}
@@ -402,18 +475,18 @@ const SimpleDag = () => {
             
             {/* Node status pill instead of circle */}
             <rect
-              x={node.x + nodeWidth*92/400}  // Adjusted position
+              x={node.x + nodeWidth*92/400}
               y={node.y - nodeHeight*20/500}
-              width="32"                 // Adjust width as needed
-              height="22"                // Adjust height as needed
-              rx="10"                    // Rounded corners
+              width="32"
+              height="22"
+              rx="10"
               className="fill-white"
               stroke={getScoreColor(node.fitness)}
               strokeWidth="1.5"
             />
             <text
               x={node.x + nodeWidth/3}
-              y={node.y + nodeHeight*130/500}  // Adjusted y position
+              y={node.y + nodeHeight*130/500}
               className="text-center"
               fill={getScoreColor(node.fitness)}
               textAnchor="middle"
@@ -423,32 +496,96 @@ const SimpleDag = () => {
               {node.fitness === undefined || node.fitness === null || node.fitness === 0 ? "🚧" : `${Math.round(node.fitness * 100)}%`}
             </text>
 
-            {/* Add button - only show on hover */}
-            {hoveredNode === node.id && (
-              <g
-                transform={`translate(${node.x + nodeWidth/2 + 10}, ${node.y})`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleAddNode(node);
-                }}
-                className="cursor-pointer"
-              >
-                <circle
-                  r="12"
-                  className="fill-white stroke-gray-300"
-                />
-                <text
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className="text-gray-500 text-lg"
-                  fontSize="20"
+            {/* Control buttons - show on hover */}
+            {hoveredNode === node.id && !isDrawingConnection && (
+              <>
+                {/* Add node button (right) */}
+                <g
+                  transform={`translate(${node.x + nodeWidth/2 + 10}, ${node.y})`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAddNode(node);
+                  }}
+                  className="cursor-pointer"
                 >
-                  +
-                </text>
-              </g>
+                  <circle
+                    r="12"
+                    className="fill-white"
+                    stroke={getScoreColor(node.fitness)}
+                  />
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className="text-gray-500 text-lg"
+                    fontSize="20"
+                  >
+                    +
+                  </text>
+                </g>
+
+                {/* Remove node button (×) */}
+                <g
+                  transform={`translate(${node.x - nodeWidth/4}, ${node.y + nodeHeight/2 + 10})`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveNode(node.id);
+                  }}
+                  className="cursor-pointer"
+                >
+                  <circle
+                    r="12"
+                    className="fill-white stroke-red-500"
+                  />
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className="fill-red-500 text-lg"
+                    fontSize="20"
+                  >
+                    ×
+                  </text>
+                </g>
+
+                {/* Forward connection button (→) */}
+                <g
+                  transform={`translate(${node.x}, ${node.y + nodeHeight/2 + 10})`}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setIsDrawingConnection(true);
+                    setConnectionStart(node);
+                    setTempConnectionEnd({ x: node.x, y: node.y });
+                  }}
+                  className="cursor-crosshair"
+                >
+                  <circle
+                    r="12"
+                    className="fill-white stroke-blue-500"
+                  />
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className="fill-blue-500 text-lg"
+                    fontSize="20"
+                  >
+                    →
+                  </text>
+                </g>
+              </>
             )}
           </g>
         ))}
+
+        {/* Add visual feedback for the temporary connection */}
+        {isDrawingConnection && connectionStart && (
+          <path
+            d={`M ${tempConnectionEnd.x},${tempConnectionEnd.y} L ${connectionStart.x},${connectionStart.y}`}
+            stroke={hoveredNode ? "#3b82f6" : "#94a3b8"} // Blue when over valid target
+            strokeWidth="2"
+            strokeDasharray="5,5"
+            fill="none"
+            markerEnd="url(#arrowhead)"
+          />
+        )}
       </svg>
 
       {editingNode && (
