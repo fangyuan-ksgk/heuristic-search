@@ -41,6 +41,17 @@ const SimpleDag = () => {
   const nodeHeight = 40;
   const cornerRadius = 8;
 
+  // Add new state for hover tracking
+  const [hoveredNode, setHoveredNode] = useState(null);
+
+  // Initialize connections with Node 1 -> Node 2
+  const [connections, setConnections] = useState([
+    {
+      source: 1,  // Node 1's ID
+      target: 2   // Node 2's ID
+    }
+  ]);
+
   const handleMouseDown = (e, node) => {
     setIsDragging(true);
     setDraggedNode(node);
@@ -127,6 +138,31 @@ const SimpleDag = () => {
     return score >= 60 ? '#22c55e' : '#ef4444'; // green-600 : red-500
   };
 
+  // Modify handleAddNode to create a connection
+  const handleAddNode = (sourceNode) => {
+    const newNodeId = nodes.length + 1;
+    const newNode = {
+      id: newNodeId,
+      x: sourceNode.x + 300,
+      y: sourceNode.y,
+      name: `Node ${newNodeId}`,
+      target: '',
+      input: [],
+      output: [],
+      code: '',
+      reasoning: '',
+      inputTypes: [],
+      outputTypes: [],
+    };
+    
+    // Add new node and create connection
+    setNodes([...nodes, newNode]);
+    setConnections([...connections, {
+      source: sourceNode.id,
+      target: newNodeId
+    }]);
+  };
+
   return (
     <svg 
       className="w-full h-screen bg-gray-50"
@@ -150,20 +186,32 @@ const SimpleDag = () => {
         </marker>
       </defs>
 
-      {/* Edge */}
-      <path
-        d={calculatePath(nodes[0], nodes[1])}
-        stroke="#94a3b8"
-        strokeWidth="2"
-        fill="none"
-        markerEnd="url(#arrowhead)"
-      />
+      {/* Modified Edges - now using connections array */}
+      {connections.map((connection, index) => {
+        const startNode = nodes.find(node => node.id === connection.source);
+        const endNode = nodes.find(node => node.id === connection.target);
+        if (startNode && endNode) {
+          return (
+            <path
+              key={`edge-${connection.source}-${connection.target}`}
+              d={calculatePath(startNode, endNode)}
+              stroke="#94a3b8"
+              strokeWidth="2"
+              fill="none"
+              markerEnd="url(#arrowhead)"
+            />
+          );
+        }
+        return null;
+      })}
 
-      {/* Nodes */}
+      {/* Nodes - Modified to include hover detection and plus button */}
       {nodes.map(node => (
         <g 
           key={node.id}
           transform={`translate(${node.x - nodeWidth/2},${node.y - nodeHeight/2})`}
+          onMouseEnter={() => setHoveredNode(node.id)}
+          onMouseLeave={() => setHoveredNode(null)}
         >
           {/* Node rectangle */}
           <rect
@@ -190,6 +238,41 @@ const SimpleDag = () => {
             {node.name}
           </text>
 
+          {/* Add Button - only show when node is hovered */}
+          {hoveredNode === node.id && (
+            <g 
+              transform={`translate(${nodeWidth + 10}, ${nodeHeight/2})`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAddNode(node);
+              }}
+              className="cursor-pointer"
+            >
+              <circle
+                r="12"
+                fill="white"
+                stroke="#94a3b8"
+                strokeWidth="2"
+              />
+              <line
+                x1="-6"
+                y1="0"
+                x2="6"
+                y2="0"
+                stroke="#94a3b8"
+                strokeWidth="2"
+              />
+              <line
+                x1="0"
+                y1="-6"
+                x2="0"
+                y2="6"
+                stroke="#94a3b8"
+                strokeWidth="2"
+              />
+            </g>
+          )}
+          
           {/* Modified Badge with larger circle */}
           <g transform={`translate(${nodeWidth - 30}, ${nodeHeight - 5})`}>
             <circle 
