@@ -381,8 +381,50 @@ const SimpleDag = () => {
            point.y <= (node.y + nodeHeight/2 + HIT_DETECTION_BUFFER);
   };
 
+  // Add these state handlers at the top with other useState declarations
+  const [fileInput, setFileInput] = useState(null);
+
+  // Add this function to handle JSON file loading
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const jsonData = JSON.parse(e.target.result);
+          // Assuming the JSON has 'nodes' and 'connections' arrays
+          if (jsonData.nodes && jsonData.connections) {
+            setNodes(jsonData.nodes);
+            setConnections(jsonData.connections);
+          } else {
+            console.error('Invalid JSON format: missing nodes or connections');
+          }
+        } catch (error) {
+          console.error('Error parsing JSON:', error);
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
   return (
     <>
+      <div className="absolute top-4 left-4 z-10">
+        <input
+          type="file"
+          accept=".json"
+          onChange={handleFileUpload}
+          className="hidden"
+          id="json-upload"
+        />
+        <label
+          htmlFor="json-upload"
+          className="bg-white px-4 py-2 rounded-md shadow-sm border border-gray-300 cursor-pointer hover:bg-gray-50"
+        >
+          Load JSON
+        </label>
+      </div>
+      
       <svg 
         ref={svgRef}
         className="w-full h-screen"
