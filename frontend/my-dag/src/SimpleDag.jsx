@@ -374,7 +374,13 @@ const SimpleDag = () => {
 
         {/* Nodes - Modified to include hover detection and plus button */}
         {nodes.map(node => (
-          <g key={node.id}>
+          <g 
+            key={node.id}
+            onMouseDown={(e) => handleMouseDown(e, node)}
+            onClick={(e) => handleNodeClick(e, node)}
+            onMouseEnter={() => setHoveredNode(node.id)}
+            onMouseLeave={() => setHoveredNode(null)}
+          >
             {/* Node rectangle */}
             <rect
               x={node.x - nodeWidth/2}
@@ -394,26 +400,53 @@ const SimpleDag = () => {
               {node.name}
             </text>
             
-            {/* Node status circle with emoji or percentage */}
-            <circle
-              cx={node.x + nodeWidth/3}
-              cy={node.y + nodeHeight/5}
-              r="15"
+            {/* Node status pill instead of circle */}
+            <rect
+              x={node.x + nodeWidth*92/400}  // Adjusted position
+              y={node.y - nodeHeight*20/500}
+              width="32"                 // Adjust width as needed
+              height="22"                // Adjust height as needed
+              rx="10"                    // Rounded corners
               className="fill-white"
               stroke={getScoreColor(node.fitness)}
               strokeWidth="1.5"
             />
             <text
               x={node.x + nodeWidth/3}
-              y={node.y + nodeHeight/4}
+              y={node.y + nodeHeight*130/500}  // Adjusted y position
               className="text-center"
               fill={getScoreColor(node.fitness)}
               textAnchor="middle"
               dominantBaseline="middle"
-              fontSize={node.fitness === undefined || node.fitness === null || node.fitness === 0 ? "14" : "11"}
+              fontSize={node.fitness === undefined || node.fitness === null || node.fitness === 0 ? "13" : "11"}
             >
               {node.fitness === undefined || node.fitness === null || node.fitness === 0 ? "🚧" : `${Math.round(node.fitness * 100)}%`}
             </text>
+
+            {/* Add button - only show on hover */}
+            {hoveredNode === node.id && (
+              <g
+                transform={`translate(${node.x + nodeWidth/2 + 10}, ${node.y})`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAddNode(node);
+                }}
+                className="cursor-pointer"
+              >
+                <circle
+                  r="12"
+                  className="fill-white stroke-gray-300"
+                />
+                <text
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="text-gray-500 text-lg"
+                  fontSize="20"
+                >
+                  +
+                </text>
+              </g>
+            )}
           </g>
         ))}
       </svg>
