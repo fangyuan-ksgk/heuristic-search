@@ -167,13 +167,20 @@ const SimpleDag = () => {
     }
   };
 
-  const handleNodeUpdate = (updatedProperties) => {
-    setNodes(nodes.map(node => 
-      node.id === editingNode.id 
-        ? { ...node, ...updatedProperties }
-        : node
-    ));
-    setEditingNode(null);
+  const handleNodeUpdate = (nodeId, updatedNode) => {
+    // Update local state first
+    const updatedNodes = nodes.map(node => 
+        node.id === nodeId ? {...node, ...updatedNode} : node
+    );
+    setNodes(updatedNodes);
+
+    // Send complete state to backend
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            nodes: updatedNodes,
+            connections: connections  // Send current connections too
+        }));
+    }
   };
 
   // Calculate the path for the edge including the arrow
@@ -235,30 +242,51 @@ const SimpleDag = () => {
     }
   };
 
-  // Modify handleAddNode to create a connection
+  // Modify handleAddNode to send the new node to backend
   const handleAddNode = (sourceNode) => {
     const newNodeId = nodes.length + 1;
     const newNode = {
-      id: newNodeId,
-      x: sourceNode.x + 300,
-      y: sourceNode.y,
-      name: `Node ${newNodeId}`,
-      target: '',
-      input: [],
-      output: [],
-      code: '',
-      reasoning: '',
-      inputTypes: [],
-      outputTypes: [],
-      fitness: 0.0,
+        id: newNodeId,
+        x: sourceNode.x + 300,
+        y: sourceNode.y,
+        name: `Node ${newNodeId}`,
+        target: '',
+        input: [],
+        output: [],
+        code: '',
+        reasoning: '',
+        inputTypes: [],
+        outputTypes: [],
+        fitness: 0.0,
     };
     
-    // Add new node and create connection
-    setNodes([...nodes, newNode]);
-    setConnections([...connections, {
-      source: sourceNode.id,
-      target: newNodeId
-    }]);
+    const newConnection = {
+        source: sourceNode.id,
+        target: newNodeId
+    };
+    
+    // Update local state
+    const updatedNodes = [...nodes, newNode];
+    const updatedConnections = [...connections, newConnection];
+    setNodes(updatedNodes);
+    setConnections(updatedConnections);
+
+    // Send complete state to backend
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            nodes: updatedNodes,
+            connections: updatedConnections
+        }));
+    }
+  };
+
+  // Also need to send connection updates
+  const handleConnectionUpdate = (newConnection) => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            connection_update: newConnection
+        }));
+    }
   };
 
   // Add pan handlers
@@ -405,6 +433,46 @@ const SimpleDag = () => {
       };
       reader.readAsText(file);
     }
+  };
+
+  // Add WebSocket state
+  const [ws, setWs] = useState(null);
+
+  // Initialize WebSocket connection
+  useEffect(() => {
+    const websocket = new WebSocket('ws://localhost:8000/ws');
+    
+    websocket.onopen = () => {
+      console.log('Connected to Python backend');
+    };
+    
+    websocket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.nodes && data.connections) {
+        setNodes(data.nodes);
+        setConnections(data.connections);
+      }
+    };
+    
+    websocket.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+    
+    setWs(websocket);
+    
+    return () => {
+      websocket.close();
+    };
+  }, []);
+
+  const handleEditNode = (node) => {
+    // Create a copy of the node without modifying its position
+    const nodeToEdit = {
+        ...node,
+        x: node.x,  // Preserve original position
+        y: node.y   // Preserve original position
+    };
+    setEditingNode(nodeToEdit);
   };
 
   return (
@@ -650,7 +718,13 @@ const SimpleDag = () => {
                 <input
                   type="text"
                   value={editingNode.name}
-                  onChange={(e) => setEditingNode({...editingNode, name: e.target.value})}
+                  onChange={(e) => {
+                    // Update local state
+                    setEditingNode({...editingNode, name: e.target.value});
+                    
+                    // Send update to backend
+                    handleNodeUpdate(editingNode.id, { name: e.target.value});
+                  }}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
@@ -660,7 +734,10 @@ const SimpleDag = () => {
                 <input
                   type="text"
                   value={editingNode.target}
-                  onChange={(e) => setEditingNode({...editingNode, target: e.target.value})}
+                  onChange={(e) => {
+                    setEditingNode({...editingNode, target: e.target.value});
+                    handleNodeUpdate(editingNode.id, { target: e.target.value});
+                  }}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
@@ -733,7 +810,38 @@ const SimpleDag = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleNodeUpdate(editingNode)}
+                  onClick={(e) => {
+                    e.preventDefault(); // Prevent any default form submission
+                    console.log("Save button clicked"); // Debug log
+                    
+                    const nodeUpdate = {
+                      id: editingNode.id,
+                      name: editingNode.name,
+                      target: editingNode.target,
+                      code: editingNode.code,
+                      reasoning: editingNode.reasoning,
+                      input: editingNode.input,
+                      output: editingNode.output,
+                      inputTypes: editingNode.inputTypes,
+                      outputTypes: editingNode.outputTypes,
+                      x: editingNode.x,
+                      y: editingNode.y,
+                      fitness: editingNode.fitness
+                    };
+                    
+                    // Send update to backend
+                    handleNodeUpdate(editingNode.id, nodeUpdate);
+                    
+                    // Update local state
+                    setNodes(prevNodes => 
+                      prevNodes.map(node => 
+                        node.id === editingNode.id ? {...node, ...nodeUpdate} : node
+                      )
+                    );
+                    
+                    // Close the edit form
+                    setEditingNode(null);
+                  }}
                   className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700"
                 >
                   Save
