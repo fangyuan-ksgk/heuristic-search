@@ -48,13 +48,14 @@ class TimeoutError(Exception):
 def timeout_handler(signum, frame):
     raise TimeoutError("Function execution timed out (> 3 seconds)")
 
-def _call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_path: str = None) -> Any:
+def _call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_path: str = None, timeout: bool = True) -> Any:
     """ 
     Dynamic calling function defined in 'code' snippet with 3-second timeout
     """
     # Set up the timeout handler
-    signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(3)  # Set timeout to 3 seconds
+    if timeout:
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(3)  # Set timeout to 3 seconds
     
     try:
         if file_path:
@@ -115,12 +116,12 @@ def _call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_
         # Ensure the alarm is disabled even if an error occurs
         signal.alarm(0)
 
-def call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_path: str = None) -> Any:
+def call_func_code(input_data: Dict[str, Any], code: str, func_name: str, file_path: str = None, timeout: bool = True) -> Any:
     """ 
     With Error Message Output
     """
     try:
-        return _call_func_code(input_data, code, func_name, file_path), ""
+        return _call_func_code(input_data, code, func_name, file_path, timeout), ""
     except Exception as e:
         return None, str(e)
 
