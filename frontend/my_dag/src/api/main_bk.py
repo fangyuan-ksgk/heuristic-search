@@ -13,6 +13,8 @@ app.add_middleware(
 )
 
 # Initialize graph state
+# This is the global dictionary which everybody works on :: both human through frontend and AI through backend
+
 graph_state = {
     'nodes': [
         {
