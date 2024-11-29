@@ -11,6 +11,7 @@ const SimpleDag = () => {
       input: [],
       output: [],
       code: '',
+      reasoning: '',
       inputTypes: [],
       outputTypes: [],
     },
@@ -23,6 +24,7 @@ const SimpleDag = () => {
       input: [],
       output: [],
       code: '',
+      reasoning: '',
       inputTypes: [],
       outputTypes: [],
     }
@@ -196,8 +198,8 @@ const SimpleDag = () => {
       {/* Add the edit modal */}
       {editingNode && (
         <foreignObject x="0" y="0" width="100%" height="100%">
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-            <div className="bg-white p-6 rounded-lg shadow-xl max-w-lg w-full">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center overflow-y-auto">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-lg w-full my-8">
               <h2 className="text-xl font-bold mb-4">Edit Node</h2>
               <div className="space-y-4">
                 <div>
@@ -223,6 +225,15 @@ const SimpleDag = () => {
                   <textarea
                     value={editingNode.code}
                     onChange={(e) => setEditingNode({...editingNode, code: e.target.value})}
+                    rows={4}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Reasoning</label>
+                  <textarea
+                    value={editingNode.reasoning}
+                    onChange={(e) => setEditingNode({...editingNode, reasoning: e.target.value})}
                     rows={4}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   />
