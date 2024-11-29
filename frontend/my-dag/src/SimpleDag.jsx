@@ -122,6 +122,11 @@ const SimpleDag = () => {
     return path;
   };
 
+  // Helper function to determine text color based on score
+  const getScoreColor = (score) => {
+    return score >= 60 ? '#22c55e' : '#ef4444'; // green-600 : red-500
+  };
+
   return (
     <svg 
       className="w-full h-screen bg-gray-50"
@@ -131,7 +136,6 @@ const SimpleDag = () => {
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
-      {/* Define arrow marker */}
       <defs>
         <marker
           id="arrowhead"
@@ -142,22 +146,17 @@ const SimpleDag = () => {
           markerHeight="6"
           orient="auto-start-reverse"
         >
-          <path
-            d="M 0 0 L 10 5 L 0 10 z"
-            fill="#94a3b8"
-            className="transition-colors duration-200"
-          />
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
         </marker>
       </defs>
 
-      {/* Edge with arrow */}
+      {/* Edge */}
       <path
         d={calculatePath(nodes[0], nodes[1])}
         stroke="#94a3b8"
         strokeWidth="2"
         fill="none"
         markerEnd="url(#arrowhead)"
-        className="transition-all duration-200"
       />
 
       {/* Nodes */}
@@ -165,8 +164,8 @@ const SimpleDag = () => {
         <g 
           key={node.id}
           transform={`translate(${node.x - nodeWidth/2},${node.y - nodeHeight/2})`}
-          className="transition-transform duration-200"
         >
+          {/* Node rectangle */}
           <rect
             width={nodeWidth}
             height={nodeHeight}
@@ -174,12 +173,12 @@ const SimpleDag = () => {
             fill="white"
             stroke="#e2e8f0"
             strokeWidth="1"
-            filter="drop-shadow(0 1px 2px rgb(0 0 0 / 0.1))"
             onMouseDown={(e) => handleMouseDown(e, node)}
             onClick={(e) => handleNodeClick(e, node)}
             className="cursor-pointer hover:stroke-blue-200"
           />
           
+          {/* Node label */}
           <text
             x={nodeWidth / 2}
             y={nodeHeight / 2}
@@ -187,15 +186,34 @@ const SimpleDag = () => {
             dy=".3em"
             fill="#64748b"
             fontSize="14"
-            fontFamily="system-ui"
-            className="select-none pointer-events-none"
           >
             {node.name}
           </text>
+
+          {/* Modified Badge with larger circle */}
+          <g transform={`translate(${nodeWidth - 30}, ${nodeHeight - 5})`}>
+            <circle 
+              r="14" 
+              fill="white" 
+              stroke={getScoreColor(90)} 
+              strokeWidth="2.5"
+              strokeOpacity="0.7"
+            />
+            <text
+              x="0"
+              y="0"
+              textAnchor="middle"
+              dy=".3em"
+              fill={getScoreColor(90)}
+              fontSize="10"
+              fontWeight="500"
+            >
+              90%
+            </text>
+          </g>
         </g>
       ))}
 
-      {/* Add the edit modal */}
       {editingNode && (
         <foreignObject x="0" y="0" width="100%" height="100%">
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center overflow-y-auto">
