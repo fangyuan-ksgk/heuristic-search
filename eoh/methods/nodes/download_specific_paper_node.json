@@ -1,0 +1,52 @@
+{
+  "code": "import arxiv\nfrom typing import Tuple\n\n\ndef download_specific_paper(paper_id: str, output_dir: str, filename: str\n    ) ->Tuple[bool, str]:\n    try:\n        client = arxiv.Client()\n        paper = next(client.results(arxiv.Search(id_list=[paper_id])))\n        file_path = paper.download_pdf(dirpath=output_dir, filename=filename)\n        return True, file_path\n    except Exception as e:\n        return False, ''\n",
+  "reasoning": "This algorithm downloads a specific research paper from arXiv using its ID and saves it with a custom filename by utilizing the arXiv API client to fetch paper metadata and download the PDF to the specified output directory.",
+  "meta_prompt": {
+    "task": "Example from docs: Download paper by ID with custom filename",
+    "func_name": "download_specific_paper",
+    "inputs": [
+      "paper_id",
+      "output_dir",
+      "filename"
+    ],
+    "outputs": [
+      "success",
+      "file_path"
+    ],
+    "input_types": [
+      "str",
+      "str",
+      "str"
+    ],
+    "output_types": [
+      "bool",
+      "str"
+    ],
+    "mode": "code"
+  },
+  "test_cases": [
+    {
+      "input": {
+        "paper_id": "1706.03762",
+        "output_dir": "/downloads/papers/",
+        "filename": "attention_paper.pdf"
+      },
+      "expected_output": {
+        "success": true,
+        "file_path": "/downloads/papers/attention_paper.pdf"
+      }
+    },
+    {
+      "input": {
+        "paper_id": "invalid_id",
+        "output_dir": "/downloads/",
+        "filename": "test.pdf"
+      },
+      "expected_output": {
+        "success": false,
+        "file_path": null
+      }
+    }
+  ],
+  "fitness": 1.0
+}
