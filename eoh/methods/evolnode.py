@@ -372,7 +372,8 @@ class EvolNode:
             n_prompt = len(prompts)
         try:
             responses = self._get_response(prompts, desc)
-        except:
+        except Exception as e:
+            print(e.with_traceback(e.__traceback__))
             responses = []
             for p in prompts:
                 responses.append(self._get_response(p))
@@ -457,7 +458,6 @@ class EvolNode:
         prompt_content += "\nIdea: " + feedback # External Guidance (perhaps we should reddit / stackoverflow this thingy)
         
         prompts = [prompt_content] * batch_size
-        
         desc_str = f"Running evolution strategy {method} in parallel with batch size {batch_size}" # Added description string for progress bar
         responses = self.get_response(prompts, desc=desc_str)
         return responses
@@ -480,7 +480,7 @@ class EvolNode:
         return reasonings, codes
     
     def evolve(self, method: str, parents: list = None, replace=True, feedback: str = "", batch_size: int = 5, fitness_threshold: float = 0.8, 
-               num_runs: int = 5, max_tries: int = 3, print_summary: bool = True, query_node: bool = True):
+               num_runs: int = 5, max_tries: int = 3, print_summary: bool = True, query_node: bool = True, timeout: bool = True):
         """
         Evolve node and only accept structurally fit solutions
         Attempts multiple evolutions before returning the final output
@@ -503,7 +503,7 @@ class EvolNode:
         
         self.reasonings = reasonings
         self.codes = codes
-        fitness_per_code, errors_per_code, global_summary = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs, custom_metric_map=self.custom_metric_map)
+        fitness_per_code, errors_per_code, global_summary = self._evaluate_fitness(codes=codes, max_tries=max_tries, num_runs=num_runs, custom_metric_map=self.custom_metric_map, timeout=timeout)
         end_time = time.time()
         evaluation_time = end_time - evolve_end_time
         if print_summary:
@@ -616,7 +616,7 @@ class EvolNode:
         return call_func_prompt_parallel(test_inputs, codes, max_tries, self.get_response)
     
     
-    def call_code_function_parallel(self, test_inputs: List[Dict], codes: Optional[List[str]] = None, file_path: Optional[str] = None):
+    def call_code_function_parallel(self, test_inputs: List[Dict], codes: Optional[List[str]] = None, file_path: Optional[str] = None, timeout: bool = True):
         output_per_code_per_test = defaultdict(lambda: defaultdict(dict))
         errors_per_code_per_test = defaultdict(lambda: defaultdict(list))
         
@@ -625,7 +625,7 @@ class EvolNode:
         
         for (test_index, test_input) in enumerate(test_inputs):
             for (code_index, code) in enumerate(codes):
-                output_value, error_msg = call_func_code(test_input, code, self.meta_prompt.func_name, file_path=file_path)
+                output_value, error_msg = call_func_code(test_input, code, self.meta_prompt.func_name, file_path=file_path, timeout=timeout)
                 if error_msg != "":
                     errors_per_code_per_test[code_index][test_index].append(error_msg)
                 else:
@@ -674,7 +674,7 @@ class EvolNode:
     
     
     def _evaluate_fitness(self, test_cases: Optional[List[Tuple[Dict, Dict]]] = None, codes: Optional[List[str]] = [], 
-                           max_tries: int = 3, num_runs: int = 1, custom_metric_map: Optional[Dict[str, Callable]] = None) -> Fitness:
+                           max_tries: int = 3, num_runs: int = 1, custom_metric_map: Optional[Dict[str, Callable]] = None, timeout: bool = True) -> Fitness:
         
         """ 
         TBD: Parallel evaluation of all test cases
@@ -692,7 +692,7 @@ class EvolNode:
         test_inputs = [case[0] for case in test_cases]
         
         if self.meta_prompt.mode == PromptMode.CODE: 
-            output_per_code_per_test, errors_per_code_per_test = self.call_code_function_parallel(test_inputs, codes)
+            output_per_code_per_test, errors_per_code_per_test = self.call_code_function_parallel(test_inputs, codes, timeout=timeout)
         elif self.meta_prompt.mode == PromptMode.PROMPT:
             output_per_code_per_test, errors_per_code_per_test = self.call_prompt_function_parallel(test_inputs, codes, max_tries)
         else:
@@ -841,7 +841,7 @@ class EvolNode:
         elif isinstance(inputs, list):
             return [self._rectify_input_dict_names(input_dict) for input_dict in inputs]
     
-    def batch_inference(self, inputs: list, codes: Optional[List[str]] = None, max_tries: int = 3):
+    def batch_inference(self, inputs: list, codes: Optional[List[str]] = None, max_tries: int = 3, timeout: bool = True):
         """ 
         Should be used in Batch Evaluation
         """
@@ -854,7 +854,7 @@ class EvolNode:
 
         # Batch inference 
         if self.meta_prompt.mode == PromptMode.CODE:
-            output_per_code_per_test, errors_per_code_per_test = self.call_code_function_parallel(inputs, codes)
+            output_per_code_per_test, errors_per_code_per_test = self.call_code_function_parallel(inputs, codes, timeout=timeout)
         elif self.meta_prompt.mode == PromptMode.PROMPT:
             output_per_code_per_test, errors_per_code_per_test = self.call_prompt_function_parallel(inputs, codes, max_tries)
         else:
@@ -863,7 +863,7 @@ class EvolNode:
         return output_per_code_per_test, errors_per_code_per_test
         
     
-    def __call__(self, inputs, max_attempts: int = 3, batch_inference: bool = True):
+    def __call__(self, inputs, max_attempts: int = 3, batch_inference: bool = True, timeout: bool = True):
         """ 
         TBD: Inheritance to accumulated codebase with 'file_path' | Graph Topology naturally enables inheritance
         TBD: Stricter input / output type checking to ensure composibility
@@ -872,7 +872,7 @@ class EvolNode:
         inputs = self._rectify_input_names(inputs)
             
         if self.meta_prompt.mode == PromptMode.CODE:
-            output_value, err_msg = call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None) # TODO: extend to multiple outputs ...
+            output_value, err_msg = call_func_code(inputs, self.code, self.meta_prompt.func_name, file_path=None, timeout=timeout) # TODO: extend to multiple outputs ...
             output_name = self.meta_prompt.outputs[0]
             return {output_name: output_value} # assuming single output for code-based node
         
@@ -925,7 +925,7 @@ class EvolNode:
     def relevant_node_desc(self):
         if len(self.relevant_nodes) == 0:
             return ""
-        return "Available functions for use:\n" + "\n".join([node.__repr__() for node in self.relevant_nodes]) + "If you intend to use this function, put the function calls into your generated function (assume the functions are already implemented). Do not use it in a separate code block with your generated function.\n"
+        return "Available functions for use:\n" + "\n".join([node.__repr__() for node in self.relevant_nodes]) + "If you intend to use this function, put the function calls into your generated function (assume the functions are already implemented and do not import them). Do not use it in a separate code block with your generated function. MAKE SURE THE FUNCTION IS USED AS A FUNCTION CALL SO IT CAN BE DETECTED BY AST\n"
         
     @property
     def referrable_function_dict(self):
@@ -1226,11 +1226,11 @@ class PlanNode:
             )
             test_cases = self.test_cases_dict[node_dict["name"]]
             if "fitness" in node_dict and "code" in node_dict: 
-                node = EvolNode(meta_prompt, node_dict["code"], node_dict["reasoning"], get_response=self.get_response, test_cases=test_cases, fitness=node_dict["fitness"])
+                node = EvolNode(meta_prompt, node_dict["code"], node_dict["reasoning"], get_response=self._get_response, test_cases=test_cases, fitness=node_dict["fitness"])
             else:
-                node = EvolNode(meta_prompt, None, None, get_response=self.get_response, test_cases=test_cases)
+                node = EvolNode(meta_prompt, None, None, get_response=self._get_response, test_cases=test_cases)
                 print(f"🎲 :: Evolving {node.meta_prompt.func_name} ... ({i+1}/{len(self.plan_dict['nodes'])})")
-                node.evolve("i1", replace=True, max_tries=2, num_runs=2, batch_size=20) # It's funny how 30+ sec could elapse before llm inference ... (collecting prompts ?? wtf is taking so long ??)
+                node.evolve(method, replace=True, max_tries=2, num_runs=2, batch_size=batch_size) # It's funny how 30+ sec could elapse before llm inference ... (collecting prompts ?? wtf is taking so long ??)
             self.nodes.append(node)
             
             

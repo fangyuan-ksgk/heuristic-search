@@ -319,7 +319,6 @@ def get_async_vllm_endpoint(endpoint_id: str, runpod_api_key: str, desc: str = "
 
     def get_vllm_endpoint_response(prompt: str | list, system_prompt: str = "You are a Turing award winner.") -> list:
         try:
-            if type(prompt) == str: prompt = [prompt]
             return asyncio.run(run_parallel_inference(prompt, system_prompt))
         except Exception as e:
             print(f"Error in endpoint response: {str(e)}")

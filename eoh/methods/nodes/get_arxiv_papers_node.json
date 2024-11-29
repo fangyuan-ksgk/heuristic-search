@@ -1,0 +1,41 @@
+{
+  "code": "from arxiv import Client, Search, Result\nimport arxiv\nfrom datetime import datetime\nfrom typing import List, Dict, Any\nfrom typing import Tuple\n\n\ndef search_papers_paginated(query: str, max_results: int, page_size: int,\n    from_date: datetime, to_date: datetime) ->tuple[List[Result], int, List\n    [Dict[str, Any]]]:\n    client = Client(page_size=page_size, delay_seconds=3.0)\n    date_filter = (\n        f\" AND submittedDate:[{from_date.strftime('%Y%m%d')}0000 TO {to_date.strftime('%Y%m%d')}2359]\"\n        )\n    full_query = query + date_filter\n    search = Search(query=full_query, max_results=max_results)\n    results = list(client.results(search))\n    total_results = len(results)\n    metadata_list = []\n    for paper in results:\n        metadata = {'id': paper.entry_id, 'title': paper.title, 'authors':\n            [author.name for author in paper.authors], 'summary': paper.\n            summary, 'published': paper.published, 'updated': paper.updated,\n            'categories': paper.categories, 'links': [link.href for link in\n            paper.links]}\n        metadata_list.append(metadata)\n    papers = results[:page_size]\n    return papers, total_results, metadata_list\n\n\ndef download_specific_paper(paper_id: str, output_dir: str, filename: str\n    ) ->Tuple[bool, str]:\n    try:\n        client = arxiv.Client()\n        paper = next(client.results(arxiv.Search(id_list=[paper_id])))\n        file_path = paper.download_pdf(dirpath=output_dir, filename=filename)\n        return True, file_path\n    except Exception as e:\n        return False, ''\n\n\ndef get_arxiv_papers(start_date: str, end_date: str, output_dir: str) ->(int,\n    int):\n    \"\"\"\n    Collect AI papers from arXiv in the given time frame and save it in output directory.\n\n    Args:\n    start_date (str): The start date of the time frame in format 'YYYY-MM-DD'.\n    end_date (str): The end date of the time frame in format 'YYYY-MM-DD'.\n    output_dir (str): The directory to save the collected papers.\n\n    Returns:\n    num_papers (int): The number of collected papers.\n    time_taken (int): The time taken to collect papers in seconds.\n    \"\"\"\n    start_time = datetime.now()\n    start_date = datetime.strptime(start_date, '%Y-%m-%d')\n    end_date = datetime.strptime(end_date, '%Y-%m-%d')\n    query = 'AI'\n    categories = ['cs.AI', 'cs.LG', 'cs.CL']\n    num_papers = 0\n    time_taken = 0\n    batch_size = 100\n    total_pages = 1\n    current_page = 1\n    while current_page <= total_pages:\n        from_date = start_date\n        to_date = end_date\n        papers, total_results, metadata_list = search_papers_paginated(query,\n            batch_size, batch_size, from_date, to_date)\n        total_pages = (total_results - 1) // batch_size + 1\n        for paper in papers:\n            paper_id = paper.get_short_id()\n            filename = f'{paper_id}.pdf'\n            success, file_path = download_specific_paper(paper_id,\n                output_dir, filename)\n            if success:\n                num_papers += 1\n                print(f'Paper {paper_id} saved successfully.')\n        current_page += 1\n    time_taken = (datetime.now() - start_time).total_seconds()\n    return num_papers, time_taken\n",
+  "reasoning": "This algorithm, called arXiv paper collector, collects AI papers from arXiv within a given time frame and saves them in an output directory. It uses the search_papers_paginated function to fetch papers, and the download_specific_paper function to download each paper. The collected papers are then saved in the output directory.",
+  "meta_prompt": {
+    "task": "Collect AI papers from arXiv in the given time frame and save it in output directory",
+    "func_name": "get_arxiv_papers",
+    "inputs": [
+      "start_date",
+      "end_date",
+      "output_dir"
+    ],
+    "outputs": [
+      "num_papers",
+      "time_taken"
+    ],
+    "input_types": [
+      "str",
+      "str",
+      "str"
+    ],
+    "output_types": [
+      "int",
+      "int"
+    ],
+    "mode": "code"
+  },
+  "test_cases": [
+    {
+      "input": {
+        "start_date": "2024-11-17",
+        "end_date": "2024-11-18",
+        "output_dir": "tmp"
+      },
+      "expected_output": {
+        "num_papers": 55,
+        "time_taken": 85
+      }
+    }
+  ],
+  "fitness": 1.0
+}
