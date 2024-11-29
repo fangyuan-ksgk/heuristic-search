@@ -614,7 +614,6 @@ def compile_code_with_references(node_code, referrable_function_dict):
 def combine_scores(llm_scores, metric_scores):
     combined_scores = defaultdict(lambda: defaultdict(list))
     combined_score = defaultdict(lambda: defaultdict(float))
-        
     # For each code index in metric scores
     for k in metric_scores: 
         for i in metric_scores[k]: 

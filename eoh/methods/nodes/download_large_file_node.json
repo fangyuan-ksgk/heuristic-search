@@ -1,0 +1,64 @@
+{
+  "code": "import brotli\nimport gzip\nimport requests\nimport time\nfrom tqdm import tqdm\nfrom typing import Tuple\nimport zlib\n\n\ndef download_large_file(url: str, output_path: str, chunk_size: int=8192,\n    timeout: int=30) ->Tuple[bool, int, float, str]:\n    try:\n        start_time = time.time()\n        headers = {'User-Agent': 'Mozilla/5.0'}\n        head_response = requests.head(url, headers=headers, timeout=timeout)\n        file_size = int(head_response.headers.get('content-length', 0))\n        content_encoding = head_response.headers.get('content-encoding',\n            'identity')\n        progress = tqdm(total=file_size, unit='iB', unit_scale=True)\n        with requests.get(url, headers=headers, stream=True, timeout=timeout\n            ) as response:\n            response.raise_for_status()\n            with open(output_path, 'wb') as f:\n                decompressor = None\n                if content_encoding == 'gzip':\n                    decompressor = gzip.decompress\n                elif content_encoding == 'br':\n                    decompressor = brotli.decompress\n                elif content_encoding == 'deflate':\n                    decompressor = zlib.decompress\n                for chunk in response.iter_content(chunk_size=chunk_size):\n                    if chunk:\n                        if decompressor:\n                            chunk = decompressor(chunk)\n                        f.write(chunk)\n                        progress.update(len(chunk))\n        progress.close()\n        download_time = time.time() - start_time\n        if file_size > 0:\n            actual_size = os.path.getsize(output_path)\n            if actual_size != file_size and content_encoding == 'identity':\n                return False, file_size, download_time, content_encoding\n        return True, file_size, download_time, content_encoding\n    except Exception as e:\n        print(f'Error downloading file: {str(e)}')\n        return False, 0, 0.0, ''\n",
+  "reasoning": "Downloads a large file in chunks by sending HTTP requests with range headers, validates response headers and content encoding, displays progress bar, and handles different compression methods while measuring download time",
+  "meta_prompt": {
+    "task": "Download a large file in chunks while displaying progress, validating response, and handling various content encodings",
+    "func_name": "download_large_file",
+    "inputs": [
+      "url",
+      "output_path",
+      "chunk_size",
+      "timeout"
+    ],
+    "outputs": [
+      "success",
+      "file_size",
+      "download_time",
+      "encoding"
+    ],
+    "input_types": [
+      "str",
+      "str",
+      "int",
+      "int"
+    ],
+    "output_types": [
+      "bool",
+      "int",
+      "float",
+      "str"
+    ],
+    "mode": "code"
+  },
+  "test_cases": [
+    {
+      "input": {
+        "url": "http://ipv4.download.thinkbroadband.com/10MB.zip",
+        "output_path": "tmp.zip",
+        "chunk_size": 8192,
+        "timeout": 30
+      },
+      "expected_output": {
+        "success": true,
+        "file_size": 10485760,
+        "download_time": 4.183753967285156,
+        "encoding": "identity"
+      }
+    },
+    {
+      "input": {
+        "url": "https://example.com/not-found.pdf",
+        "output_path": "/tmp/error.pdf",
+        "chunk_size": 4096,
+        "timeout": 10
+      },
+      "expected_output": {
+        "success": false,
+        "file_size": 0,
+        "download_time": 0.0,
+        "encoding": ""
+      }
+    }
+  ],
+  "fitness": 1.0
+}

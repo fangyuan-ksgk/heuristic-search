@@ -168,7 +168,7 @@ def get_claude_response(prompt: Union[str, list], img = None, img_type = None, s
         
     message = claude_client.messages.create(
         model="claude-3-5-sonnet-latest",
-        max_tokens=1024,
+        max_tokens=2048,
         messages=[
             {
                 "role": "user",
@@ -317,8 +317,9 @@ def get_async_vllm_endpoint(endpoint_id: str, runpod_api_key: str, desc: str = "
     import nest_asyncio
     nest_asyncio.apply()
 
-    def get_vllm_endpoint_response(prompt: list, system_prompt: str = "You are a Turing award winner.") -> list:
+    def get_vllm_endpoint_response(prompt: str | list, system_prompt: str = "You are a Turing award winner.") -> list:
         try:
+            if type(prompt) == str: prompt = [prompt]
             return asyncio.run(run_parallel_inference(prompt, system_prompt))
         except Exception as e:
             print(f"Error in endpoint response: {str(e)}")

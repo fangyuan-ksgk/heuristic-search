@@ -7,7 +7,6 @@ import ast
 import networkx as nx
 from dataclasses import dataclass
 from typing import Optional, Union, Callable
-
 import test
 
 class PromptMode(Enum):
@@ -834,7 +833,14 @@ def extract_imports_and_functions(code_str):
             names = ", ".join(alias.name for alias in node.names)
             imports.append(f"from {node.module} import {names}")
         elif isinstance(node, ast.FunctionDef):
-            functions.append(ast.unparse(node))
+            if not hasattr(node, "parent"): functions.append(ast.unparse(node))
+            for child in node.body:
+                if isinstance(child, ast.FunctionDef):
+                    child.parent = node
+        elif isinstance(node, ast.ClassDef):
+            for child in node.body:
+                if isinstance(child, ast.FunctionDef):
+                    child.parent = node
     
     return imports, functions
 
@@ -904,4 +910,53 @@ Respond in this format:
   "aligned": true/false,
   "comment": "Whatever you want to say on the prediction, be concise."
 }}
+"""
+
+GENERATE_NODES_FROM_API = """Generate a JSON-style list representing new nodes based on the API documentation, which can be resuable for more nodes. These nodes have to be general but are not one liners (make them slightly complex/useful). You can also make nodes which are just examples in the documentation (recommended to have some as they are most likely error free). The list should include:
+- **Nodes**: Each node represents a key action or step and must contain the following attributes:
+- `task`: Description of the task. MAKE SURE THE TASK IS NOT JUST A ONE LINER BUT ALSO VERY USEFUL
+- `name`: Concise name used for the task function.
+- `inputs`: List of input parameters needed to perform the action.
+- `input_types`: List of corresponding types for each input parameter.
+- `outputs`: List of output parameters produced by the action.
+- `output_types`: List of corresponding types for each output parameter.
+- `target`: The purpose or goal that the action contributes to.
+- `mode`: The execution mode for this task ("CODE" or "PROMPT").
+- 'relevant_docs': Relevant documentation for the task based on the given documentation. Make sure this is very verbose, stating what library you are using, suggest the functions and give its signatures and meaning or anything that a developer would need to code out/use the library without checking the internet. For example, give example function calls which could be useful as well as how to import the function
+**Output Format:**
+
+To be direct, have 2 nodes which are copy pasted from the documentation if possible which can be use widely. Have more nodes which are more complex and can be build on the first 2 nodes
+
+Provide the output in the following JSON structure:
+
+```json
+{
+"nodes": [
+    {
+    "task": "Task 1",
+    "name": "task_1"
+    "inputs": inputs_str,
+    "input_types": input_types_str,
+    "outputs": ["output_11", "output_12"],
+    "output_types": ["str", "str"],
+    "target": "Purpose of Action 1"
+    "mode": "CODE",
+    "relevant_docs": "The function xyz takes in the following parameters and returns the following output."
+    },
+    {
+    "task": "Task 2",
+    "name": "task_2",
+    "inputs": ["input_21", "input_22"],
+    "input_types": input_types_str,
+    "outputs": outputs_str,
+    "output_types": output_types_str,
+    "target": "Purpose of Action 2",
+    "mode": "PROMPT",
+    "relevant_docs": "The function abc does this and that."
+    }
+    // Add more nodes as needed
+]
+}
+```\n
+If no json is given people will die. Make sure the nodes are somewhat complex/ not one-liners of calling the api function\n
 """
