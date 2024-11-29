@@ -1,0 +1,85 @@
+{
+  "code": "import arxiv\nfrom collections import defaultdict\nfrom typing import Dict, List\n\n\ndef get_author_network(author_name: str, max_papers: int, depth: int) ->tuple[\n    Dict[str, List[str]], Dict[str, int], Dict[str, List[str]]]:\n    client = arxiv.Client(delay_seconds=3.0)\n    coauthor_network = defaultdict(list)\n    paper_counts = defaultdict(int)\n    primary_categories = defaultdict(list)\n    processed_authors = set()\n\n    def process_author(author: str, current_depth: int):\n        if author in processed_authors or current_depth > depth:\n            return\n        processed_authors.add(author)\n        search = arxiv.Search(query=f'au:\"{author}\"', max_results=max_papers)\n        for result in client.results(search):\n            paper_counts[author] += 1\n            if result.primary_category not in primary_categories[author]:\n                primary_categories[author].append(result.primary_category)\n            for coauthor in result.authors:\n                coauthor_name = coauthor.name\n                if coauthor_name != author:\n                    if coauthor_name not in coauthor_network[author]:\n                        coauthor_network[author].append(coauthor_name)\n                    if author not in coauthor_network[coauthor_name]:\n                        coauthor_network[coauthor_name].append(author)\n                    if current_depth < depth:\n                        process_author(coauthor_name, current_depth + 1)\n    process_author(author_name, 0)\n    return dict(coauthor_network), dict(paper_counts), dict(primary_categories)",
+  "reasoning": "Search arXiv for papers by the specified author, build a network of co-authors by traversing collaborator papers up to given depth, and track paper counts and categories for each author",
+  "meta_prompt": {
+    "task": "Search for papers by a specific author and get their collaboration network from co-authors",
+    "func_name": "get_author_network",
+    "inputs": [
+      "author_name",
+      "max_papers",
+      "depth"
+    ],
+    "outputs": [
+      "coauthor_network",
+      "paper_counts",
+      "primary_categories"
+    ],
+    "input_types": [
+      "str",
+      "int",
+      "int"
+    ],
+    "output_types": [
+      "Dict[str, List[str]]",
+      "Dict[str, int]",
+      "Dict[str, List[str]]"
+    ],
+    "mode": "code"
+  },
+  "test_cases": [
+    {
+      "input": {
+        "author_name": "Ashish Vaswani",
+        "max_papers": 1,
+        "depth": 1
+      },
+      "expected_output": {
+        "coauthor_network": {
+          "Ashish Vaswani": [
+            "Aurko Roy",
+            "Arvind Neelakantan",
+            "Niki Parmar"
+          ],
+          "Aurko Roy": [
+            "Ashish Vaswani",
+            "Niki Parmar"
+          ],
+          "Arvind Neelakantan": [
+            "Ashish Vaswani",
+            "Michael Collins",
+            "Niki Parmar"
+          ],
+          "Michael Collins": [
+            "Arvind Neelakantan"
+          ],
+          "Niki Parmar": [
+            "Ashish Vaswani",
+            "Aurko Roy",
+            "Arvind Neelakantan"
+          ]
+        },
+        "paper_counts": {
+          "Ashish Vaswani": 1,
+          "Aurko Roy": 1,
+          "Arvind Neelakantan": 1,
+          "Niki Parmar": 1
+        },
+        "primary_categories": {
+          "Ashish Vaswani": [
+            "cs.LG"
+          ],
+          "Aurko Roy": [
+            "cs.DM"
+          ],
+          "Arvind Neelakantan": [
+            "cs.CL"
+          ],
+          "Niki Parmar": [
+            "cs.LG"
+          ]
+        }
+      }
+    }
+  ],
+  "fitness": 1.0
+}
