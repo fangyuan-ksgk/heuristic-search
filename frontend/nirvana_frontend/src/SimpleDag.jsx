@@ -497,6 +497,10 @@ const SimpleDag = () => {
     setEditingNode(nodeToEdit);
   };
 
+  // Add this state near your other state declarations
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+
   return (
     <div className="relative w-full h-screen overflow-hidden">
       <div className="absolute top-4 left-4 z-10">
@@ -538,6 +542,23 @@ const SimpleDag = () => {
           >
             <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
           </marker>
+
+          <circle id="dataPoint" r="3" fill="#3b82f6" />
+
+          <linearGradient id="nodeGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="100%" stopColor="#f8fafc" />
+          </linearGradient>
+
+          <linearGradient id="borderGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#94a3b8" />
+            <stop offset="50%" stopColor="#cbd5e1" />
+            <stop offset="100%" stopColor="#94a3b8" />
+          </linearGradient>
+
+          <filter id="dropShadow" filterUnits="userSpaceOnUse">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#6b728080" />
+          </filter>
         </defs>
 
         {/* Modified Edges - now using connections array */}
@@ -545,15 +566,24 @@ const SimpleDag = () => {
           const startNode = nodes.find(node => node.id === connection.source);
           const endNode = nodes.find(node => node.id === connection.target);
           if (startNode && endNode) {
+            const path = calculatePath(startNode, endNode);
             return (
-              <path
-                key={`edge-${connection.source}-${connection.target}`}
-                d={calculatePath(startNode, endNode)}
-                stroke="#94a3b8"
-                strokeWidth="2"
-                fill="none"
-                markerEnd="url(#arrowhead)"
-              />
+              <g key={`edge-${connection.source}-${connection.target}`}>
+                <path
+                  d={path}
+                  stroke="#94a3b8"
+                  strokeWidth="2"
+                  fill="none"
+                  markerEnd="url(#arrowhead)"
+                />
+                <circle r="3" fill="#3b82f6">
+                  <animateMotion
+                    dur="1.5s"
+                    repeatCount="indefinite"
+                    path={path}
+                  />
+                </circle>
+              </g>
             );
           }
           return null;
@@ -591,7 +621,11 @@ const SimpleDag = () => {
               width={nodeWidth}
               height={nodeHeight}
               rx={cornerRadius}
-              className={`fill-white stroke-gray-300 ${
+              fill="url(#nodeGradient)"
+              stroke="url(#borderGradient)"
+              strokeWidth="1.5"
+              filter="url(#dropShadow)"
+              className={`transition-all duration-300 ${
                 isDrawingConnection && hoveredNode === node.id ? 'stroke-blue-500 stroke-2' : ''
               }`}
             />
@@ -605,7 +639,7 @@ const SimpleDag = () => {
               {node.name}
             </text>
             
-            {/* Node status pill instead of circle */}
+            {/* Node status pill */}
             <rect
               x={node.x + nodeWidth*92/400}
               y={node.y - nodeHeight*20/500}
@@ -615,6 +649,10 @@ const SimpleDag = () => {
               className="fill-white"
               stroke={getScoreColor(node.fitness)}
               strokeWidth="1.5"
+              style={{ 
+                transform: `scale(${1/viewBox.scale})`,
+                transformOrigin: `${node.x + nodeWidth/3}px ${node.y}px`
+              }}
             />
             <text
               x={node.x + nodeWidth/3}
@@ -624,6 +662,13 @@ const SimpleDag = () => {
               textAnchor="middle"
               dominantBaseline="middle"
               fontSize={node.fitness === undefined || node.fitness === null || node.fitness === 0 ? "13" : "11"}
+              style={{ 
+                transform: `scale(${1/viewBox.scale})`,
+                transformOrigin: `${node.x + nodeWidth/3}px ${node.y}px`,
+                backgroundColor: 'transparent',  // Make background transparent
+                paintOrder: 'stroke',  // Ensure proper text rendering
+                userSelect: 'none'  // Prevent text selection
+              }}
             >
               {node.fitness === undefined || node.fitness === null || node.fitness === 0 ? "🚧" : `${Math.round(node.fitness * 100)}%`}
             </text>
@@ -719,6 +764,61 @@ const SimpleDag = () => {
           />
         )}
       </svg>
+
+      {/* Chat Box - Show history on hover */}
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/2 bg-gradient-to-b from-white to-gray-50 border-t border-x border-gray-200 shadow-lg backdrop-blur-sm rounded-t-xl group">
+        {/* Chat history - hidden by default, shown on group hover */}
+        <div className="max-h-40 overflow-y-auto p-3 space-y-2 hidden group-hover:block">
+          {messages.map((msg, index) => (
+            <div 
+              key={index} 
+              className="px-4 py-2 rounded-xl bg-gradient-to-b from-white to-gray-50 text-sm text-gray-700 shadow-sm border border-gray-200"
+              style={{
+                filter: 'drop-shadow(0 2px 3px rgba(107, 114, 128, 0.1))',
+                borderImage: 'linear-gradient(to bottom, #94a3b8, #cbd5e1, #94a3b8) 1'
+              }}
+            >
+              {msg}
+            </div>
+          ))}
+        </div>
+        <div className="p-3 border-t border-gray-200" style={{
+          borderImage: 'linear-gradient(to right, #94a3b8, #cbd5e1, #94a3b8) 1'
+        }}>
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (newMessage.trim()) {
+                setMessages(prev => [...prev, newMessage]);
+                setNewMessage('');
+              }
+            }}
+            className="flex gap-2 items-center"
+          >
+            <input
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder="Type a message..."
+              className="flex-1 rounded-xl border px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-400 bg-gradient-to-b from-white to-gray-50"
+              style={{
+                borderImage: 'linear-gradient(to bottom, #94a3b8, #cbd5e1, #94a3b8) 1'
+              }}
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 text-slate-700 rounded-xl text-sm font-medium transition-colors border"
+              style={{
+                background: 'linear-gradient(to bottom, #ffffff, #f8fafc)',
+                borderImage: 'linear-gradient(to bottom, #94a3b8, #cbd5e1, #94a3b8) 1',
+                filter: 'drop-shadow(0 2px 3px rgba(107, 114, 128, 0.1))'
+              }}
+            >
+              Send
+            </button>
+          </form>
+        </div>
+      </div>
 
       {editingNode && (
         <div className="fixed inset-0 z-50">
