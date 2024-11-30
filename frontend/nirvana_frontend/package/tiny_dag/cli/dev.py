@@ -10,8 +10,15 @@ def open_browser():
     # On macOS, Chrome accepts JavaScript to set window size
     chrome_path = 'open -a "Google Chrome" %s --args --window-size=1200,800 --window-position=100,100'
     webbrowser.get(chrome_path).open('http://localhost:5173')
+    
+def run_frontend():
+    os.chdir('src')
+    os.system('npm install && npm run dev')
 
 def run_dev():
+    # Set unbuffered output before creating manager
+    os.environ['PYTHONUNBUFFERED'] = '1'
+    
     manager = Manager()
     
     # Start frontend first and launch browser
@@ -23,13 +30,12 @@ def run_dev():
     # Start browser in a separate thread
     threading.Thread(target=open_browser, daemon=True).start()
     
-    # Add backend with initial output suppression
+    # Add backend without delay
     manager.add_process(
         'backend', 
-        'sleep 5 2>/dev/null && tiny_dag_backend'
+        'tiny_dag_backend'
     )
     
-    os.environ['PYTHONUNBUFFERED'] = '1'
     manager.loop()
 
 if __name__ == "__main__":

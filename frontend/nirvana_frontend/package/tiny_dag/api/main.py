@@ -160,8 +160,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 break
                 
     except Exception as e:
-        print(f"[WS] Connection setup error: {str(e)}")
-        raise
+        print(f"[WS] Connection setup error ...")
+        pass
         
     finally:
         graph_manager._websocket_connections.discard(websocket)
