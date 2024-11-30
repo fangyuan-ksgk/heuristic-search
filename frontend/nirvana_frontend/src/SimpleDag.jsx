@@ -91,10 +91,10 @@ const SimpleDag = () => {
   }, []);
 
   const handleMouseDown = (e, node) => {
+    e.stopPropagation();
     setIsDragging(true);
     setDraggedNode(node);
     
-    // Calculate offset relative to the node's position, not the DOM element
     const svgRect = svgRef.current.getBoundingClientRect();
     const scale = svgRect.width / viewBox.width;
     
@@ -105,32 +105,31 @@ const SimpleDag = () => {
   };
 
   const handleMouseMove = (e) => {
-    if (!isDragging || !draggedNode) return;
+    if (isDragging && draggedNode) {
+      e.preventDefault();
+      const svgRect = svgRef.current.getBoundingClientRect();
+      const scale = svgRect.width / viewBox.width;
+      
+      const newX = (e.clientX - svgRect.left) / scale + viewBox.x - dragOffset.x;
+      const newY = (e.clientY - svgRect.top) / scale + viewBox.y - dragOffset.y;
 
-    const svgRect = svgRef.current.getBoundingClientRect();
-    const scale = svgRect.width / viewBox.width;
-    
-    // Calculate new position considering viewBox and scale
-    const newX = (e.clientX - svgRect.left) / scale + viewBox.x - dragOffset.x;
-    const newY = (e.clientY - svgRect.top) / scale + viewBox.y - dragOffset.y;
-
-    setNodes(nodes.map(node => 
-      node.id === draggedNode.id 
-        ? { ...node, x: newX, y: newY }
-        : node
-    ));
+      setNodes(nodes.map(node => 
+        node.id === draggedNode.id 
+          ? { ...node, x: newX, y: newY }
+          : node
+      ));
+    }
   };
 
   const handleMouseUp = () => {
-    // Add this block to send position updates after dragging
     if (isDragging && draggedNode) {
-        const updatedNode = nodes.find(node => node.id === draggedNode.id);
-        if (updatedNode && ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-                nodes: nodes,  // Send complete state including positions
-                connections: connections
-            }));
-        }
+      const updatedNode = nodes.find(node => node.id === draggedNode.id);
+      if (updatedNode && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          nodes: nodes,
+          connections: connections
+        }));
+      }
     }
     
     setIsDragging(false);
@@ -195,38 +194,37 @@ const SimpleDag = () => {
 
   // Calculate the path for the edge including the arrow
   const calculatePath = (startNode, endNode) => {
-    // Connection points
     const start = {
-      x: startNode.x + nodeWidth/2,  // Right side
-      y: startNode.y                 // Center y
+      x: startNode.x + nodeWidth/2,
+      y: startNode.y
     };
     const end = {
-      x: endNode.x - nodeWidth/2,    // Left side
-      y: endNode.y                   // Center y
+      x: endNode.x - nodeWidth/2,
+      y: endNode.y
     };
 
-    // Calculate control points for a smooth curve
     const dx = end.x - start.x;
     const dy = end.y - start.y;
     
-    // Adjust control points based on vertical distance
-    const offsetX = Math.min(Math.abs(dx) * 0.5, 100);
+    // Increase curve intensity based on distance
+    const offsetX = Math.min(Math.abs(dx) * 0.7, 150);
+    
+    // Add slight vertical offset for more natural curves
+    const verticalOffset = Math.min(Math.abs(dy) * 0.2, 30);
+    
     const controlPoint1 = {
       x: start.x + offsetX,
-      y: start.y
+      y: start.y + (dy > 0 ? verticalOffset : -verticalOffset)
     };
     const controlPoint2 = {
       x: end.x - offsetX,
-      y: end.y
+      y: end.y + (dy > 0 ? -verticalOffset : verticalOffset)
     };
 
-    // Create the main path
-    const path = `M ${start.x},${start.y} 
-                 C ${controlPoint1.x},${controlPoint1.y} 
-                   ${controlPoint2.x},${controlPoint2.y} 
-                   ${end.x},${end.y}`;
-
-    return path;
+    return `M ${start.x},${start.y} 
+            C ${controlPoint1.x},${controlPoint1.y} 
+              ${controlPoint2.x},${controlPoint2.y} 
+              ${end.x},${end.y}`;
   };
 
   // Helper function to determine text color based on score
@@ -540,24 +538,52 @@ const SimpleDag = () => {
             markerHeight="6"
             orient="auto-start-reverse"
           >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="url(#arrowGradient)" />
           </marker>
 
-          <circle id="dataPoint" r="3" fill="#3b82f6" />
+          <circle id="dataPoint" r="3" fill="url(#dataPointGradient)" />
 
           <linearGradient id="nodeGradient" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor="#ffffff" />
             <stop offset="100%" stopColor="#f8fafc" />
           </linearGradient>
 
-          <linearGradient id="borderGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <linearGradient id="borderGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#cbd5e1" />
+            <stop offset="50%" stopColor="#94a3b8" />
+            <stop offset="100%" stopColor="#cbd5e1" />
+          </linearGradient>
+
+          <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.1"/>
+          </filter>
+
+          <linearGradient id="connectionGradient" gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor="#94a3b8" />
             <stop offset="50%" stopColor="#cbd5e1" />
             <stop offset="100%" stopColor="#94a3b8" />
           </linearGradient>
 
-          <filter id="dropShadow" filterUnits="userSpaceOnUse">
-            <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#6b728080" />
+          <linearGradient id="arrowGradient">
+            <stop offset="0%" stopColor="#94a3b8" />
+            <stop offset="100%" stopColor="#cbd5e1" />
+          </linearGradient>
+
+          <radialGradient id="dataPointGradient">
+            <stop offset="0%" stopColor="#60a5fa" />
+            <stop offset="100%" stopColor="#3b82f6" />
+          </radialGradient>
+
+          <filter id="connectionShadow" x="-20%" y="-20%" width="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2" />
+            <feOffset dx="1" dy="1" result="offsetblur" />
+            <feComponentTransfer>
+              <feFuncA type="linear" slope="0.2" />
+            </feComponentTransfer>
+            <feMerge>
+              <feMergeNode />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
           </filter>
         </defs>
 
@@ -600,18 +626,19 @@ const SimpleDag = () => {
             onMouseUp={(e) => {
               if (isDrawingConnection && hoveredNode === node.id && connectionStart) {
                 e.stopPropagation();
-                // Create connection from source to target
                 const newConnection = {
-                  source: connectionStart.id,  // Node where → was clicked
-                  target: node.id             // Node where we dropped
+                  source: connectionStart.id,
+                  target: node.id
                 };
                 setConnections(prevConnections => [...prevConnections, newConnection]);
-                
-                // Clean up
                 setIsDrawingConnection(false);
                 setConnectionStart(null);
                 setHoveredNode(null);
               }
+            }}
+            style={{
+              transformOrigin: `${node.x}px ${node.y}px`,  // Set transform origin to node center
+              transform: `scale(${1/viewBox.scale})`,       // Apply inverse scale to counteract zoom
             }}
           >
             {/* Node rectangle with highlight when hovered during connection */}
@@ -621,7 +648,7 @@ const SimpleDag = () => {
               width={nodeWidth}
               height={nodeHeight}
               rx={cornerRadius}
-              fill="url(#nodeGradient)"
+              fill="white"
               stroke="url(#borderGradient)"
               strokeWidth="1.5"
               filter="url(#dropShadow)"
@@ -632,17 +659,19 @@ const SimpleDag = () => {
             
             {/* Node name */}
             <text
-              x={node.x - nodeWidth/5}
-              y={node.y + 5}
-              className="text-sm fill-gray-700"
+              x={node.x}
+              y={node.y + 1}
+              className="text-sm fill-gray-700 font-bold"
+              textAnchor="middle"
+              dominantBaseline="middle"
             >
               {node.name}
             </text>
             
-            {/* Node status pill */}
+            {/* Node status pill - moved outside and to bottom right */}
             <rect
-              x={node.x + nodeWidth*92/400}
-              y={node.y - nodeHeight*20/500}
+              x={node.x + nodeWidth/4 - 1}  // Changed from nodeWidth*92/400
+              y={node.y + nodeHeight/2 + 1}      // Changed from nodeHeight*20/500
               width="32"
               height="22"
               rx="10"
@@ -651,23 +680,23 @@ const SimpleDag = () => {
               strokeWidth="1.5"
               style={{ 
                 transform: `scale(${1/viewBox.scale})`,
-                transformOrigin: `${node.x + nodeWidth/3}px ${node.y}px`
+                transformOrigin: `${node.x + nodeWidth/2 + 21}px ${node.y + nodeHeight/2 + 11}px`  // Updated transform origin
               }}
             />
             <text
-              x={node.x + nodeWidth/3}
-              y={node.y + nodeHeight*130/500}
-              className="text-center"
+              x={node.x + nodeWidth/3 + 1}  // Changed from nodeWidth/3
+              y={node.y + nodeHeight/2 + 13}  // Changed from nodeHeight*130/500
+              className="text-center font-bold"
               fill={getScoreColor(node.fitness)}
               textAnchor="middle"
               dominantBaseline="middle"
               fontSize={node.fitness === undefined || node.fitness === null || node.fitness === 0 ? "13" : "11"}
               style={{ 
                 transform: `scale(${1/viewBox.scale})`,
-                transformOrigin: `${node.x + nodeWidth/3}px ${node.y}px`,
-                backgroundColor: 'transparent',  // Make background transparent
-                paintOrder: 'stroke',  // Ensure proper text rendering
-                userSelect: 'none'  // Prevent text selection
+                transformOrigin: `${node.x + nodeWidth/2 + 21}px ${node.y + nodeHeight/2 + 11}px`,  // Updated transform origin
+                backgroundColor: 'transparent',
+                paintOrder: 'stroke',
+                userSelect: 'none'
               }}
             >
               {node.fitness === undefined || node.fitness === null || node.fitness === 0 ? "🚧" : `${Math.round(node.fitness * 100)}%`}
@@ -766,25 +795,22 @@ const SimpleDag = () => {
       </svg>
 
       {/* Chat Box - Show history on hover */}
-      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/2 bg-gradient-to-b from-white to-gray-50 border-t border-x border-gray-200 shadow-lg backdrop-blur-sm rounded-t-xl group">
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/2 bg-gradient-to-b from-white/80 to-gray-50/90 shadow-lg backdrop-blur-sm rounded-t-2xl group">
         {/* Chat history - hidden by default, shown on group hover */}
         <div className="max-h-40 overflow-y-auto p-3 space-y-2 hidden group-hover:block">
           {messages.map((msg, index) => (
             <div 
               key={index} 
-              className="px-4 py-2 rounded-xl bg-gradient-to-b from-white to-gray-50 text-sm text-gray-700 shadow-sm border border-gray-200"
+              className="px-4 py-2 rounded-full bg-gradient-to-b from-white to-gray-50 text-sm text-gray-700 shadow-sm"
               style={{
                 filter: 'drop-shadow(0 2px 3px rgba(107, 114, 128, 0.1))',
-                borderImage: 'linear-gradient(to bottom, #94a3b8, #cbd5e1, #94a3b8) 1'
               }}
             >
               {msg}
             </div>
           ))}
         </div>
-        <div className="p-3 border-t border-gray-200" style={{
-          borderImage: 'linear-gradient(to right, #94a3b8, #cbd5e1, #94a3b8) 1'
-        }}>
+        <div className="p-3">
           <form 
             onSubmit={(e) => {
               e.preventDefault();
@@ -800,21 +826,25 @@ const SimpleDag = () => {
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="Type a message..."
-              className="flex-1 rounded-xl border px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-400 bg-gradient-to-b from-white to-gray-50"
+              className="flex-1 rounded-full px-6 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-400"
               style={{
-                borderImage: 'linear-gradient(to bottom, #94a3b8, #cbd5e1, #94a3b8) 1'
+                background: 'linear-gradient(to right, #f8fafc, #f1f5f9, #f8fafc)',
+                boxShadow: 'inset 0 1px 2px rgba(160, 174, 192, 0.2)',
+                border: 'none',
               }}
             />
             <button
               type="submit"
-              className="px-4 py-2 text-slate-700 rounded-xl text-sm font-medium transition-colors border"
+              className="p-2 w-10 h-10 flex items-center justify-center text-slate-600 rounded-full text-sm font-medium transition-all hover:bg-slate-100 active:scale-95"
               style={{
-                background: 'linear-gradient(to bottom, #ffffff, #f8fafc)',
-                borderImage: 'linear-gradient(to bottom, #94a3b8, #cbd5e1, #94a3b8) 1',
-                filter: 'drop-shadow(0 2px 3px rgba(107, 114, 128, 0.1))'
+                background: 'linear-gradient(135deg, #f8fafc, #e2e8f0)',
+                boxShadow: '0 2px 4px rgba(148, 163, 184, 0.1)',
+                border: 'none',
               }}
             >
-              Send
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" />
+              </svg>
             </button>
           </form>
         </div>
