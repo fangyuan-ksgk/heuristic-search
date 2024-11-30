@@ -1,8 +1,34 @@
-# React + Vite
+# TinyDAG
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A lightweight package for real-time manipulation of directed acyclic graphs (DAGs).
 
-Currently, two official plugins are available:
+Features:
+- Create and manage graph nodes
+- Update connections in real-time
+- Visualize graph structures
+- Track node properties and relationships
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Setup and Installation
+
+TinyDAG can be installed directly from the source. The package provides several command-line tools for running both the backend and frontend services.
+
+### Installation
+```bash
+pip install -e .
+```
+
+### Available Commands
+
+After installation, the following commands will be available:
+
+- `tiny_dag_backend`: Starts the backend server
+- `tiny_dag_frontend`: Launches the frontend development server
+- `serve_tiny_dag`: Runs both frontend and backend in development mode
+
+### Dependencies
+
+The package requires the following main dependencies:
+- FastAPI
+- Uvicorn
+- WebSockets
+- Honcho
