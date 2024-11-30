@@ -78,10 +78,7 @@ class GraphStateManager:
         return self._state 
     
     def add_edge(self, edge_data: dict):
-        # Check if edge ID already exists
-        if any(edge['id'] == edge_data['id'] for edge in self._state['connections']):
-            raise HTTPException(status_code=400, detail=f"Edge with id {edge_data['id']} already exists")
-            
+
         # Check if source node exists
         if not any(node['id'] == edge_data['source'] for node in self._state['nodes']):
             raise HTTPException(status_code=400, detail=f"Source node {edge_data['source']} does not exist")
@@ -89,7 +86,12 @@ class GraphStateManager:
         # Check if target node exists  
         if not any(node['id'] == edge_data['target'] for node in self._state['nodes']):
             raise HTTPException(status_code=400, detail=f"Target node {edge_data['target']} does not exist")
-            
+        
+        # Check for duplicate edge (same source and target)
+        if any(edge['source'] == edge_data['source'] and edge['target'] == edge_data['target'] 
+            for edge in self._state['connections']):
+            raise HTTPException(status_code=400, detail=f"Edge from node {edge_data['source']} to {edge_data['target']} already exists")
+                
         self._state["connections"].append(edge_data)
         return self._state
     
@@ -97,8 +99,11 @@ class GraphStateManager:
         self._state["nodes"] = [node for node in self._state["nodes"] if node["id"] != node_id]
         return self._state 
     
-    def remove_edge(self, edge_id: int):
-        self._state["connections"] = [edge for edge in self._state["connections"] if edge["id"] != edge_id]
+    def remove_edge(self, source: int, target: int):
+        self._state["connections"] = [
+            edge for edge in self._state["connections"] 
+            if not (edge["source"] == source and edge["target"] == target)
+        ]
         return self._state
     
     def update_node(self, node_id: int, node_data: dict):
@@ -173,7 +178,6 @@ class NodeData(BaseModel):
     outputTypes: list = []
 
 class EdgeData(BaseModel):
-    id: int
     source: int
     target: int
 
@@ -207,16 +211,37 @@ async def delete_node(node_id: int):
 @app.post("/api/edges")
 async def add_edge(edge: EdgeData):
     """Add new edge and broadcast update"""
-    graph_manager.add_edge(edge.dict())
-    await graph_manager.broadcast_state()
-    return {"status": "success", "edge": edge}
+    try:
+        print(f"Received edge request: {edge.dict()}")
+        # Check if nodes exist
+        state = graph_manager.get_state()
+        node_ids = [node['id'] for node in state['nodes']]
+        print(f"Existing node IDs: {node_ids}")
+        print(f"Looking for source: {edge.source}, target: {edge.target}")
+        
+        result = graph_manager.add_edge(edge.dict())
+        await graph_manager.broadcast_state()
+        return {"status": "success", "edge": edge}
+    except Exception as e:
+        print(f"Error adding edge: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/api/edges/{edge_id}")
-async def delete_edge(edge_id: int):
+@app.delete("/api/edges/{source}/{target}")
+async def delete_edge(source: int, target: int):
     """Delete edge and broadcast update"""
-    graph_manager.remove_edge(edge_id)
+    graph_manager.remove_edge(source, target)
     await graph_manager.broadcast_state()
     return {"status": "success"}
+
+@app.put("/api/graph")
+async def update_graph_state(data: dict):
+    """Update entire graph state"""
+    try:
+        graph_manager.update_state(data)
+        await graph_manager.broadcast_state()
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

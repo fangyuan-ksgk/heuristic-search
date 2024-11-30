@@ -122,7 +122,17 @@ const SimpleDag = () => {
   };
 
   const handleMouseUp = () => {
-    // Only reset dragging states, don't trigger node click
+    // Add this block to send position updates after dragging
+    if (isDragging && draggedNode) {
+        const updatedNode = nodes.find(node => node.id === draggedNode.id);
+        if (updatedNode && ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                nodes: nodes,  // Send complete state including positions
+                connections: connections
+            }));
+        }
+    }
+    
     setIsDragging(false);
     setDraggedNode(null);
   };
