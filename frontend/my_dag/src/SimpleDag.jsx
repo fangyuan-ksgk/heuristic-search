@@ -498,7 +498,7 @@ const SimpleDag = () => {
   };
 
   return (
-    <>
+    <div className="relative w-full h-screen overflow-hidden">
       <div className="absolute top-4 left-4 z-10">
         <input
           type="file"
@@ -517,7 +517,7 @@ const SimpleDag = () => {
       
       <svg 
         ref={svgRef}
-        className="w-full h-screen"
+        className="w-full h-full"
         viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
         preserveAspectRatio="xMidYMid meet"
         onMouseDown={handleSvgMouseDown}
@@ -873,7 +873,7 @@ const SimpleDag = () => {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
 

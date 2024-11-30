@@ -120,17 +120,20 @@ graph_manager = GraphStateManager()
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     try:
+        print("[WS] Attempting to accept connection...")
         await websocket.accept()
         graph_manager._websocket_connections.add(websocket)
-        print("[WS] New connection opened")
+        print(f"[WS] New connection opened. Total connections: {len(graph_manager._websocket_connections)}")
         
         # Send initial state
         print("[WS] Sending initial state...")
-        await websocket.send_json({
+        initial_state = {
             'type': 'graph_update',
             'nodes': graph_manager._state['nodes'],
             'connections': graph_manager._state['connections']
-        })
+        }
+        print(f"[WS] Initial state content: {initial_state}")
+        await websocket.send_json(initial_state)
         print("[WS] Initial state sent successfully")
         
         while True:
@@ -146,8 +149,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 await graph_manager.broadcast_state()
                 print("[WS] Broadcast complete")
                 
-            except WebSocketDisconnect:
-                print("[WS] Client disconnected with WebSocketDisconnect")
+            except WebSocketDisconnect as e:
+                print(f"[WS] Client disconnected with WebSocketDisconnect. Code: {e.code}")
                 break
                 
             except Exception as e:
@@ -156,9 +159,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 print(f"[WS] Error details: {e.__dict__}")
                 break
                 
+    except Exception as e:
+        print(f"[WS] Connection setup error: {str(e)}")
+        raise
+        
     finally:
         graph_manager._websocket_connections.discard(websocket)
-        print("[WS] Connection cleaned up and closed")
+        print(f"[WS] Connection cleaned up. Remaining connections: {len(graph_manager._websocket_connections)}")
 
 
 # For the backend program to twist the values with simple api and forget about async stuff
@@ -243,6 +250,23 @@ async def update_graph_state(data: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-if __name__ == "__main__":
+def run_server():
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    import logging
+
+    # Configure logging to be less verbose
+    logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.asgi").setLevel(logging.WARNING)
+    
+    uvicorn.run(
+        "tiny_dag.api.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="warning",  # Changed from debug to warning
+        workers=1
+    )
+
+if __name__ == "__main__":
+    run_server() 

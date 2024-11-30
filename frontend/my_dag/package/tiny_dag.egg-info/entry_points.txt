@@ -1,0 +1,5 @@
+[console_scripts]
+serve_tiny_dag = tiny_dag.cli.dev:run_dev
+tiny_dag_backend = tiny_dag.api.main:run_server
+tiny_dag_frontend = tiny_dag.cli.dev:run_frontend
+
