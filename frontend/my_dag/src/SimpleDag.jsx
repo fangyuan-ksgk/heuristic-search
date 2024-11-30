@@ -378,10 +378,22 @@ const SimpleDag = () => {
 
   // Add new handler for removing nodes
   const handleRemoveNode = (nodeId) => {
-    setNodes(nodes.filter(node => node.id !== nodeId));
-    setConnections(connections.filter(conn => 
-      conn.source !== nodeId && conn.target !== nodeId
-    ));
+    // Update local state
+    const updatedNodes = nodes.filter(node => node.id !== nodeId);
+    const updatedConnections = connections.filter(conn => 
+        conn.source !== nodeId && conn.target !== nodeId
+    );
+    
+    setNodes(updatedNodes);
+    setConnections(updatedConnections);
+
+    // Send complete state to backend
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            nodes: updatedNodes,
+            connections: updatedConnections
+        }));
+    }
   };
 
   // Add connection drawing handlers
