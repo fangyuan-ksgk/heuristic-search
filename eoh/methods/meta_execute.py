@@ -363,7 +363,7 @@ def process_all_inputs(codes, input_dicts, max_tries, timeout: int = 3):
                 try:
                     # Add timeout here
                     input_index, prompts, errors = future.result(timeout=timeout)
-                    input_indices.extend([input_index] * len(prompts))
+                    input_indices.extend([(input_index, code_index)] * len(prompts))
                     full_prompts.extend(prompts)                    
                     errors_per_code_per_test[code_index][input_index].extend(errors)
                 except concurrent.futures.TimeoutError:
