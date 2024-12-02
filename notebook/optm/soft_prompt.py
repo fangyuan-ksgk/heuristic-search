@@ -35,7 +35,7 @@ def load_hf_model(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct"):
 
 def load_tf_data(data_path: str = "../data/processed_data.json", split_ratio: float = 0.8):
     """ 
-    Load processed data
+    Load processed data -- let's add some phony data in-place
     """
     with open(data_path, 'r') as f:
         data = json.load(f)

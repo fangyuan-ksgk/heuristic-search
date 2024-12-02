@@ -35,6 +35,10 @@ image = (
         "fastapi>=0.109.0",
         "pydantic>=2.0",
         "starlette>=0.36.0",
+        "openai>=1.40.8",
+        "orjson",
+        "torch",
+        "accelerate",
     )
     .run_function(download_model_to_image)
 )
