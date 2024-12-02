@@ -39,6 +39,7 @@ image = (
         "orjson",
         "torch",
         "accelerate",
+        "uvicorn",
     )
     .run_function(download_model_to_image)
 )
@@ -49,6 +50,7 @@ app = modal.App("sgl-vlm-service")
     gpu=GPU_CONFIG,
     image=image,
     timeout=20 * MINUTES,
+    secrets=[modal.Secret.from_name("ksgk-secret")],
     container_idle_timeout=20 * MINUTES,
 )
 class Model:
@@ -73,7 +75,10 @@ class Model:
         time.sleep(10)  # Give the server some time to start
         
         from openai import OpenAI
-        self.client = OpenAI(base_url=f"http://localhost:{PORT_NO}/v1", api_key=None)
+        self.client = OpenAI(
+            base_url=f"http://localhost:{PORT_NO}/v1", 
+            api_key="dummy-key"
+        )
 
     @modal.method()
     def process_chat(self, messages):

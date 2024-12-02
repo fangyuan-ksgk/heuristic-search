@@ -2,24 +2,27 @@
 apt-get update
 apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
     libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
-    libpango-1.0-0 libcairo2 libasound2
+    libpango-1.0-0 libcairo2 libasound2 build-essential
 
-# Visualization tools
-pip install nb-mermaid astor wordcloud nltk seaborn
-npm install @mermaid-js/mermaid-cli
-curl -fsSL https://d2lang.com/install.sh | sh -s --
+# Clean existing installations
+pip uninstall -y torch torchvision torchaudio flash-attn
+pip cache purge
 
-# Core ML libraries - install these first
-pip install --upgrade transformers accelerate bitsandbytes
+# Install PyTorch with CUDA support
+pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
-# CUDA optimization packages - with fix for flash-attn
-pip uninstall flash-attn -y  # Remove any existing installation
-MAX_JOBS=4 pip install flash-attn --no-build-isolation
-pip install flashinfer -i https://flashinfer.ai/whl/cu121/torch2.3
+# Install flash-attention dependencies
+pip install --no-cache-dir packaging ninja wheel
+
+# Install flash-attention with specific configuration for A100
+TORCH_CUDA_ARCH_LIST="8.0" pip install --no-cache-dir flash-attn --no-build-isolation
+
+# Core ML libraries
+pip install --no-cache-dir transformers accelerate bitsandbytes
 
 # Additional ML packages
-pip install trl anthropic groq openai huggingface_hub \
+pip install --no-cache-dir trl anthropic groq openai huggingface_hub \
     datasets peft deepspeed sentence_transformers nest_asyncio
 
 # VLLM and Jupyter
-pip install --upgrade vllm jupyterlab
+pip install --no-cache-dir vllm jupyterlab
