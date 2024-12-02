@@ -7,7 +7,7 @@ import numpy as np
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
-from typing import Callable
+from typing import Callable, Union, List
 from tqdm import tqdm as tqdm 
 
 
@@ -96,12 +96,8 @@ tf_metric_map = {"label": tf_label_metric}
 
 # Worth including diversity in response template
 RESPONSE_TEMPLATES = [
-    "Decision: {label}\n\nComment: {comment}",
-    "Comment: {comment}\n\nDecision: {label}",
-    "Reasoning: {comment}\n\nDecision: {label}",
-    "Decision: {label}\n\nReasoning: {comment}",
-    "Comment on the proposal: {comment}\n\nDecision: {label}",
-    "Decision: {label}\n\nComment on the proposal: {comment}",
+    '```json\n{\n    "decision": "{label}",\n    "comment": "{comment}"\n}\n```',
+    '```json\n{\n    "comment": "{comment}",\n    "decision": "{label}"\n}\n```'
 ]
 
 SYSTEM_PROMPTS = [
@@ -294,7 +290,71 @@ class SoftPromptLLM(nn.Module):
         else:
             return outputs
         
+    def generate(self, prompts: Union[str, List[str]], max_new_tokens: int = 100):
+        """
+        Generate text using the model with soft prompts prepended.
         
+        Args:
+            prompts: Single prompt string or list of prompt strings
+            max_new_tokens (int): Maximum number of tokens to generate
+            
+        Returns:
+            List[str]: List of generated texts
+        """
+        # Handle single prompt case
+        if isinstance(prompts, str):
+            prompts = [prompts]
+        
+        # Tokenize the input prompts
+        tokenized = self.tokenizer(prompts, 
+                                 return_tensors="pt", 
+                                 padding=True,
+                                 truncation=True).to(self.device)
+        input_ids = tokenized.input_ids
+        attention_mask = tokenized.attention_mask
+        batch_size = input_ids.shape[0]
+        
+        # Get input embeddings for the prompts
+        inputs_embeds = self.model.get_input_embeddings()(input_ids)
+        
+        # Expand soft prompts for batch size
+        soft_prompts = self.soft_prompts.unsqueeze(0).expand(batch_size, -1, -1)
+        
+        # Concatenate soft prompts with input embeddings
+        inputs_embeds = torch.cat([soft_prompts, inputs_embeds], dim=1)
+        
+        # Adjust attention mask
+        prefix_mask = torch.ones(batch_size, self.n_learnable_tokens, device=self.device)
+        attention_mask = torch.cat([prefix_mask, attention_mask], dim=1)
+        
+        # Generate with the modified inputs
+        outputs = self.model.generate(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            max_new_tokens=max_new_tokens,
+            pad_token_id=self.tokenizer.pad_token_id,
+            eos_token_id=self.tokenizer.eos_token_id,
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.9
+        )
+        
+        # Decode the generated tokens for each sequence in batch
+        generated_texts = []
+        for output in outputs:
+            # Skip the soft prompt tokens for each sequence
+            text = self.tokenizer.decode(
+                output[self.n_learnable_tokens:],
+                skip_special_tokens=True
+            )
+            generated_texts.append(text)
+        
+        # If input was single prompt, return single result
+        if len(generated_texts) == 1:
+            return generated_texts[0]
+        
+        return generated_texts
+
 def check_and_handle_nans(loss, model, pred_logits, batch_idx, optimizer):
     """
     Check for NaN/Inf values and handle recovery
@@ -319,9 +379,113 @@ def check_and_handle_nans(loss, model, pred_logits, batch_idx, optimizer):
         
     return True
 
+import re 
+import ast 
+
+def extract_json_from_text(text):
+    """
+    Extracts a JSON object from a text containing either a JSON code block or a JSON-like structure.
+    
+    Parameters:
+        text (str): The input text containing the JSON code block or JSON-like structure.
+        
+    Returns:
+        dict: The parsed JSON object.
+        
+    Raises:
+        ValueError: If no JSON structure is found or JSON is invalid.
+    """
+    # Available Patterns
+    code_json_pattern = r'```json\s*(\{.*?\})\s*```'
+    code_python_pattern = r'```python\s*(.*?)\s*```'
+    json_list_pattern = r'```json\s*(.*?)\s*```'
+    json_dict_pattern = r'\{[^}]+\}'
+    
+    code_json_match = re.search(code_json_pattern, text, re.DOTALL)
+    code_python_match = re.search(code_python_pattern, text, re.DOTALL)
+    list_match = re.search(json_list_pattern, text, re.DOTALL)
+    dict_match = re.search(json_dict_pattern, text, re.DOTALL)
+    
+    if code_json_match:
+        json_str = code_json_match.group(1)
+    elif code_python_match:
+        json_str = code_python_match.group(1)
+    elif list_match:
+        json_str = list_match.group(1)
+    elif dict_match:
+        json_str = dict_match.group(0)
+    else:
+        raise ValueError("No JSON structure found in the provided text.")
+          
+    # return json_str
+    # json_str = json_str.replace("'", '"')
+    error_msg = ""
+    try:
+        json_data = json.loads(json_str)
+        return json_data 
+    except json.JSONDecodeError as e:
+        error_msg += f"JsonDecodeError : \n{e}"
+    try:
+        json_data = ast.literal_eval(json_str)
+        return json_data
+    except Exception as e:
+        error_msg += f"AstLiteralError : \n{e}"
+        
+    raise ValueError(error_msg)
+
+def label_metric(target_label: str, generated_response: str) -> float: 
+    """ 
+    Evaluate the generated response against the target label
+    """
+    try:
+        parsed_response = extract_json_from_text(generated_response)
+    except Exception as e:
+        return 0.0, f"Error parsing generated response: {e}"
+    
+    if 'decision' not in parsed_response:
+        return 0.0, "Generated response does not contain 'decision' key"
+    else:
+        generated_label = parsed_response["decision"]
+        if generated_label.lower() != target_label.lower():
+            return 0.0, f"Target label is '{target_label}', but generated label is '{generated_label}'"
+
+
+def test_model(model_with_soft_prompt, tokenizer, test_data, batch_size=24):
+    data_len = len(test_data["prompt"])
+    scores = []
+    err_msgs = []  # Added to collect error messages
+
+    for i in tqdm(range(0, data_len, batch_size), desc="Testing model"):
+        prompts = test_data["prompt"][i:i+batch_size]
+        labels = test_data["label"][i:i+batch_size]
+        comments = test_data["comment"][i:i+batch_size]
+        
+        query_prompts = []
+        for prompt, comment, label in zip(prompts, comments, labels):
+            query_prompt, response_prompt = format_prompt_instruction_tuned(prompt, comment, label, tokenizer, previous_messages=[])
+            query_prompts.append(query_prompt)
+            
+        generated_responses = model_with_soft_prompt.generate(query_prompts, max_new_tokens=600)
+        
+        for response, label in zip(generated_responses, labels):
+            score, err_msg = label_metric(response, label)  # Now properly unpacking both return values
+            scores.append(score)
+            err_msgs.append(err_msg)
+            
+        break # one-batch as validation set
+
+    avg_score = sum(scores) / len(scores)
+    print(f"Average score: {avg_score}")
+    
+    # Print error summary if needed
+    error_count = sum(1 for msg in err_msgs if msg)
+    if error_count > 0:
+        print(f"\nFound {error_count} errors out of {len(err_msgs)} predictions")
+    
+    return avg_score, err_msgs  # Return both score and error messages for analysis
 
         
-def train_soft_prompt(model, dataloader, num_epochs=5, learning_rate=1e-4, print_info: bool = True):
+def train_soft_prompt(model, train_dataloader, num_epochs=5, learning_rate=1e-4, accumulation_steps=4, print_info: bool = True):
     """ 
     Train soft prompt without mixed precision training
     """
@@ -334,18 +498,22 @@ def train_soft_prompt(model, dataloader, num_epochs=5, learning_rate=1e-4, print
     running_window = 50
     running_losses = []
     
+    # Add early stopping parameters
+    best_metric = 0.0
+    patience = 3
+    patience_counter = 0
+    
     for epoch in range(num_epochs):
         model.train()
         total_loss = 0
         epoch_losses = []
         accumulated_loss = 0  # Track loss across accumulation steps
         
-        progress_bar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{num_epochs} - Loss: N/A")
+        progress_bar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{num_epochs} - Loss: N/A")
         optimizer.zero_grad()  # Zero gradients at start
         
         for batch_idx, batch in enumerate(progress_bar):
-            accumulation_steps = 4
-            
+
             # Move batch to device
             input_ids = batch['input_ids'].to(model.device)
             attention_mask = batch['attention_mask'].to(model.device)
@@ -406,13 +574,14 @@ def train_soft_prompt(model, dataloader, num_epochs=5, learning_rate=1e-4, print
             
             # Print detailed loss every 100 steps
             if batch_idx % running_window == 0 and print_info:
+                
                 print(f"\nStep {batch_idx}")
                 print(f"Current loss: {current_loss:.4f}")
                 print(f"Running average (last {running_window} steps): {running_avg:.4f}")
                 print(f"Learning rate: {optimizer.param_groups[0]['lr']:.2e}")
                 print(f"Soft prompts range: [{model.soft_prompts.min():.4f}, {model.soft_prompts.max():.4f}]")
         
-        avg_loss = total_loss / len(dataloader)
+        avg_loss = total_loss / len(train_dataloader)
         
         if print_info:
             print(f"\nEpoch {epoch+1}/{num_epochs} Summary:")

@@ -40,6 +40,7 @@ image = (
         "torch",
         "accelerate",
         "uvicorn",
+        "uvloop",
     )
     .run_function(download_model_to_image)
 )
@@ -62,8 +63,10 @@ class Model:
     def start_runtime(self):
         import subprocess
         import time
+        import requests
+        from requests.exceptions import RequestException
         
-        # Start the server using subprocess instead of the old utility function
+        # Start the server using subprocess
         self.server_process = subprocess.Popen([
             "python3", "-m", "sglang.launch_server",
             "--model-path", MODEL_PATH,
@@ -71,8 +74,18 @@ class Model:
             "--chat-template", MODEL_CHAT_TEMPLATE
         ])
         
-        # Wait for server to start
-        time.sleep(10)  # Give the server some time to start
+        # Wait for server to start with timeout and health check
+        max_retries = 30
+        for i in range(max_retries):
+            try:
+                # Try to connect to the server
+                response = requests.get(f"http://localhost:{PORT_NO}/health")
+                if response.status_code == 200:
+                    break
+            except RequestException:
+                if i == max_retries - 1:
+                    raise RuntimeError("Server failed to start after maximum retries")
+                time.sleep(2)  # Wait 2 seconds between retries
         
         from openai import OpenAI
         self.client = OpenAI(
