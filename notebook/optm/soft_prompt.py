@@ -11,21 +11,22 @@ from typing import Callable
 from tqdm import tqdm as tqdm 
 
 
-def load_hf_model(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct"):
+def load_hf_model_precise(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct"):
     """ 
     Load Huggingface model and tokenizer
+    Load in model with same precision level (MPS and CUDA)
     """    
-    # if on mps device use float32
     if torch.backends.mps.is_available():
         torch_dtype = torch.float32
         device_map = "mps"
     else:
-        torch_dtype = torch.float16
+        # For CUDA, use float32 instead of float16
+        torch_dtype = torch.float32  # Changed from float16
         device_map = "cuda"
         
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch_dtype,  # Change to float32 instead of "auto"
+        torch_dtype=torch_dtype,
         device_map=device_map
     )
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -293,35 +294,132 @@ class SoftPromptLLM(nn.Module):
         else:
             return outputs
         
+        
+def check_and_handle_nans(loss, model, pred_logits, batch_idx, optimizer):
+    """
+    Check for NaN/Inf values and handle recovery
+    Returns: bool indicating if training should continue
+    """
+    if torch.isnan(loss) or torch.isinf(loss):
+        print(f"\nNaN/Inf loss detected in batch {batch_idx}!")
+        print(f"Device: {model.device}, Dtype: {next(model.parameters()).dtype}")
+        print(f"Soft prompts stats: min={model.soft_prompts.min():.4f}, max={model.soft_prompts.max():.4f}")
+        print(f"Logits stats: min={pred_logits.min():.4f}, max={pred_logits.max():.4f}")
+        print(f"Loss value: {loss.item()}")
+        
+        # Clear gradients
+        optimizer.zero_grad()
+        
+        # If this happens in first batch, we should stop training
+        if batch_idx == 0:
+            return False
+            
+        # For later batches, skip this batch and continue training
+        return True
+        
+    return True
 
-def train_soft_prompt(model, dataloader, num_epochs=5, learning_rate=1e-3):
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+
+        
+def train_soft_prompt(model, dataloader, num_epochs=5, learning_rate=1e-4, print_info: bool = True):
+    """ 
+    Train soft prompt without mixed precision training
+    """
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=2, verbose=True
+    )
+    
+    # Add running average window
+    running_window = 50
+    running_losses = []
     
     for epoch in range(num_epochs):
         model.train()
         total_loss = 0
+        epoch_losses = []
+        accumulated_loss = 0  # Track loss across accumulation steps
         
-        for batch in tqdm(dataloader, desc=f"Epoch {epoch+1}/{num_epochs}"):
-            optimizer.zero_grad()
+        progress_bar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{num_epochs} - Loss: N/A")
+        optimizer.zero_grad()  # Zero gradients at start
+        
+        for batch_idx, batch in enumerate(progress_bar):
+            accumulation_steps = 4
             
             # Move batch to device
             input_ids = batch['input_ids'].to(model.device)
             attention_mask = batch['attention_mask'].to(model.device)
             labels = batch['labels'].to(model.device)
             
-            outputs = model(
+            outputs, pred_logits, labels = model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                labels=labels
+                labels=labels,
+                return_pred_n_label=True
             )
+            loss = outputs.loss / accumulation_steps  # Scale loss for accumulation
             
-            loss = outputs.loss
+            # NaN checking
+            should_continue = check_and_handle_nans(loss, model, pred_logits, batch_idx, optimizer)
+            if not should_continue:
+                raise ValueError("NaN/Inf loss detected in first batch - training stopped")
+            elif should_continue is True and torch.isnan(loss):
+                continue
+            
+            # Accumulate loss and gradients
             loss.backward()
-            optimizer.step()
+            accumulated_loss += loss.item()
+            
+            # Only update weights after accumulation_steps
+            if (batch_idx + 1) % accumulation_steps == 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
+                optimizer.step()
+                optimizer.zero_grad()  # Reset gradients after update
+                
+                # Log the accumulated loss
+                current_loss = accumulated_loss
+                accumulated_loss = 0  # Reset accumulator
 
-            total_loss += loss.item()
+            # More conservative soft prompt value clipping
+            with torch.no_grad():
+                model.soft_prompts.data.clamp_(-0.5, 0.5)
+            
+            current_loss = loss.item() * accumulation_steps
+            total_loss += current_loss
+            epoch_losses.append(current_loss)
+            running_losses.append(current_loss)
+            
+            # Calculate and display running average loss
+            if len(running_losses) > running_window:
+                running_losses.pop(0)
+            running_avg = sum(running_losses) / len(running_losses)
+            
+            # Update progress bar description with current loss
+            progress_bar.set_description(f"Epoch {epoch+1}/{num_epochs} - Loss: {running_avg:.4f}")
+            
+            # Update progress bar with current losses
+            progress_bar.set_postfix({
+                'loss': f'{current_loss:.4f}',
+                'avg_loss': f'{running_avg:.4f}',
+                'lr': f'{optimizer.param_groups[0]["lr"]:.2e}'
+            })
+            
+            # Print detailed loss every 100 steps
+            if batch_idx % running_window == 0 and print_info:
+                print(f"\nStep {batch_idx}")
+                print(f"Current loss: {current_loss:.4f}")
+                print(f"Running average (last {running_window} steps): {running_avg:.4f}")
+                print(f"Learning rate: {optimizer.param_groups[0]['lr']:.2e}")
+                print(f"Soft prompts range: [{model.soft_prompts.min():.4f}, {model.soft_prompts.max():.4f}]")
         
         avg_loss = total_loss / len(dataloader)
-        print(f"Epoch {epoch+1}/{num_epochs}, Average loss: {avg_loss:.4f}")
+        
+        if print_info:
+            print(f"\nEpoch {epoch+1}/{num_epochs} Summary:")
+            print(f"Average loss: {avg_loss:.4f}")
+            print(f"Min loss: {min(epoch_losses):.4f}")
+            print(f"Max loss: {max(epoch_losses):.4f}")
+        
+        scheduler.step(avg_loss)
     
     return model
