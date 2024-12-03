@@ -29,7 +29,7 @@ async def generate(prompts: list[str]):
 def run_server():
     global engine
     engine = sgl.Engine(model_path="unsloth/Llama-3.2-11B-Vision-Instruct")
-    uvicorn.run(app, host="0.0.0.0", port=30000, single_process=True)
+    uvicorn.run(app, host="0.0.0.0", port=30000)
 
 if __name__ == "__main__":
     run_server()
