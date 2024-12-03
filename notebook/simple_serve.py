@@ -1,4 +1,4 @@
-# Simple Server for SGLang 
+# Simple Server for SGLang (work for text-generation model, not VLM)
 import sglang as sgl
 from fastapi import FastAPI, HTTPException
 import uvicorn
