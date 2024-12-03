@@ -26,7 +26,7 @@ pip install --no-cache-dir transformers accelerate bitsandbytes
 
 # Additional ML packages
 pip install --no-cache-dir trl anthropic groq openai huggingface_hub \
-    datasets peft deepspeed sentence_transformers nest_asyncio orjson sglang
+    datasets peft deepspeed sentence_transformers nest_asyncio orjson sglang python-multipart
 
 # VLLM and Jupyter
 pip install --no-cache-dir vllm jupyterlab
