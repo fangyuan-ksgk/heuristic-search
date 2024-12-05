@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 import struct
-from .meta_prompt import GENERATE_NODES_FROM_API, MetaPrompt, PromptMode, parse_evol_response, spawn_test_cases
+
+import urllib
+from .meta_prompt import CHOOSE_USEFUL_LINKS, GENERATE_NODES_FROM_API, MetaPrompt, PromptMode, parse_evol_response, spawn_test_cases
 from .meta_prompt import MetaPlan, extract_json_from_text, extract_python_code, ALIGNMENT_CHECK_PROMPT, check_n_rectify_plan_dict
 from .meta_execute import call_func_code, call_func_prompt_parallel, call_func_prompt, call_func_prompts, compile_code_with_references, combine_scores, combine_errors
 from sentence_transformers import SentenceTransformer
@@ -12,7 +14,10 @@ from collections import defaultdict
 from typing import Optional, Union, Dict, List, Callable, Tuple
 from collections import Counter
 import requests
+from bs4 import BeautifulSoup
 import re
+from typing import Any, Dict
+import http 
 
 
 MAX_ATTEMPTS = 6
@@ -451,12 +456,15 @@ class EvolNode:
         response = self.get_response(prompt_content)
         return response 
     
-    def _get_evolve_response(self, method: str, parents: Optional[list] = None, feedback: str = "", batch_size: int = 5):
+    def _get_evolve_prompt(self, method: str, parents: Optional[list] = None, feedback: str = ""):
         prompt_method = getattr(self.meta_prompt, f'_get_prompt_{method}')
         prompt_content = prompt_method(parents)
         prompt_content += self.relevant_node_desc
-        prompt_content += "\nIdea: " + feedback # External Guidance (perhaps we should reddit / stackoverflow this thingy)
-        
+        prompt_content += "\nFeedback: " + feedback # External Guidance (perhaps we should reddit / stackoverflow this thingy)
+        return prompt_content
+    
+    def _get_evolve_response(self, method: str, parents: Optional[list] = None, feedback: str = "", batch_size: int = 5):
+        prompt_content = self._get_evolve_prompt(method, parents, feedback)
         prompts = [prompt_content] * batch_size
         desc_str = f"Running evolution strategy {method} in parallel with batch size {batch_size}" # Added description string for progress bar
         responses = self.get_response(prompts, desc=desc_str)
@@ -1354,46 +1362,4 @@ class PlanNode:
     def referrable_function_dict(self):
         referrable_function_dict = {node.meta_prompt.func_name: node.code for node in self.relevant_nodes} # name to code of referrable functions 
         return referrable_function_dict
-    
-def nodes_from_api(link: str, clean: bool = True, get_response: Optional[Callable] = get_openai_response, evol_method: str = "i1", max_attempts: int = 3):
-    from .population import Evolution
-
-    resp = requests.get(link)
-    if resp.status_code != 200:
-        return "Error: Unable to fetch API documentation"
-    content = resp.text.split("<body>")[1].split("</body>")[0].strip()
-    qe = QueryEngine()
-    nodes = qe.meta_prompts
-    if clean:
-        content = re.sub(r'<(/?)(\w+)[^>]*>', r'<\1\2>', content)
-        content = re.sub(r'</?span>', '', content)
-    prompt = content + "\nAvailable functions for use:\n" + "\n".join([node.__repr__() for node in nodes]) + "\nYou are a Turing Prize winner programmer." + GENERATE_NODES_FROM_API
-    nodes = []
-    for i in range(max_attempts):
-        response = get_response(prompt)
-        response = response if type(response) == str else response[0]
-        print(response)
-        try:
-            node_dict = extract_json_from_text(response)['nodes']
-            for node in node_dict:
-                meta_prompt = MetaPrompt(
-                    task=node.get("task"),
-                    func_name=node.get("name"),
-                    inputs=node.get("inputs"),
-                    outputs=node.get("outputs"),
-                    input_types=node.get("input_types"),
-                    output_types=node.get("output_types"),
-                    mode = PromptMode((node.get("mode", "code")).lower())
-                )
-                nodes.append((Evolution(pop_size=1, meta_prompt=meta_prompt, get_response=get_response), node.get("relevant_docs")))
-            break
-        except ValueError as e:
-            print(f"Failed to extract JSON from API plan response: {e}")
-        except KeyError as e:
-            nodes = []
-            print(f"Failed to extract fully formed nodes from API plan response: {e}")
-    
-    for node in nodes:
-        node[0].get_offspring(evol_method, feedback=node[1])
-    return nodes
     

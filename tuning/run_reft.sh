@@ -1,0 +1,4 @@
+python run_tuning.py model=HuggingFaceTB/SmolLM2-1.7B-Instruct lr=3e-3 num_epochs=50 token_tuning=false prompt_tuning=false reft=true config_id=smol1b_1 accumulation_steps=4
+python run_tuning.py model=HuggingFaceTB/SmolLM2-1.7B-Instruct lr=3e-3 num_epochs=50 token_tuning=false prompt_tuning=false reft=true config_id=smol1b_2 accumulation_steps=24
+python run_tuning.py model=HuggingFaceTB/SmolLM2-1.7B-Instruct lr=3e-3 num_epochs=50 token_tuning=false prompt_tuning=false reft=true config_id=smol1b_3 accumulation_steps=64
+python run_tuning.py model=HuggingFaceTB/SmolLM2-1.7B-Instruct lr=3e-3 num_epochs=100 token_tuning=false prompt_tuning=false reft=true config_id=smol1b_4 accumulation_steps=64

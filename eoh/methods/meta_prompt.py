@@ -960,3 +960,14 @@ Provide the output in the following JSON structure:
 ```\n
 If no json is given people will die. Make sure the nodes are somewhat complex/ not one-liners of calling the api function\n
 """
+
+CHOOSE_USEFUL_LINKS = """You are a master programmer. You have to help a junior programmer go through some doucmentation, but due to time constraits, he should not look at useless links.
+Given a list of links, choose the most useful links which are most likely to be useful for the junior programmer to code without ever searching the documentation himself. 
+Provide the output in the following JSON structure. DO NOT GIVE THE CODE FOR IT but the JSON:
+```json
+{
+    "links": [0, 1, 2, 3] //indexes of chosen linksxs
+}
+```
+Anything without code such as forum or community pages or faq or installation pages are useless. Remove them based on the link names
+"""

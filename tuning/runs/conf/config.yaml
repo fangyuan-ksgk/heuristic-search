@@ -1,0 +1,22 @@
+defaults:
+  - _self_
+
+model: HuggingFaceTB/SmolLM2-1.7B-Instruct
+lr: 4e-3
+num_epochs: 50
+per_device_train_batch_size: 4
+logging_steps: 2
+device: cuda
+prompt_tuning: false
+token_tuning: false
+reft: true
+cap_num: 1000 # use all test cases for evaluation (for full runs only)
+
+num_virtual_tokens: 3
+token_dim: 4096
+num_attention_heads: 32
+num_layers: 32
+prompt_tuning_init_text: "Json output"
+config_id: "smolLM2"
+batch_size: 4
+accumulation_steps: 6
